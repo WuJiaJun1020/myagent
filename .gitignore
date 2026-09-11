@@ -1,0 +1,19 @@
+.pi-agent-upstream-git-backup/
+
+# Local dependencies and generated outputs
+**/node_modules/
+**/dist/
+**/release/
+**/coverage/
+
+# Local configuration and logs
+**/.env
+**/.env.*
+*.log
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
