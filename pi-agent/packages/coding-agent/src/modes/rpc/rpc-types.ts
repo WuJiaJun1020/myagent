@@ -33,6 +33,10 @@ export type RpcCommand =
 	| { id?: string; type: "set_model"; provider: string; modelId: string }
 	| { id?: string; type: "cycle_model" }
 	| { id?: string; type: "get_available_models" }
+	| { id?: string; type: "get_providers" }
+	| { id?: string; type: "login_provider"; providerId: string; authType: "api_key" | "oauth" }
+	| { id?: string; type: "logout_provider"; providerId: string }
+	| { id?: string; type: "cancel_provider_login"; flowId: string }
 
 	// Thinking
 	| { id?: string; type: "set_thinking_level"; level: ThinkingLevel }
@@ -66,9 +70,15 @@ export type RpcCommand =
 	| { id?: string; type: "get_tree" }
 	| { id?: string; type: "get_last_assistant_text" }
 	| { id?: string; type: "set_session_name"; name: string }
+	| { id?: string; type: "rename_session"; sessionId: string; name: string }
+	| { id?: string; type: "set_session_mode"; mode: RpcSessionMode }
+	| { id?: string; type: "set_approval_policy"; policy: RpcApprovalPolicy }
 
 	// Messages
 	| { id?: string; type: "get_messages" }
+
+	// Runtime resources (tools, extensions, and loaded context files)
+	| { id?: string; type: "get_resources" }
 
 	// Commands (available for invocation via prompt)
 	| { id?: string; type: "get_commands" };
@@ -89,9 +99,113 @@ export interface RpcSlashCommand {
 	sourceInfo: SourceInfo;
 }
 
+export interface RpcRuntimeTool {
+	name: string;
+	description?: string;
+	active: boolean;
+	sourceInfo: SourceInfo;
+}
+
+export interface RpcRuntimeExtension {
+	path: string;
+	sourceInfo: SourceInfo;
+	toolNames: string[];
+	commandNames: string[];
+}
+
+export interface RpcContextResource {
+	kind: "instructions" | "system" | "append-system";
+	path: string;
+	content: string;
+	truncated: boolean;
+}
+
+export interface RpcResourceState {
+	tools: RpcRuntimeTool[];
+	extensions: RpcRuntimeExtension[];
+	extensionErrors: Array<{ path: string; error: string }>;
+	contextResources: RpcContextResource[];
+	capabilities: {
+		nativeMcp: false;
+		semanticMemory: false;
+	};
+}
+
+export interface RpcProviderAuthMethod {
+	type: "api_key" | "oauth";
+	name: string;
+	loginLabel?: string;
+	isSubscription: boolean;
+	interactive: boolean;
+}
+
+export interface RpcProviderSummary {
+	id: string;
+	name: string;
+	configured: boolean;
+	authType?: "api_key" | "oauth";
+	authSource?: string;
+	stored: boolean;
+	modelCount: number;
+	availableModelCount: number;
+	authMethods: RpcProviderAuthMethod[];
+}
+
+export interface RpcProviderState {
+	providers: RpcProviderSummary[];
+	error?: string;
+}
+
+export type RpcProviderAuthPrompt =
+	| { type: "text" | "secret" | "manual_code"; message: string; placeholder?: string }
+	| {
+			type: "select";
+			message: string;
+			options: Array<{ id: string; label: string; description?: string }>;
+	  };
+
+export type RpcProviderAuthRequest = {
+	type: "provider_auth_request";
+	flowId: string;
+	id: string;
+	providerId: string;
+	prompt: RpcProviderAuthPrompt;
+};
+
+export type RpcProviderAuthResponse = {
+	type: "provider_auth_response";
+	flowId: string;
+	id: string;
+	value?: string;
+	cancelled?: boolean;
+};
+
+export type RpcProviderAuthEvent = {
+	type: "provider_auth_event";
+	flowId: string;
+	providerId: string;
+	event:
+		| { type: "started"; authType: "api_key" | "oauth" }
+		| { type: "info"; message: string; links?: Array<{ url: string; label?: string }> }
+		| { type: "auth_url"; url: string; instructions?: string }
+		| {
+				type: "device_code";
+				userCode: string;
+				verificationUri: string;
+				intervalSeconds?: number;
+				expiresInSeconds?: number;
+		  }
+		| { type: "progress"; message: string }
+		| { type: "completed" }
+		| { type: "failed"; message: string };
+};
+
 // ============================================================================
 // RPC State
 // ============================================================================
+
+export type RpcSessionMode = "work" | "chat";
+export type RpcApprovalPolicy = "ask" | "auto";
 
 export interface RpcSessionState {
 	model?: Model<any>;
@@ -103,6 +217,9 @@ export interface RpcSessionState {
 	sessionFile?: string;
 	sessionId: string;
 	sessionName?: string;
+	sessionMode: RpcSessionMode;
+	approvalPolicy: RpcApprovalPolicy;
+	contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
 	autoCompactionEnabled: boolean;
 	messageCount: number;
 	pendingMessageCount: number;
@@ -153,6 +270,10 @@ export type RpcResponse =
 			success: true;
 			data: { models: Model<any>[] };
 	  }
+	| { id?: string; type: "response"; command: "get_providers"; success: true; data: RpcProviderState }
+	| { id?: string; type: "response"; command: "login_provider"; success: true; data: RpcProviderState }
+	| { id?: string; type: "response"; command: "logout_provider"; success: true; data: RpcProviderState }
+	| { id?: string; type: "response"; command: "cancel_provider_login"; success: true }
 
 	// Thinking
 	| { id?: string; type: "response"; command: "set_thinking_level"; success: true }
@@ -222,9 +343,21 @@ export type RpcResponse =
 			data: { text: string | null };
 	  }
 	| { id?: string; type: "response"; command: "set_session_name"; success: true }
+	| { id?: string; type: "response"; command: "rename_session"; success: true }
+	| { id?: string; type: "response"; command: "set_session_mode"; success: true; data: { mode: RpcSessionMode } }
+	| {
+			id?: string;
+			type: "response";
+			command: "set_approval_policy";
+			success: true;
+			data: { policy: RpcApprovalPolicy };
+	  }
 
 	// Messages
 	| { id?: string; type: "response"; command: "get_messages"; success: true; data: { messages: AgentMessage[] } }
+
+	// Runtime resources
+	| { id?: string; type: "response"; command: "get_resources"; success: true; data: RpcResourceState }
 
 	// Commands
 	| {

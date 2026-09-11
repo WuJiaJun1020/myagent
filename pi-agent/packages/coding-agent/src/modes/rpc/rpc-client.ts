@@ -13,7 +13,19 @@ import type { CompactionResult } from "../../core/compaction/index.ts";
 import type { SessionEntry, SessionTreeNode } from "../../core/session-manager.ts";
 import type { JsonAgentSessionEvent } from "../json-event.ts";
 import { attachJsonlLineReader, serializeJsonLine } from "./jsonl.ts";
-import type { RpcCommand, RpcResponse, RpcSessionState, RpcSlashCommand } from "./rpc-types.ts";
+import type {
+	RpcApprovalPolicy,
+	RpcCommand,
+	RpcExtensionUIRequest,
+	RpcProviderAuthEvent,
+	RpcProviderAuthRequest,
+	RpcProviderAuthResponse,
+	RpcProviderState,
+	RpcResourceState,
+	RpcResponse,
+	RpcSessionState,
+	RpcSlashCommand,
+} from "./rpc-types.ts";
 
 // ============================================================================
 // Types
@@ -47,7 +59,8 @@ export interface ModelInfo {
 	reasoning: boolean;
 }
 
-export type RpcEventListener = (event: JsonAgentSessionEvent) => void;
+export type RpcEvent = JsonAgentSessionEvent | RpcExtensionUIRequest | RpcProviderAuthEvent | RpcProviderAuthRequest;
+export type RpcEventListener = (event: RpcEvent) => void;
 
 // ============================================================================
 // RPC Client
@@ -274,6 +287,32 @@ export class RpcClient {
 		return this.getData<{ models: ModelInfo[] }>(response).models;
 	}
 
+	/** Get every registered provider, including providers that are not authenticated yet. */
+	async getProviders(): Promise<RpcProviderState> {
+		const response = await this.send({ type: "get_providers" });
+		return this.getData<RpcProviderState>(response);
+	}
+
+	/** Run a provider-owned API-key or OAuth login flow. */
+	async loginProvider(providerId: string, authType: "api_key" | "oauth", flowId?: string): Promise<RpcProviderState> {
+		const response = await this.send({ id: flowId, type: "login_provider", providerId, authType }, 10 * 60_000);
+		return this.getData<RpcProviderState>(response);
+	}
+
+	/** Remove the stored credential for a provider. Ambient environment credentials are unchanged. */
+	async logoutProvider(providerId: string): Promise<RpcProviderState> {
+		const response = await this.send({ type: "logout_provider", providerId });
+		return this.getData<RpcProviderState>(response);
+	}
+
+	async cancelProviderLogin(flowId: string): Promise<void> {
+		await this.send({ type: "cancel_provider_login", flowId });
+	}
+
+	respondToProviderAuth(response: RpcProviderAuthResponse): void {
+		this.writeWithoutResponse(response);
+	}
+
 	/**
 	 * Set thinking level.
 	 */
@@ -437,12 +476,35 @@ export class RpcClient {
 		await this.send({ type: "set_session_name", name });
 	}
 
+	/** Rename any session in the current workspace. */
+	async renameSession(sessionId: string, name: string): Promise<void> {
+		await this.send({ type: "rename_session", sessionId, name });
+	}
+
+	/** Switch the current session between work mode and plain chat mode. */
+	async setSessionMode(mode: "work" | "chat"): Promise<void> {
+		await this.send({ type: "set_session_mode", mode });
+	}
+
+	/** Control whether RPC hosts confirm each tool call or approve them automatically. */
+	async setApprovalPolicy(policy: RpcApprovalPolicy): Promise<void> {
+		await this.send({ type: "set_approval_policy", policy });
+	}
+
 	/**
 	 * Get all messages in the session.
 	 */
 	async getMessages(): Promise<AgentMessage[]> {
 		const response = await this.send({ type: "get_messages" });
 		return this.getData<{ messages: AgentMessage[] }>(response).messages;
+	}
+
+	/**
+	 * Get the active tool registry, loaded extensions, and context resources.
+	 */
+	async getResources(): Promise<RpcResourceState> {
+		const response = await this.send({ type: "get_resources" });
+		return this.getData<RpcResourceState>(response);
 	}
 
 	/**
@@ -490,6 +552,13 @@ export class RpcClient {
 			}, timeout);
 
 			const unsubscribe = this.onEvent((event) => {
+				if (
+					event.type === "extension_ui_request" ||
+					event.type === "provider_auth_event" ||
+					event.type === "provider_auth_request"
+				) {
+					return;
+				}
 				events.push(event);
 				if (event.type === "agent_settled") {
 					clearTimeout(timer);
@@ -527,7 +596,7 @@ export class RpcClient {
 
 			// Otherwise it's an event
 			for (const listener of this.eventListeners) {
-				listener(data as JsonAgentSessionEvent);
+				listener(data as RpcEvent);
 			}
 		} catch {
 			// Ignore non-JSON lines
@@ -545,7 +614,7 @@ export class RpcClient {
 		this.pendingRequests.clear();
 	}
 
-	private async send(command: RpcCommandBody): Promise<RpcResponse> {
+	private async send(command: RpcCommandBody & { id?: string }, timeoutMs = 30000): Promise<RpcResponse> {
 		const childProcess = this.process;
 		const stdin = childProcess?.stdin;
 		if (!childProcess || !stdin) {
@@ -565,14 +634,14 @@ export class RpcClient {
 			throw error;
 		}
 
-		const id = `req_${++this.requestId}`;
+		const id = command.id ?? `req_${++this.requestId}`;
 		const fullCommand = { ...command, id } as RpcCommand;
 
 		return new Promise((resolve, reject) => {
 			const timeout = setTimeout(() => {
 				this.pendingRequests.delete(id);
 				reject(new Error(`Timeout waiting for response to ${command.type}. Stderr: ${this.stderr}`));
-			}, 30000);
+			}, timeoutMs);
 
 			this.pendingRequests.set(id, {
 				resolve: (response) => {
@@ -594,6 +663,15 @@ export class RpcClient {
 				pending?.reject(writeError);
 			}
 		});
+	}
+
+	private writeWithoutResponse(message: RpcProviderAuthResponse): void {
+		const childProcess = this.process;
+		const stdin = childProcess?.stdin;
+		if (!childProcess || !stdin || stdin.destroyed || !stdin.writable) {
+			throw this.exitError ?? new Error("Agent process stdin is not writable");
+		}
+		stdin.write(serializeJsonLine(message));
 	}
 
 	private getData<T>(response: RpcResponse): T {

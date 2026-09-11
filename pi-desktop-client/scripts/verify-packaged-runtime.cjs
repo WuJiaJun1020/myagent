@@ -23,6 +23,12 @@ const rpcEntry = join(
   "rpc-entry.js",
 );
 
+function createElectronAppEnv(extra = {}) {
+  const env = { ...process.env, ...extra };
+  delete env.ELECTRON_RUN_AS_NODE;
+  return env;
+}
+
 if (!existsSync(executable) || !existsSync(appArchive)) {
   console.error("缺少打包产物，请先运行 npm.cmd run dist:win");
   process.exit(1);
@@ -110,7 +116,7 @@ async function verifyPortable() {
   let portableStderr = "";
   const portable = spawn(portableExecutable, [], {
     cwd: projectRoot,
-    env: { ...process.env, PI_CLIENT_SMOKE_RESULT: portableResult },
+    env: createElectronAppEnv({ PI_CLIENT_SMOKE_RESULT: portableResult }),
     stdio: ["ignore", "ignore", "pipe"],
     windowsHide: true,
   });
@@ -146,7 +152,7 @@ async function verifyUnpackedApp() {
   if (existsSync(unpackedAppResult)) unlinkSync(unpackedAppResult);
   const packagedApp = spawn(executable, [], {
     cwd: projectRoot,
-    env: { ...process.env, PI_CLIENT_SMOKE_RESULT: unpackedAppResult },
+    env: createElectronAppEnv({ PI_CLIENT_SMOKE_RESULT: unpackedAppResult }),
     stdio: "ignore",
     windowsHide: true,
   });

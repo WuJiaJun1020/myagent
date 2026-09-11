@@ -1,0 +1,69 @@
+import { describe, expect, it, vi } from "vitest";
+import { RpcClient } from "../src/modes/rpc/rpc-client.ts";
+
+type RpcClientPrivate = {
+	send: (command: { type: string; [key: string]: unknown }, timeoutMs?: number) => Promise<unknown>;
+	getData: <T>(response: unknown) => T;
+};
+
+describe("RpcClient getResources", () => {
+	it("sends the read-only get_resources RPC command", async () => {
+		const client = new RpcClient();
+		const privateClient = client as unknown as RpcClientPrivate;
+		const resources = {
+			tools: [],
+			extensions: [],
+			extensionErrors: [],
+			contextResources: [],
+			capabilities: { nativeMcp: false as const, semanticMemory: false as const },
+		};
+		const send = vi.fn(async () => ({
+			type: "response",
+			command: "get_resources",
+			success: true,
+			data: resources,
+		}));
+		privateClient.send = send;
+		privateClient.getData = <T>(response: unknown): T => (response as { data: T }).data;
+
+		const result = await client.getResources();
+
+		expect(send).toHaveBeenCalledWith({ type: "get_resources" });
+		expect(result).toEqual(resources);
+	});
+});
+
+describe("RpcClient provider authentication", () => {
+	it("lists providers and starts a correlated login flow", async () => {
+		const client = new RpcClient();
+		const privateClient = client as unknown as RpcClientPrivate;
+		const state = { providers: [] };
+		const send = vi.fn(async () => ({ type: "response", command: "get_providers", success: true, data: state }));
+		privateClient.send = send;
+		privateClient.getData = <T>(response: unknown): T => (response as { data: T }).data;
+
+		await expect(client.getProviders()).resolves.toEqual(state);
+		expect(send).toHaveBeenLastCalledWith({ type: "get_providers" });
+
+		await expect(client.loginProvider("anthropic", "oauth", "flow-1")).resolves.toEqual(state);
+		expect(send).toHaveBeenLastCalledWith(
+			{ id: "flow-1", type: "login_provider", providerId: "anthropic", authType: "oauth" },
+			600_000,
+		);
+	});
+});
+
+describe("RpcClient session management", () => {
+	it("sends rename and mode commands", async () => {
+		const client = new RpcClient();
+		const privateClient = client as unknown as RpcClientPrivate;
+		const send = vi.fn(async () => ({ type: "response", command: "session", success: true }));
+		privateClient.send = send;
+
+		await client.renameSession("session-1", "设计讨论");
+		expect(send).toHaveBeenLastCalledWith({ type: "rename_session", sessionId: "session-1", name: "设计讨论" });
+
+		await client.setSessionMode("chat");
+		expect(send).toHaveBeenLastCalledWith({ type: "set_session_mode", mode: "chat" });
+	});
+});

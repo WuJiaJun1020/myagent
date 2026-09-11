@@ -22,6 +22,7 @@ import type {
 	AgentMessage,
 	AgentState,
 	AgentTool,
+	BeforeToolCallResult,
 	PrepareNextTurnContext,
 	ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
@@ -187,6 +188,9 @@ export type AgentSessionEvent =
 /** Listener function for agent session events */
 export type AgentSessionEventListener = (event: AgentSessionEvent) => void;
 
+/** Controls whether a session exposes coding tools or behaves as a plain conversation. */
+export type AgentInteractionMode = "work" | "chat";
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -291,6 +295,11 @@ interface ToolDefinitionEntry {
 	sourceInfo: SourceInfo;
 }
 
+export type ToolApprovalHandler = (
+	request: { toolCallId: string; toolName: string; input: Record<string, unknown> },
+	signal?: AbortSignal,
+) => Promise<BeforeToolCallResult | undefined>;
+
 function estimateMessagesTokens(messages: AgentMessage[]): number {
 	let tokens = 0;
 	for (const message of messages) {
@@ -376,6 +385,8 @@ export class AgentSession {
 	private _baseSystemPrompt = "";
 	private _baseSystemPromptOptions!: BuildSystemPromptOptions;
 	private _systemPromptOverride?: string;
+	private _interactionMode: AgentInteractionMode = "work";
+	private _toolApprovalHandler?: ToolApprovalHandler;
 
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
@@ -480,19 +491,26 @@ export class AgentSession {
 	 * happens here instead of in wrappers.
 	 */
 	private _installAgentToolHooks(): void {
-		this.agent.beforeToolCall = async ({ toolCall, args }) => {
+		this.agent.beforeToolCall = async ({ toolCall, args }, signal) => {
 			const runner = this._extensionRunner;
-			if (!runner.hasHandlers("tool_call")) {
-				return undefined;
-			}
-
 			try {
-				return await runner.emitToolCall({
-					type: "tool_call",
-					toolName: toolCall.name,
-					toolCallId: toolCall.id,
-					input: args as Record<string, unknown>,
-				});
+				const extensionResult = runner.hasHandlers("tool_call")
+					? await runner.emitToolCall({
+							type: "tool_call",
+							toolName: toolCall.name,
+							toolCallId: toolCall.id,
+							input: args as Record<string, unknown>,
+						})
+					: undefined;
+				if (extensionResult?.block || !this._toolApprovalHandler) return extensionResult;
+				return await this._toolApprovalHandler(
+					{
+						toolCallId: toolCall.id,
+						toolName: toolCall.name,
+						input: args as Record<string, unknown>,
+					},
+					signal,
+				);
 			} catch (err) {
 				if (err instanceof Error) {
 					throw err;
@@ -533,6 +551,11 @@ export class AgentSession {
 				usage: hookResult?.usage,
 			};
 		};
+	}
+
+	/** Install an optional host-level approval gate for validated tool calls. */
+	setToolApprovalHandler(handler?: ToolApprovalHandler): void {
+		this._toolApprovalHandler = handler;
 	}
 
 	private async _compactBeforeNextAssistantResponse(context: AgentContext): Promise<AgentContext> {
@@ -940,6 +963,24 @@ export class AgentSession {
 		return this.agent.state.tools.map((t) => t.name);
 	}
 
+	/** Current interaction mode. Chat mode has no active tools or project context. */
+	get interactionMode(): AgentInteractionMode {
+		return this._interactionMode;
+	}
+
+	/**
+	 * Switch between tool-enabled work mode and plain chat mode.
+	 * Callers should pass the previously active work tools when restoring work mode.
+	 */
+	setInteractionMode(mode: AgentInteractionMode, workToolNames?: string[]): void {
+		this._interactionMode = mode;
+		const nextTools =
+			mode === "chat"
+				? []
+				: (workToolNames ?? this._initialActiveToolNames ?? Array.from(this._toolRegistry.keys()));
+		this.setActiveToolsByName(nextTools);
+	}
+
 	/**
 	 * Get all configured tools with name, description, parameter schema, prompt guidelines, and source metadata.
 	 */
@@ -966,7 +1007,8 @@ export class AgentSession {
 	setActiveToolsByName(toolNames: string[]): void {
 		const tools: AgentTool[] = [];
 		const validToolNames: string[] = [];
-		for (const name of toolNames) {
+		const requestedToolNames = this._interactionMode === "chat" ? [] : toolNames;
+		for (const name of requestedToolNames) {
 			const tool = this._toolRegistry.get(name);
 			if (tool) {
 				tools.push(tool);
@@ -1059,6 +1101,22 @@ export class AgentSession {
 	}
 
 	private _rebuildSystemPrompt(toolNames: string[]): string {
+		if (this._interactionMode === "chat") {
+			const chatPrompt = [
+				"You are a helpful AI assistant in a plain chat session.",
+				"Answer the user directly and clearly.",
+				"You do not have access to tools, files, terminals, or project context in this mode.",
+				"Do not claim to have inspected or changed the user's local environment.",
+			].join("\n");
+			this._baseSystemPromptOptions = {
+				cwd: this._cwd,
+				customPrompt: chatPrompt,
+				selectedTools: [],
+				contextFiles: [],
+				skills: [],
+			};
+			return chatPrompt;
+		}
 		const validToolNames = toolNames.filter((name) => this._toolRegistry.has(name));
 		const toolSnippets: Record<string, string> = {};
 		const promptGuidelines: string[] = [];

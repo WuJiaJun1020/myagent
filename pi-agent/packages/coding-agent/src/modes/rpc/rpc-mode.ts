@@ -12,6 +12,7 @@
  */
 
 import * as crypto from "node:crypto";
+import type { AuthEvent, AuthInteraction, AuthPrompt } from "@earendil-works/pi-ai";
 import type { AgentSessionRuntime } from "../../core/agent-session-runtime.ts";
 import type {
 	ExtensionUIContext,
@@ -25,25 +26,41 @@ import {
 	waitForRawStdoutBackpressure,
 	writeRawStdout,
 } from "../../core/output-guard.ts";
+import { SessionManager } from "../../core/session-manager.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { type Theme, theme } from "../interactive/theme/theme.ts";
 import { toJsonEvent } from "../json-event.ts";
 import { attachJsonlLineReader, serializeJsonLine } from "./jsonl.ts";
 import type {
+	RpcApprovalPolicy,
 	RpcCommand,
 	RpcExtensionUIRequest,
 	RpcExtensionUIResponse,
+	RpcProviderAuthEvent,
+	RpcProviderAuthMethod,
+	RpcProviderAuthRequest,
+	RpcProviderAuthResponse,
+	RpcProviderState,
+	RpcResourceState,
 	RpcResponse,
+	RpcSessionMode,
 	RpcSessionState,
 	RpcSlashCommand,
 } from "./rpc-types.ts";
 
 // Re-export types for consumers
 export type {
+	RpcApprovalPolicy,
 	RpcCommand,
 	RpcExtensionUIRequest,
 	RpcExtensionUIResponse,
+	RpcProviderAuthEvent,
+	RpcProviderAuthRequest,
+	RpcProviderAuthResponse,
+	RpcProviderState,
+	RpcResourceState,
 	RpcResponse,
+	RpcSessionMode,
 	RpcSessionState,
 } from "./rpc-types.ts";
 
@@ -81,6 +98,114 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 		string,
 		{ resolve: (value: any) => void; reject: (error: Error) => void }
 	>();
+	const pendingProviderAuthRequests = new Map<
+		string,
+		{
+			flowId: string;
+			resolve: (value: string) => void;
+			reject: (error: Error) => void;
+			cleanup: () => void;
+		}
+	>();
+	const providerLoginControllers = new Map<string, AbortController>();
+	const sessionModeEntryType = "pi.rpc.session-mode";
+	const approvalPolicyEntryType = "pi.rpc.approval-policy";
+	let approvalPolicy: RpcApprovalPolicy = "auto";
+
+	type PersistedSessionMode = { mode: RpcSessionMode; workToolNames: string[] };
+
+	function readPersistedSessionMode(): PersistedSessionMode | undefined {
+		const entries = session.sessionManager.getEntries();
+		for (let index = entries.length - 1; index >= 0; index -= 1) {
+			const entry = entries[index];
+			if (entry.type !== "custom" || entry.customType !== sessionModeEntryType) continue;
+			const data = entry.data;
+			if (!data || typeof data !== "object" || Array.isArray(data)) continue;
+			const mode = (data as { mode?: unknown }).mode;
+			if (mode !== "work" && mode !== "chat") continue;
+			const names = (data as { workToolNames?: unknown }).workToolNames;
+			const workToolNames = Array.isArray(names)
+				? names.filter((name): name is string => typeof name === "string")
+				: [];
+			return { mode, workToolNames };
+		}
+		return undefined;
+	}
+
+	function applyPersistedSessionMode(): void {
+		const persisted = readPersistedSessionMode();
+		if (persisted) session.setInteractionMode(persisted.mode, persisted.workToolNames);
+	}
+
+	function setSessionMode(mode: RpcSessionMode): void {
+		const previous = readPersistedSessionMode();
+		const activeToolNames = session.getActiveToolNames();
+		const workToolNames =
+			mode === "chat"
+				? session.interactionMode === "work"
+					? activeToolNames
+					: (previous?.workToolNames ?? [])
+				: previous?.workToolNames.length
+					? previous.workToolNames
+					: session.getAllTools().map((tool) => tool.name);
+		session.setInteractionMode(mode, workToolNames);
+		session.sessionManager.appendCustomEntry(sessionModeEntryType, { mode, workToolNames });
+	}
+
+	function readPersistedApprovalPolicy(): RpcApprovalPolicy {
+		const entries = session.sessionManager.getEntries();
+		for (let index = entries.length - 1; index >= 0; index -= 1) {
+			const entry = entries[index];
+			if (entry.type !== "custom" || entry.customType !== approvalPolicyEntryType) continue;
+			const data = entry.data;
+			if (!data || typeof data !== "object" || Array.isArray(data)) continue;
+			const policy = (data as { policy?: unknown }).policy;
+			if (policy === "ask" || policy === "auto") return policy;
+		}
+		return "auto";
+	}
+
+	function formatToolApprovalMessage(toolName: string, input: Record<string, unknown>): string {
+		let details: string;
+		try {
+			details = JSON.stringify(input, null, 2);
+		} catch {
+			details = String(input);
+		}
+		if (details.length > 4_000) details = `${details.slice(0, 4_000)}\n…`;
+		return `Pi 请求调用工具：${toolName}\n\n${details}`;
+	}
+
+	function applyApprovalPolicy(policy: RpcApprovalPolicy): void {
+		approvalPolicy = policy;
+		session.setToolApprovalHandler(
+			policy === "ask"
+				? async (request, signal) => {
+						const confirmed = await createDialogPromise(
+							{ signal },
+							false,
+							{
+								method: "confirm",
+								title: "批准工具调用",
+								message: formatToolApprovalMessage(request.toolName, request.input),
+							},
+							(response) =>
+								"cancelled" in response && response.cancelled
+									? false
+									: "confirmed" in response && response.confirmed,
+						);
+						return confirmed
+							? undefined
+							: { block: true, reason: `用户未批准工具调用：${request.toolName}`, terminate: true };
+					}
+				: undefined,
+		);
+	}
+
+	function setApprovalPolicy(policy: RpcApprovalPolicy): void {
+		applyApprovalPolicy(policy);
+		session.sessionManager.appendCustomEntry(approvalPolicyEntryType, { policy });
+	}
 
 	// Shutdown request flag
 	let shutdownRequested = false;
@@ -128,6 +253,112 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			});
 			output({ type: "extension_ui_request", id, ...request } as RpcExtensionUIRequest);
 		});
+	}
+
+	function providerState(): RpcProviderState {
+		const availableCounts = new Map<string, number>();
+		for (const model of session.modelRuntime.getAvailableSnapshot()) {
+			availableCounts.set(model.provider, (availableCounts.get(model.provider) ?? 0) + 1);
+		}
+		const providers = session.modelRuntime
+			.getProviders()
+			.map((provider) => {
+				const status = session.modelRuntime.getProviderAuthStatus(provider.id);
+				const authMethods: RpcProviderAuthMethod[] = [];
+				if (provider.auth.apiKey) {
+					authMethods.push({
+						type: "api_key" as const,
+						name: provider.auth.apiKey.name,
+						isSubscription: false,
+						interactive: provider.auth.apiKey.login !== undefined,
+					});
+				}
+				if (provider.auth.oauth) {
+					authMethods.push({
+						type: "oauth" as const,
+						name: provider.auth.oauth.name,
+						loginLabel: provider.auth.oauth.loginLabel,
+						isSubscription: provider.auth.oauth.isSubscription === true,
+						interactive: true,
+					});
+				}
+				return {
+					id: provider.id,
+					name: provider.name,
+					configured: status.configured,
+					authType: status.configured
+						? session.modelRuntime.isUsingOAuth(provider.id)
+							? ("oauth" as const)
+							: ("api_key" as const)
+						: undefined,
+					authSource: status.label ?? status.source,
+					stored: status.source === "stored",
+					modelCount: session.modelRuntime.getModels(provider.id).length,
+					availableModelCount: availableCounts.get(provider.id) ?? 0,
+					authMethods,
+				};
+			})
+			.sort((left, right) => left.name.localeCompare(right.name));
+		return { providers, error: session.modelRuntime.getError() };
+	}
+
+	function createProviderAuthPrompt(
+		flowId: string,
+		providerId: string,
+		flowSignal: AbortSignal,
+		prompt: AuthPrompt,
+	): Promise<string> {
+		const id = crypto.randomUUID();
+		const signal = prompt.signal ? AbortSignal.any([flowSignal, prompt.signal]) : flowSignal;
+		const rpcPrompt =
+			prompt.type === "select"
+				? {
+						type: prompt.type,
+						message: prompt.message,
+						options: prompt.options.map((option) => ({ ...option })),
+					}
+				: {
+						type: prompt.type,
+						message: prompt.message,
+						placeholder: prompt.placeholder,
+					};
+
+		return new Promise((resolve, reject) => {
+			const cleanup = () => {
+				signal.removeEventListener("abort", onAbort);
+				pendingProviderAuthRequests.delete(id);
+			};
+			const onAbort = () => {
+				cleanup();
+				reject(new Error("Provider authentication cancelled"));
+			};
+			signal.addEventListener("abort", onAbort, { once: true });
+			pendingProviderAuthRequests.set(id, { flowId, resolve, reject, cleanup });
+			output({
+				type: "provider_auth_request",
+				flowId,
+				id,
+				providerId,
+				prompt: rpcPrompt,
+			} satisfies RpcProviderAuthRequest);
+			if (signal.aborted) onAbort();
+		});
+	}
+
+	function emitProviderAuthEvent(flowId: string, providerId: string, event: RpcProviderAuthEvent["event"]): void {
+		output({ type: "provider_auth_event", flowId, providerId, event } satisfies RpcProviderAuthEvent);
+	}
+
+	function forwardProviderAuthEvent(flowId: string, providerId: string, event: AuthEvent): void {
+		if (event.type === "info") {
+			emitProviderAuthEvent(flowId, providerId, {
+				type: "info",
+				message: event.message,
+				links: event.links?.map((link) => ({ ...link })),
+			});
+			return;
+		}
+		emitProviderAuthEvent(flowId, providerId, { ...event });
 	}
 
 	/**
@@ -349,6 +580,8 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				output({ type: "extension_error", extensionPath: err.extensionPath, event: err.event, error: err.error });
 			},
 		});
+		applyPersistedSessionMode();
+		applyApprovalPolicy(readPersistedApprovalPolicy());
 
 		unsubscribe?.();
 		unsubscribeBackpressure?.();
@@ -458,6 +691,9 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 					sessionFile: session.sessionFile,
 					sessionId: session.sessionId,
 					sessionName: session.sessionName,
+					sessionMode: session.interactionMode,
+					approvalPolicy,
+					contextUsage: session.getContextUsage(),
 					autoCompactionEnabled: session.autoCompactionEnabled,
 					messageCount: session.messages.length,
 					pendingMessageCount: session.pendingMessageCount,
@@ -490,6 +726,80 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			case "get_available_models": {
 				const models = session.modelRuntime.getAvailableSnapshot();
 				return success(id, "get_available_models", { models });
+			}
+
+			case "get_providers": {
+				return success(id, "get_providers", providerState());
+			}
+
+			case "login_provider": {
+				if (session.isStreaming)
+					return error(id, "login_provider", "Cannot configure a provider while the agent is running");
+				const flowId = id ?? crypto.randomUUID();
+				if (providerLoginControllers.has(flowId)) {
+					return error(id, "login_provider", `Provider login flow already exists: ${flowId}`);
+				}
+				const provider = session.modelRuntime.getProvider(command.providerId);
+				if (!provider) return error(id, "login_provider", `Provider not found: ${command.providerId}`);
+				const controller = new AbortController();
+				providerLoginControllers.set(flowId, controller);
+				emitProviderAuthEvent(flowId, command.providerId, { type: "started", authType: command.authType });
+				const interaction: AuthInteraction = {
+					signal: controller.signal,
+					prompt: (prompt) => createProviderAuthPrompt(flowId, command.providerId, controller.signal, prompt),
+					notify: (event) => forwardProviderAuthEvent(flowId, command.providerId, event),
+				};
+				try {
+					await session.modelRuntime.login(command.providerId, command.authType, interaction);
+					emitProviderAuthEvent(flowId, command.providerId, {
+						type: "progress",
+						message: "Refreshing provider model catalog…",
+					});
+					const refreshController = new AbortController();
+					const refreshTimeout = setTimeout(() => refreshController.abort(), 15_000);
+					try {
+						const result = await session.modelRuntime.refresh({
+							providers: [command.providerId],
+							signal: refreshController.signal,
+						});
+						const refreshError = result.errors.get(command.providerId);
+						if (result.aborted || refreshError) {
+							emitProviderAuthEvent(flowId, command.providerId, {
+								type: "info",
+								message:
+									refreshError?.message ?? "Model catalog refresh timed out; cached models remain available.",
+							});
+						}
+					} finally {
+						clearTimeout(refreshTimeout);
+					}
+					emitProviderAuthEvent(flowId, command.providerId, { type: "completed" });
+					return success(id, "login_provider", providerState());
+				} catch (loginError: unknown) {
+					const message = loginError instanceof Error ? loginError.message : String(loginError);
+					emitProviderAuthEvent(flowId, command.providerId, { type: "failed", message });
+					throw loginError;
+				} finally {
+					providerLoginControllers.delete(flowId);
+					for (const request of pendingProviderAuthRequests.values()) {
+						if (request.flowId === flowId) request.cleanup();
+					}
+				}
+			}
+
+			case "logout_provider": {
+				if (session.isStreaming)
+					return error(id, "logout_provider", "Cannot remove provider auth while the agent is running");
+				if (!session.modelRuntime.getProvider(command.providerId)) {
+					return error(id, "logout_provider", `Provider not found: ${command.providerId}`);
+				}
+				await session.modelRuntime.logout(command.providerId);
+				return success(id, "logout_provider", providerState());
+			}
+
+			case "cancel_provider_login": {
+				providerLoginControllers.get(command.flowId)?.abort();
+				return success(id, "cancel_provider_login");
 			}
 
 			// =================================================================
@@ -667,12 +977,121 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				return success(id, "set_session_name");
 			}
 
+			case "rename_session": {
+				if (session.isStreaming)
+					return error(id, "rename_session", "Cannot rename a session while the agent is running");
+				const name = command.name.replace(/[\r\n]+/g, " ").trim();
+				if (!name || name.length > 120) return error(id, "rename_session", "Session name must be 1-120 characters");
+				if (command.sessionId === session.sessionId) {
+					session.setSessionName(name);
+					return success(id, "rename_session");
+				}
+				const sessions = await SessionManager.list(
+					session.sessionManager.getCwd(),
+					session.sessionManager.getSessionDir(),
+				);
+				const target = sessions.find((candidate) => candidate.id === command.sessionId);
+				if (!target) return error(id, "rename_session", `Session not found: ${command.sessionId}`);
+				SessionManager.open(target.path, session.sessionManager.getSessionDir()).appendSessionInfo(name);
+				return success(id, "rename_session");
+			}
+
+			case "set_session_mode": {
+				if (session.isStreaming)
+					return error(id, "set_session_mode", "Cannot change mode while the agent is running");
+				if (command.mode !== "work" && command.mode !== "chat") {
+					return error(id, "set_session_mode", "Session mode must be work or chat");
+				}
+				setSessionMode(command.mode);
+				return success(id, "set_session_mode", { mode: command.mode });
+			}
+
+			case "set_approval_policy": {
+				if (session.isStreaming)
+					return error(id, "set_approval_policy", "Cannot change approval policy while the agent is running");
+				if (command.policy !== "ask" && command.policy !== "auto") {
+					return error(id, "set_approval_policy", "Approval policy must be ask or auto");
+				}
+				setApprovalPolicy(command.policy);
+				return success(id, "set_approval_policy", { policy: command.policy });
+			}
+
 			// =================================================================
 			// Messages
 			// =================================================================
 
 			case "get_messages": {
 				return success(id, "get_messages", { messages: session.messages });
+			}
+
+			// =================================================================
+			// Runtime resources (read-only observability for embedded clients)
+			// =================================================================
+
+			case "get_resources": {
+				const maxTools = 500;
+				const maxExtensions = 200;
+				const maxContextResourceLength = 100_000;
+				let remainingContextLength = 400_000;
+				const resourceLoader = session.resourceLoader;
+				const activeToolNames = new Set(session.getActiveToolNames());
+				const extensionsResult = resourceLoader.getExtensions();
+				const contextResources: RpcResourceState["contextResources"] = [];
+				const appendContextResource = (
+					kind: RpcResourceState["contextResources"][number]["kind"],
+					path: string,
+					content: string,
+				) => {
+					const allowed = Math.max(0, Math.min(maxContextResourceLength, remainingContextLength));
+					const boundedContent = content.slice(0, allowed);
+					remainingContextLength -= boundedContent.length;
+					contextResources.push({
+						kind,
+						path,
+						content: boundedContent,
+						truncated: boundedContent.length < content.length,
+					});
+				};
+				for (const resource of resourceLoader.getAgentsFiles().agentsFiles) {
+					appendContextResource("instructions", resource.path, resource.content);
+				}
+
+				const systemPromptSource = resourceLoader.getSystemPromptSource();
+				const systemPrompt = resourceLoader.getSystemPrompt();
+				if (systemPromptSource && systemPrompt !== undefined) {
+					appendContextResource("system", systemPromptSource.path, systemPrompt);
+				}
+
+				const appendSources = resourceLoader.getAppendSystemPromptSources();
+				const appendPrompts = resourceLoader.getAppendSystemPrompt();
+				appendSources.forEach((source, index) => {
+					appendContextResource("append-system", source.path, appendPrompts[index] ?? "");
+				});
+
+				const resources: RpcResourceState = {
+					tools: session
+						.getAllTools()
+						.slice(0, maxTools)
+						.map((tool) => ({
+							name: tool.name,
+							description: tool.description?.slice(0, 4_000),
+							active: activeToolNames.has(tool.name),
+							sourceInfo: tool.sourceInfo,
+						})),
+					extensions: extensionsResult.extensions.slice(0, maxExtensions).map((extension) => ({
+						path: extension.path,
+						sourceInfo: extension.sourceInfo,
+						toolNames: [...extension.tools.keys()].slice(0, maxTools),
+						commandNames: [...extension.commands.keys()].slice(0, 500),
+					})),
+					extensionErrors: extensionsResult.errors.slice(0, 100).map((item) => ({
+						path: item.path,
+						error: item.error.slice(0, 4_000),
+					})),
+					contextResources,
+					capabilities: { nativeMcp: false, semanticMemory: false },
+				};
+				return success(id, "get_resources", resources);
 			}
 
 			// =================================================================
@@ -730,6 +1149,8 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			process.exit(exitCode);
 		}
 		shuttingDown = true;
+		for (const controller of providerLoginControllers.values()) controller.abort();
+		providerLoginControllers.clear();
 		for (const cleanup of signalCleanupHandlers) {
 			cleanup();
 		}
@@ -762,6 +1183,26 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				),
 			);
 			await waitForRawStdoutBackpressure();
+			return;
+		}
+
+		// Handle provider authentication responses
+		if (
+			typeof parsed === "object" &&
+			parsed !== null &&
+			"type" in parsed &&
+			parsed.type === "provider_auth_response"
+		) {
+			const response = parsed as RpcProviderAuthResponse;
+			const pending = pendingProviderAuthRequests.get(response.id);
+			if (pending && pending.flowId === response.flowId) {
+				pending.cleanup();
+				if (response.cancelled || response.value === undefined) {
+					pending.reject(new Error("Provider authentication cancelled"));
+				} else {
+					pending.resolve(response.value);
+				}
+			}
 			return;
 		}
 

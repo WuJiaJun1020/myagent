@@ -165,6 +165,40 @@ describe("AgentSession dynamic tool registration", () => {
 		session.dispose();
 	});
 
+	it("switches between tool-enabled work mode and isolated chat mode", async () => {
+		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const sessionManager = SessionManager.inMemory();
+		const resourceLoader = new DefaultResourceLoader({ cwd: tempDir, agentDir, settingsManager });
+		await resourceLoader.reload();
+
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir,
+			model: getModel("anthropic", "claude-sonnet-4-5")!,
+			settingsManager,
+			sessionManager,
+			resourceLoader,
+		});
+		const workTools = session.getActiveToolNames();
+		expect(workTools.length).toBeGreaterThan(0);
+
+		session.setInteractionMode("chat", workTools);
+		expect(session.interactionMode).toBe("chat");
+		expect(session.getActiveToolNames()).toEqual([]);
+		expect(session.systemPrompt).toContain("plain chat session");
+		expect(session.systemPrompt).not.toContain(tempDir.replace(/\\/g, "/"));
+
+		session.setActiveToolsByName(["read"]);
+		expect(session.getActiveToolNames()).toEqual([]);
+
+		session.setInteractionMode("work", workTools);
+		expect(session.interactionMode).toBe("work");
+		expect(session.getActiveToolNames()).toEqual(workTools);
+		expect(session.systemPrompt).toContain("coding agent harness");
+
+		session.dispose();
+	});
+
 	it("returns source metadata for SDK custom tools", async () => {
 		const settingsManager = SettingsManager.create(tempDir, agentDir);
 		const sessionManager = SessionManager.inMemory();
