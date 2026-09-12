@@ -29,6 +29,8 @@ function createWindow(): BrowserWindow {
     minHeight: 620,
     backgroundColor: "#0d1118",
     title: "Pi Desktop",
+    frame: false,
+    autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
@@ -43,10 +45,21 @@ function createWindow(): BrowserWindow {
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = null;
   });
+  window.on("maximize", () => sendToRenderer(window, "app:window-maximized", true));
+  window.on("unmaximize", () => sendToRenderer(window, "app:window-maximized", false));
   return window;
 }
 
 function registerIpc(): void {
+  ipcMain.handle("app:window-minimize", () => mainWindow?.minimize());
+  ipcMain.handle("app:window-toggle-maximize", () => {
+    if (!mainWindow) return false;
+    if (mainWindow.isMaximized()) mainWindow.unmaximize();
+    else mainWindow.maximize();
+    return mainWindow.isMaximized();
+  });
+  ipcMain.handle("app:window-close", () => mainWindow?.close());
+  ipcMain.handle("app:window-get-maximized", () => mainWindow?.isMaximized() ?? false);
   ipcMain.handle("pi:get-status", () => pi.getStatus());
   ipcMain.handle("pi:get-runtime-snapshot", () => sessionService.getSnapshot(true));
   ipcMain.handle("pi:get-session-state", () => sessionService.getSessionState());

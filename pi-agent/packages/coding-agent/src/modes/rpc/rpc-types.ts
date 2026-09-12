@@ -24,7 +24,7 @@ export type RpcCommand =
 	| { id?: string; type: "follow_up"; message: string; images?: ImageContent[] }
 	| { id?: string; type: "abort" }
 	| { id?: string; type: "clear_queue" }
-	| { id?: string; type: "new_session"; parentSession?: string }
+	| { id?: string; type: "new_session"; parentSession?: string; sessionDir?: string }
 
 	// State
 	| { id?: string; type: "get_state" }
@@ -62,7 +62,7 @@ export type RpcCommand =
 	// Session
 	| { id?: string; type: "get_session_stats" }
 	| { id?: string; type: "export_html"; outputPath?: string }
-	| { id?: string; type: "switch_session"; sessionPath: string }
+	| { id?: string; type: "switch_session"; sessionPath: string; cwdOverride?: string }
 	| { id?: string; type: "fork"; entryId: string }
 	| { id?: string; type: "clone" }
 	| { id?: string; type: "get_fork_messages" }
@@ -70,7 +70,7 @@ export type RpcCommand =
 	| { id?: string; type: "get_tree" }
 	| { id?: string; type: "get_last_assistant_text" }
 	| { id?: string; type: "set_session_name"; name: string }
-	| { id?: string; type: "rename_session"; sessionId: string; name: string }
+	| { id?: string; type: "rename_session"; sessionId: string; name: string; sessionPath?: string }
 	| { id?: string; type: "set_session_mode"; mode: RpcSessionMode }
 	| { id?: string; type: "set_approval_policy"; policy: RpcApprovalPolicy }
 

@@ -171,6 +171,7 @@ async function createRuntimeHost(options: { withAuth: boolean; responseDelayMs: 
 async function startRpcMode(options: { withAuth: boolean; responseDelayMs: number; model?: Model<any> }): Promise<{
 	lineHandler: (line: string) => void;
 	cleanup: () => Promise<void>;
+	runtimeHost: AgentSessionRuntime;
 }> {
 	rpcIo.outputLines = [];
 	rpcIo.lineHandler = undefined;
@@ -179,7 +180,7 @@ async function startRpcMode(options: { withAuth: boolean; responseDelayMs: numbe
 	void runRpcMode(runtimeHost);
 	await vi.waitFor(() => expect(rpcIo.lineHandler).toBeDefined());
 
-	return { lineHandler: rpcIo.lineHandler!, cleanup };
+	return { lineHandler: rpcIo.lineHandler!, cleanup, runtimeHost };
 }
 
 describe("RPC prompt response semantics", () => {
@@ -333,6 +334,78 @@ describe("RPC prompt response semantics", () => {
 
 			await sleep(600);
 			expect(parseOutputLines(rpcIo.outputLines).filter((record) => record.type === "agent_start")).toHaveLength(1);
+		} finally {
+			await cleanup();
+		}
+	});
+
+	it("resumes a session with an explicit current-workspace override", async () => {
+		const { lineHandler, cleanup, runtimeHost } = await startRpcMode({ withAuth: true, responseDelayMs: 0 });
+
+		try {
+			lineHandler(
+				JSON.stringify({
+					id: "resume-current-workspace",
+					type: "switch_session",
+					sessionPath: "/sessions/global-chat.jsonl",
+					cwdOverride: "/workspaces/current",
+				}),
+			);
+
+			await vi.waitFor(() => {
+				expect(runtimeHost.switchSession).toHaveBeenCalledWith("/sessions/global-chat.jsonl", {
+					cwdOverride: "/workspaces/current",
+				});
+				expect(parseOutputLines(rpcIo.outputLines)).toContainEqual({
+					id: "resume-current-workspace",
+					type: "response",
+					command: "switch_session",
+					success: true,
+					data: { cancelled: true },
+				});
+			});
+		} finally {
+			await cleanup();
+		}
+	});
+
+	it("creates a session in the requested storage directory", async () => {
+		const { lineHandler, cleanup, runtimeHost } = await startRpcMode({ withAuth: true, responseDelayMs: 0 });
+
+		try {
+			lineHandler(JSON.stringify({ id: "new-storage", type: "new_session", sessionDir: "/sessions/desktop-chat" }));
+
+			await vi.waitFor(() => {
+				expect(runtimeHost.newSession).toHaveBeenCalledWith({ sessionDir: "/sessions/desktop-chat" });
+				expect(parseOutputLines(rpcIo.outputLines)).toContainEqual({
+					id: "new-storage",
+					type: "response",
+					command: "new_session",
+					success: true,
+					data: { cancelled: true },
+				});
+			});
+		} finally {
+			await cleanup();
+		}
+	});
+
+	it("rejects an empty requested storage directory", async () => {
+		const { lineHandler, cleanup, runtimeHost } = await startRpcMode({ withAuth: true, responseDelayMs: 0 });
+
+		try {
+			lineHandler(JSON.stringify({ id: "invalid-storage", type: "new_session", sessionDir: "" }));
+
+			await vi.waitFor(() => {
+				expect(runtimeHost.newSession).not.toHaveBeenCalled();
+				expect(parseOutputLines(rpcIo.outputLines)).toContainEqual({
+					id: "invalid-storage",
+					type: "response",
+					command: "new_session",
+					success: false,
+					error: "sessionDir must be a non-empty path",
+				});
+			});
 		} finally {
 			await cleanup();
 		}

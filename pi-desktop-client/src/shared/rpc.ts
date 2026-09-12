@@ -39,6 +39,11 @@ export type ExtensionUiResponse = {
 };
 
 export interface PiDesktopApi {
+  minimizeWindow(): Promise<void>;
+  toggleWindowMaximize(): Promise<boolean>;
+  closeWindow(): Promise<void>;
+  getWindowMaximized(): Promise<boolean>;
+  onWindowMaximized(listener: (maximized: boolean) => void): () => void;
   getStatus(): Promise<ProcessStatus>;
   selectWorkspace(): Promise<ProcessStatus>;
   restart(): Promise<ProcessStatus>;

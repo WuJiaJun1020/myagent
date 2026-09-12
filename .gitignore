@@ -13,7 +13,9 @@
 .DS_Store
 Thumbs.db
 
+# Literal placeholder directory created by a local Windows smoke test
+pi-desktop-client/%USERPROFILE%/
+
 # Editors
 .vscode/
 .idea/
-

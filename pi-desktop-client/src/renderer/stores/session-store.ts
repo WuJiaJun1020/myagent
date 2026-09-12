@@ -35,6 +35,7 @@ type SessionStore = {
   selectModel: (provider: string, modelId: string) => Promise<void>;
   selectThinkingLevel: (level: ThinkingLevel) => Promise<void>;
   refreshSessionState: () => Promise<void>;
+  prepareWorkspaceTransition: () => void;
   clearError: () => void;
   reset: () => void;
 };
@@ -48,7 +49,7 @@ function errorMessage(reason: unknown): string {
 function applySnapshot(snapshot: AgentRuntimeSnapshot, cwd: string): void {
   useAgentStore.getState().hydrateRuntimeSnapshot(snapshot);
   useUiStore.getState().clearDetailSelection();
-  if (cwd) useSettingsStore.getState().rememberSession(cwd, snapshot.session.id);
+  if (cwd && snapshot.session.mode === "work") useSettingsStore.getState().rememberSession(cwd, snapshot.session.id);
   if (snapshot.session.model) {
     useSettingsStore.getState().setPreferredModel(snapshot.session.model.provider, snapshot.session.model.id);
   }
@@ -74,7 +75,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       if (
         rememberedSessionId
         && rememberedSessionId !== snapshot.session.id
-        && snapshot.sessions.some((session) => session.id === rememberedSessionId)
+        && snapshot.sessions.some((session) => session.id === rememberedSessionId && session.mode === "work")
       ) {
         snapshot = await agentGateway.switchSession(rememberedSessionId);
       }
@@ -229,6 +230,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       // A settled event can race with process shutdown or a session switch.
     }
   },
+
+  prepareWorkspaceTransition: () => set({
+    session: null,
+    models: [],
+    thinkingLevels: ["off"],
+    commands: [],
+    error: null,
+  }),
 
   clearError: () => set({ error: null }),
   reset: () => {

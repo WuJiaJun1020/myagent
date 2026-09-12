@@ -414,8 +414,12 @@ export class RpcClient {
 	 * Switch to a different session file.
 	 * @returns Object with `cancelled: true` if an extension cancelled the switch
 	 */
-	async switchSession(sessionPath: string): Promise<{ cancelled: boolean }> {
-		const response = await this.send({ type: "switch_session", sessionPath });
+	async switchSession(sessionPath: string, cwdOverride?: string): Promise<{ cancelled: boolean }> {
+		const response = await this.send({
+			type: "switch_session",
+			sessionPath,
+			...(cwdOverride === undefined ? {} : { cwdOverride }),
+		});
 		return this.getData(response);
 	}
 
@@ -477,8 +481,13 @@ export class RpcClient {
 	}
 
 	/** Rename any session in the current workspace. */
-	async renameSession(sessionId: string, name: string): Promise<void> {
-		await this.send({ type: "rename_session", sessionId, name });
+	async renameSession(sessionId: string, name: string, sessionPath?: string): Promise<void> {
+		await this.send({
+			type: "rename_session",
+			sessionId,
+			name,
+			...(sessionPath === undefined ? {} : { sessionPath }),
+		});
 	}
 
 	/** Switch the current session between work mode and plain chat mode. */

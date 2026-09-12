@@ -23,11 +23,13 @@ export type PiSessionIndexOptions = {
   activeSessionFile?: string;
   sessionDir?: string;
   agentDir?: string;
+  additionalSessionDirs?: string[];
 };
 
 const MAX_CONCURRENT_READS = 10;
 const MAX_FIRST_MESSAGE_LENGTH = 240;
 const SESSION_MODE_ENTRY_TYPE = "pi.rpc.session-mode";
+const sessionInfoCache = new Map<string, { size: number; mtimeMs: number; entry: PiSessionIndexEntry }>();
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -53,6 +55,14 @@ export function getDefaultPiSessionDir(cwd: string, agentDir?: string): string {
   const resolvedCwd = normalizedPath(cwd);
   const safePath = `--${resolvedCwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
   return join(defaultAgentDir(agentDir, resolvedCwd), "sessions", safePath);
+}
+
+/**
+ * Pure-chat transcripts are intentionally outside every project session directory.
+ * Keeping them below Pi's shared session root still lets the global session index find them.
+ */
+export function getDesktopChatSessionDir(cwd: string, agentDir?: string): string {
+  return join(defaultAgentDir(agentDir, normalizedPath(cwd)), "sessions", "--pi-desktop-global-chat--");
 }
 
 async function readConfiguredSessionDir(cwd: string, agentDir: string): Promise<string | undefined> {
@@ -117,6 +127,9 @@ function readTimestamp(value: unknown): number | undefined {
 async function readSessionInfo(filePath: string): Promise<PiSessionIndexEntry | null> {
   try {
     const fileStat = await stat(filePath);
+    const cacheKey = comparablePath(filePath);
+    const cached = sessionInfoCache.get(cacheKey);
+    if (cached && cached.size === fileStat.size && cached.mtimeMs === fileStat.mtimeMs) return cached.entry;
     let header: UnknownRecord | null = null;
     let messageCount = 0;
     let firstMessage = "";
@@ -168,7 +181,7 @@ async function readSessionInfo(filePath: string): Promise<PiSessionIndexEntry | 
     if (!header || typeof header.id !== "string") return null;
     const fallbackCreatedAt = fileStat.birthtimeMs || fileStat.mtimeMs;
     const createdAt = readTimestamp(header.timestamp) ?? fallbackCreatedAt;
-    return {
+    const entry = {
       path: filePath,
       id: header.id,
       cwd: typeof header.cwd === "string" ? header.cwd : "",
@@ -179,6 +192,8 @@ async function readSessionInfo(filePath: string): Promise<PiSessionIndexEntry | 
       messageCount,
       firstMessage: truncateSummary(firstMessage) || "（无消息）",
     };
+    sessionInfoCache.set(cacheKey, { size: fileStat.size, mtimeMs: fileStat.mtimeMs, entry });
+    return entry;
   } catch {
     return null;
   }
@@ -202,6 +217,24 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+async function listSessionFiles(directories: string[]): Promise<string[]> {
+  const uniqueDirectories = new Map<string, string>();
+  for (const directory of directories) uniqueDirectories.set(comparablePath(directory), directory);
+
+  const files: string[] = [];
+  for (const directory of uniqueDirectories.values()) {
+    try {
+      const entries = await readdir(directory, { withFileTypes: true });
+      files.push(...entries
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
+        .map((entry) => join(directory, entry.name)));
+    } catch {
+      // A missing project or custom session directory has no sessions to index.
+    }
+  }
+  return files;
+}
+
 export async function listPiSessions(
   cwd: string,
   options: PiSessionIndexOptions = {},
@@ -221,5 +254,37 @@ export async function listPiSessions(
   return entries
     .filter((entry): entry is PiSessionIndexEntry => entry !== null)
     .filter((entry) => !sessionDir.filterByCwd || (entry.cwd && comparablePath(entry.cwd) === resolvedCwd))
+    .sort((left, right) => right.modifiedAt - left.modifiedAt);
+}
+
+/**
+ * Index sessions across Pi's default per-workspace directories and the active custom directory.
+ * The returned paths stay in the Main Process; callers must not expose them to the Renderer.
+ */
+export async function listAllPiSessions(
+  cwd: string,
+  options: PiSessionIndexOptions = {},
+): Promise<PiSessionIndexEntry[]> {
+  const agentDir = defaultAgentDir(options.agentDir, cwd);
+  const sessionRoot = join(agentDir, "sessions");
+  const directories: string[] = [];
+
+  try {
+    const entries = await readdir(sessionRoot, { withFileTypes: true });
+    directories.push(...entries
+      .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
+      .map((entry) => join(sessionRoot, entry.name)));
+  } catch {
+    // The default session root has not been created yet.
+  }
+
+  const activeDirectory = await resolveSessionDir(cwd, options);
+  directories.push(activeDirectory.path);
+  directories.push(getDesktopChatSessionDir(cwd, options.agentDir));
+  directories.push(...(options.additionalSessionDirs ?? []));
+
+  const entries = await mapWithConcurrency(await listSessionFiles(directories), MAX_CONCURRENT_READS, readSessionInfo);
+  return entries
+    .filter((entry): entry is PiSessionIndexEntry => entry !== null)
     .sort((left, right) => right.modifiedAt - left.modifiedAt);
 }

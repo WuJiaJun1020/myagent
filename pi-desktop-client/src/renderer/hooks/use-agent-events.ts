@@ -9,14 +9,17 @@ import { useProviderStore } from "../stores/provider-store";
 
 function applyProcessStatus(status: ProcessStatus): void {
   const previous = useAgentStore.getState().processStatus;
+  const sessionTransition = useSessionStore.getState().mutation === "session";
   if (previous.cwd !== status.cwd) {
-    useSessionStore.getState().reset();
+    useAgentStore.getState().resetSession();
+    if (sessionTransition) useSessionStore.getState().prepareWorkspaceTransition();
+    else useSessionStore.getState().reset();
     useResourceStore.getState().reset();
     useProviderStore.getState().reset();
   }
   useAgentStore.getState().setProcessStatus(status);
   useWorkspaceStore.getState().setWorkspace(status.cwd);
-  if (status.state === "running" && (previous.state !== "running" || previous.cwd !== status.cwd)) {
+  if (!sessionTransition && status.state === "running" && (previous.state !== "running" || previous.cwd !== status.cwd)) {
     void useSessionStore.getState().initialize(status.cwd);
     void useResourceStore.getState().initialize(status.cwd);
     void useProviderStore.getState().initialize();

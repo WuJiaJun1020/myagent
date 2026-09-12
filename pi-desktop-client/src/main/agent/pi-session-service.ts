@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { basename, dirname, resolve } from "node:path";
 import type {
   AgentRuntimeSnapshot,
   AgentSessionState,
@@ -10,11 +12,14 @@ import type {
 } from "../../shared/contracts/agent-session";
 import type { RpcMessage } from "../../shared/rpc";
 import { PiProcess } from "../pi-process";
-import { listPiSessions } from "../sessions/pi-session-index";
+import { getDefaultPiSessionDir, getDesktopChatSessionDir, listAllPiSessions, type PiSessionIndexEntry } from "../sessions/pi-session-index";
 import { PiEventAdapter } from "./pi-event-adapter";
 import { adaptRpcHistory, toDesktopModel, toThinkingLevel } from "./pi-snapshot-adapter";
 
 type UnknownRecord = Record<string, unknown>;
+type DesktopSessionIndexEntry = PiSessionIndexEntry & {
+  requiresWorkMode: boolean;
+};
 const RPC_TIMEOUT = 30_000;
 const MAX_SESSION_NAME_LENGTH = 120;
 
@@ -60,6 +65,19 @@ function validateSessionMode(value: unknown): SessionMode {
 function validateSessionId(value: unknown): string {
   if (typeof value !== "string" || !value || value.length > 200) throw new Error("会话 ID 无效");
   return value;
+}
+
+function sameWorkspace(left: string, right: string): boolean {
+  if (!left || !right) return false;
+  const normalizedLeft = resolve(left);
+  const normalizedRight = resolve(right);
+  return process.platform === "win32"
+    ? normalizedLeft.toLocaleLowerCase() === normalizedRight.toLocaleLowerCase()
+    : normalizedLeft === normalizedRight;
+}
+
+function workspaceName(cwd: string): string {
+  return basename(cwd) || "未知工作区";
 }
 
 function parseSessionState(value: UnknownRecord): AgentSessionState {
@@ -109,19 +127,18 @@ function parseThinkingLevels(value: UnknownRecord): ThinkingLevel[] {
 }
 
 export class PiSessionService {
-  private readonly sessionPaths = new Map<string, string>();
+  private readonly sessionIndex = new Map<string, DesktopSessionIndexEntry>();
+  private recentSessions: SessionListItem[] = [];
 
   constructor(
     private readonly pi: PiProcess,
     private readonly eventAdapter: PiEventAdapter,
     private readonly trashItem: (path: string) => Promise<void>,
+    private readonly chatSessionDirectory: (cwd: string) => string = getDesktopChatSessionDir,
   ) {}
 
-  async getSnapshot(synchronizeSession = false): Promise<AgentRuntimeSnapshot> {
-    const stateResponse = await this.pi.send({ type: "get_state" }, RPC_TIMEOUT);
-    const stateData = responseData(stateResponse);
-    const session = parseSessionState(stateData);
-    const sessionFile = readString(stateData.sessionFile);
+  async getSnapshot(synchronizeSession = false, cachedSessions?: SessionListItem[]): Promise<AgentRuntimeSnapshot> {
+    const { session, sessionFile } = await this.getNormalizedCurrentSession();
     if (synchronizeSession) this.eventAdapter.synchronizeSession(session.id);
 
     const [messagesResponse, modelsResponse, thinkingResponse, commandsResponse, sessions] = await Promise.all([
@@ -129,7 +146,7 @@ export class PiSessionService {
       this.pi.send({ type: "get_available_models" }, RPC_TIMEOUT),
       this.pi.send({ type: "get_available_thinking_levels" }, RPC_TIMEOUT),
       this.pi.send({ type: "get_commands" }, RPC_TIMEOUT),
-      this.listSessions(session, sessionFile),
+      cachedSessions ? Promise.resolve(cachedSessions) : this.listSessions(session, sessionFile),
     ]);
     const messageData = responseData(messagesResponse);
 
@@ -145,12 +162,24 @@ export class PiSessionService {
   }
 
   async getSessionState(): Promise<AgentSessionState> {
-    return parseSessionState(responseData(await this.pi.send({ type: "get_state" }, RPC_TIMEOUT)));
+    return (await this.getNormalizedCurrentSession()).session;
   }
 
   async newSession(mode: unknown = "work"): Promise<AgentRuntimeSnapshot> {
     const sessionMode = validateSessionMode(mode);
-    const response = await this.pi.send({ type: "new_session" }, RPC_TIMEOUT);
+    const { sessionFile } = await this.getNormalizedCurrentSession();
+    const cwd = this.pi.getStatus().cwd;
+    const chatSessionDir = this.chatSessionDirectory(cwd);
+
+    const currentIsChat = this.isDesktopChatSession(sessionFile, cwd);
+    const sessionDir = sessionMode === "chat"
+      ? chatSessionDir
+      : currentIsChat
+        ? getDefaultPiSessionDir(cwd)
+        : undefined;
+
+    this.eventAdapter.beginSession();
+    const response = await this.pi.send({ type: "new_session", ...(sessionDir ? { sessionDir } : {}) }, RPC_TIMEOUT);
     if (isRecord(response.data) && response.data.cancelled === true) return this.getSnapshot(false);
     if (sessionMode === "chat") await this.pi.send({ type: "set_session_mode", mode: sessionMode }, RPC_TIMEOUT);
     return this.getSnapshot(true);
@@ -158,14 +187,31 @@ export class PiSessionService {
 
   async switchSession(sessionId: unknown): Promise<AgentRuntimeSnapshot> {
     const id = validateSessionId(sessionId);
-    const stateData = responseData(await this.pi.send({ type: "get_state" }, RPC_TIMEOUT));
-    const currentState = parseSessionState(stateData);
-    await this.listSessions(currentState, readString(stateData.sessionFile));
-    const sessionPath = this.sessionPaths.get(id);
-    if (!sessionPath) throw new Error("找不到当前工作区中的目标会话");
-    const response = await this.pi.send({ type: "switch_session", sessionPath }, RPC_TIMEOUT);
+    const { session: currentState, sessionFile } = await this.getNormalizedCurrentSession();
+    let target = this.sessionIndex.get(id);
+    if (!target) {
+      await this.listSessions(currentState, sessionFile);
+      target = this.sessionIndex.get(id);
+    }
+    if (!target) throw new Error("找不到目标会话");
+
+    const currentWorkspace = this.pi.getStatus().cwd;
+    if (target.mode === "work" && !target.cwd) {
+      throw new Error("工作会话缺少原工作区目录，无法恢复");
+    }
+    if (target.mode === "work" && !existsSync(target.cwd)) {
+      throw new Error("原工作区目录不存在，无法恢复此工作会话");
+    }
+
+    const response = await this.pi.send({
+      type: "switch_session",
+      sessionPath: target.path,
+      ...(target.mode === "chat" ? { cwdOverride: currentWorkspace } : {}),
+    }, RPC_TIMEOUT);
     if (isRecord(response.data) && response.data.cancelled === true) return this.getSnapshot(false);
-    return this.getSnapshot(true);
+    if (target.mode === "work") this.pi.setWorkspaceCwd(target.cwd);
+    if (target.requiresWorkMode) await this.pi.send({ type: "set_session_mode", mode: "work" }, RPC_TIMEOUT);
+    return this.getSnapshot(true, this.cachedSessionsWithCurrent(id));
   }
 
   async renameSession(sessionId: unknown, name: unknown): Promise<AgentRuntimeSnapshot> {
@@ -175,35 +221,37 @@ export class PiSessionService {
     if (!normalizedName || normalizedName.length > MAX_SESSION_NAME_LENGTH) {
       throw new Error(`会话名称必须为 1-${MAX_SESSION_NAME_LENGTH} 个字符`);
     }
-    const stateData = responseData(await this.pi.send({ type: "get_state" }, RPC_TIMEOUT));
-    const current = parseSessionState(stateData);
-    await this.listSessions(current, readString(stateData.sessionFile));
-    if (!this.sessionPaths.has(id)) throw new Error("找不到当前工作区中的目标会话");
-    await this.pi.send({ type: "rename_session", sessionId: id, name: normalizedName }, RPC_TIMEOUT);
+    const { session: current, sessionFile } = await this.getNormalizedCurrentSession();
+    await this.listSessions(current, sessionFile);
+    const target = this.sessionIndex.get(id);
+    if (!target) throw new Error("找不到目标会话");
+    await this.pi.send({ type: "rename_session", sessionId: id, name: normalizedName, sessionPath: target.path }, RPC_TIMEOUT);
     return this.getSnapshot(false);
   }
 
   async deleteSession(sessionId: unknown): Promise<AgentRuntimeSnapshot> {
     const id = validateSessionId(sessionId);
-    const stateData = responseData(await this.pi.send({ type: "get_state" }, RPC_TIMEOUT));
-    const current = parseSessionState(stateData);
-    await this.listSessions(current, readString(stateData.sessionFile));
-    const sessionPath = this.sessionPaths.get(id);
-    if (!sessionPath) throw new Error("找不到当前工作区中的目标会话");
+    const { session: current, sessionFile } = await this.getNormalizedCurrentSession();
+    await this.listSessions(current, sessionFile);
+    const target = this.sessionIndex.get(id);
+    if (!target) throw new Error("找不到目标会话");
 
     if (id === current.id) {
+      if (target.requiresWorkMode) await this.pi.send({ type: "set_session_mode", mode: "work" }, RPC_TIMEOUT);
       const response = await this.pi.send({ type: "new_session" }, RPC_TIMEOUT);
       if (isRecord(response.data) && response.data.cancelled === true) throw new Error("创建替代会话已取消，未删除当前会话");
-      if (current.mode === "chat") await this.pi.send({ type: "set_session_mode", mode: "chat" }, RPC_TIMEOUT);
+      if (target.mode === "chat") await this.pi.send({ type: "set_session_mode", mode: "chat" }, RPC_TIMEOUT);
     }
-    await this.trashItem(sessionPath);
+    await this.trashItem(target.path);
     return this.getSnapshot(id === current.id);
   }
 
   async setSessionMode(mode: unknown): Promise<AgentRuntimeSnapshot> {
     const sessionMode = validateSessionMode(mode);
-    await this.pi.send({ type: "set_session_mode", mode: sessionMode }, RPC_TIMEOUT);
-    return this.getSnapshot(false);
+    const { session, sessionFile } = await this.getNormalizedCurrentSession();
+    const currentMode = this.isDesktopChatSession(sessionFile, this.pi.getStatus().cwd) ? "chat" : "work";
+    if (currentMode === sessionMode && session.mode === sessionMode) return this.getSnapshot(false);
+    return this.newSession(sessionMode);
   }
 
   async setApprovalPolicy(policy: unknown): Promise<AgentRuntimeSnapshot> {
@@ -231,36 +279,85 @@ export class PiSessionService {
     return this.getSnapshot(false);
   }
 
+  private async getNormalizedCurrentSession(): Promise<{ session: AgentSessionState; sessionFile?: string }> {
+    let stateData = responseData(await this.pi.send({ type: "get_state" }, RPC_TIMEOUT));
+    let session = parseSessionState(stateData);
+    let sessionFile = readString(stateData.sessionFile);
+    const cwd = this.pi.getStatus().cwd;
+    if (session.mode === "chat" && !session.isStreaming && !this.isDesktopChatSession(sessionFile, cwd)) {
+      await this.pi.send({ type: "set_session_mode", mode: "work" }, RPC_TIMEOUT);
+      stateData = responseData(await this.pi.send({ type: "get_state" }, RPC_TIMEOUT));
+      session = parseSessionState(stateData);
+      sessionFile = readString(stateData.sessionFile);
+    }
+    return { session, sessionFile };
+  }
+
+  private isDesktopChatSession(sessionFile: string | undefined, cwd: string): boolean {
+    return Boolean(sessionFile) && sameWorkspace(dirname(sessionFile!), this.chatSessionDirectory(cwd));
+  }
+
+  private cachedSessionsWithCurrent(sessionId: string): SessionListItem[] | undefined {
+    if (!this.recentSessions.some((session) => session.id === sessionId)) return undefined;
+    return this.recentSessions.map((session) => ({ ...session, current: session.id === sessionId }));
+  }
+
   private async listSessions(current: AgentSessionState, activeSessionFile?: string): Promise<SessionListItem[]> {
     const cwd = this.pi.getStatus().cwd;
-    const sessionInfos = await listPiSessions(cwd, { activeSessionFile });
-    this.sessionPaths.clear();
-    const sessions = sessionInfos.map((session): SessionListItem => {
-      this.sessionPaths.set(session.id, session.path);
+    const sessionInfos = await listAllPiSessions(cwd, {
+      activeSessionFile,
+      additionalSessionDirs: [this.chatSessionDirectory(cwd)],
+    });
+    this.sessionIndex.clear();
+    const sessions = sessionInfos.map((source): SessionListItem => {
+      const isGlobalChat = this.isDesktopChatSession(source.path, cwd);
+      const session: DesktopSessionIndexEntry = {
+        ...source,
+        mode: isGlobalChat ? "chat" : "work",
+        requiresWorkMode: !isGlobalChat && source.mode === "chat",
+      };
+      this.sessionIndex.set(session.id, session);
+      const scope = session.mode === "chat" ? "global" : "workspace";
       return {
         id: session.id,
         name: session.name,
         mode: session.mode,
+        scope,
         firstMessage: session.firstMessage,
         createdAt: session.createdAt,
         modifiedAt: session.modifiedAt,
         messageCount: session.messageCount,
         current: session.id === current.id,
+        ...(scope === "workspace"
+          ? {
+              workspace: {
+                name: workspaceName(session.cwd),
+                current: sameWorkspace(session.cwd, cwd),
+                available: Boolean(session.cwd) && existsSync(session.cwd),
+              },
+            }
+          : {}),
       };
     });
 
     if (!sessions.some((session) => session.id === current.id)) {
+      const isGlobalChat = this.isDesktopChatSession(activeSessionFile, cwd);
       sessions.unshift({
         id: current.id,
         name: current.name,
-        mode: current.mode,
+        mode: isGlobalChat ? "chat" : "work",
+        scope: isGlobalChat ? "global" : "workspace",
         firstMessage: "新会话",
         createdAt: Date.now(),
         modifiedAt: Date.now(),
         messageCount: current.messageCount,
         current: true,
+        ...(!isGlobalChat
+          ? { workspace: { name: workspaceName(cwd), current: true, available: existsSync(cwd) } }
+          : {}),
       });
     }
+    this.recentSessions = sessions;
     return sessions;
   }
 }

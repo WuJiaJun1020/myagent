@@ -23,8 +23,8 @@ type ComposerCommand = Omit<SlashCommand, "source"> & {
 
 const DESKTOP_COMMANDS: ComposerCommand[] = [
   { name: "new", description: "创建新会话", source: "desktop", usage: "[work|chat]" },
-  { name: "chat", description: "切换到纯聊天模式", source: "desktop" },
-  { name: "work", description: "切换到工作模式", source: "desktop" },
+  { name: "chat", description: "新建独立的纯聊天会话", source: "desktop" },
+  { name: "work", description: "新建独立的工作会话", source: "desktop" },
   { name: "name", description: "重命名当前会话", source: "desktop", usage: "<名称>" },
   { name: "compact", description: "压缩当前上下文", source: "desktop", usage: "[附加要求]" },
   { name: "thinking", description: "设置 Thinking Level", source: "desktop", usage: "<level>" },
@@ -58,7 +58,6 @@ export function Composer() {
   const sessionMutation = useSessionStore((state) => state.mutation);
   const createSession = useSessionStore((state) => state.createSession);
   const renameSession = useSessionStore((state) => state.renameSession);
-  const setSessionMode = useSessionStore((state) => state.setSessionMode);
   const setApprovalPolicy = useSessionStore((state) => state.setApprovalPolicy);
   const selectModel = useSessionStore((state) => state.selectModel);
   const selectThinkingLevel = useSessionStore((state) => state.selectThinkingLevel);
@@ -91,10 +90,10 @@ export function Composer() {
         return true;
       }
       case "chat":
-        await setSessionMode("chat");
+        await createSession("chat");
         return true;
       case "work":
-        await setSessionMode("work");
+        await createSession("work");
         return true;
       case "name":
         if (!args) throw new Error("用法：/name <会话名称>");

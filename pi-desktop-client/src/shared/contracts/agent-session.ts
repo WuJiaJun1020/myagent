@@ -2,6 +2,7 @@ import type { AgentMessage, ToolOutputBlock } from "./agent-events";
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type SessionMode = "work" | "chat";
+export type SessionScope = "workspace" | "global";
 export type ApprovalPolicy = "ask" | "auto";
 
 export type ContextUsage = {
@@ -45,11 +46,17 @@ export type SessionListItem = {
   id: string;
   name?: string;
   mode: SessionMode;
+  scope: SessionScope;
   firstMessage: string;
   createdAt: number;
   modifiedAt: number;
   messageCount: number;
   current: boolean;
+  workspace?: {
+    name: string;
+    current: boolean;
+    available: boolean;
+  };
 };
 
 export type SnapshotToolCall = {

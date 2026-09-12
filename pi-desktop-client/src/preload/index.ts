@@ -4,6 +4,15 @@ import type { ProviderAuthUiEvent } from "../shared/contracts/provider-auth";
 import type { ExtensionUiResponse, PiDesktopApi, ProcessStatus, RpcCommand, RpcMessage } from "../shared/rpc";
 
 const api: PiDesktopApi = {
+  minimizeWindow: () => ipcRenderer.invoke("app:window-minimize") as Promise<void>,
+  toggleWindowMaximize: () => ipcRenderer.invoke("app:window-toggle-maximize") as Promise<boolean>,
+  closeWindow: () => ipcRenderer.invoke("app:window-close") as Promise<void>,
+  getWindowMaximized: () => ipcRenderer.invoke("app:window-get-maximized") as Promise<boolean>,
+  onWindowMaximized: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, maximized: boolean) => listener(maximized);
+    ipcRenderer.on("app:window-maximized", handler);
+    return () => ipcRenderer.removeListener("app:window-maximized", handler);
+  },
   getStatus: () => ipcRenderer.invoke("pi:get-status") as Promise<ProcessStatus>,
   selectWorkspace: () => ipcRenderer.invoke("pi:select-workspace") as Promise<ProcessStatus>,
   restart: () => ipcRenderer.invoke("pi:restart") as Promise<ProcessStatus>,

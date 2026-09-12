@@ -63,6 +63,13 @@ describe("RpcClient session management", () => {
 		await client.renameSession("session-1", "设计讨论");
 		expect(send).toHaveBeenLastCalledWith({ type: "rename_session", sessionId: "session-1", name: "设计讨论" });
 
+		await client.switchSession("D:/sessions/global-chat.jsonl", "D:/current-workspace");
+		expect(send).toHaveBeenLastCalledWith({
+			type: "switch_session",
+			sessionPath: "D:/sessions/global-chat.jsonl",
+			cwdOverride: "D:/current-workspace",
+		});
+
 		await client.setSessionMode("chat");
 		expect(send).toHaveBeenLastCalledWith({ type: "set_session_mode", mode: "chat" });
 	});

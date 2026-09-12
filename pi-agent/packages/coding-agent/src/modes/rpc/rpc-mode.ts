@@ -668,7 +668,21 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			}
 
 			case "new_session": {
-				const options = command.parentSession ? { parentSession: command.parentSession } : undefined;
+				if (
+					command.sessionDir !== undefined &&
+					(typeof command.sessionDir !== "string" ||
+						!command.sessionDir.trim() ||
+						command.sessionDir.includes("\0"))
+				) {
+					return error(id, "new_session", "sessionDir must be a non-empty path");
+				}
+				const options =
+					command.parentSession || command.sessionDir
+						? {
+								...(command.parentSession ? { parentSession: command.parentSession } : {}),
+								...(command.sessionDir ? { sessionDir: command.sessionDir } : {}),
+							}
+						: undefined;
 				const result = await runtimeHost.newSession(options);
 				if (!result.cancelled) {
 					await rebindSession();
@@ -913,7 +927,18 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			}
 
 			case "switch_session": {
-				const result = await runtimeHost.switchSession(command.sessionPath);
+				if (
+					command.cwdOverride !== undefined &&
+					(typeof command.cwdOverride !== "string" ||
+						!command.cwdOverride.trim() ||
+						command.cwdOverride.includes("\0"))
+				) {
+					return error(id, "switch_session", "cwdOverride must be a non-empty path");
+				}
+				const result = await runtimeHost.switchSession(
+					command.sessionPath,
+					command.cwdOverride === undefined ? undefined : { cwdOverride: command.cwdOverride },
+				);
 				if (!result.cancelled) {
 					await rebindSession();
 				}
@@ -984,6 +1009,14 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				if (!name || name.length > 120) return error(id, "rename_session", "Session name must be 1-120 characters");
 				if (command.sessionId === session.sessionId) {
 					session.setSessionName(name);
+					return success(id, "rename_session");
+				}
+				if (command.sessionPath) {
+					const target = SessionManager.open(command.sessionPath);
+					if (target.getSessionId() !== command.sessionId) {
+						return error(id, "rename_session", `Session path does not match: ${command.sessionId}`);
+					}
+					target.appendSessionInfo(name);
 					return success(id, "rename_session");
 				}
 				const sessions = await SessionManager.list(

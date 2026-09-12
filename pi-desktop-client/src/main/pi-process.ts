@@ -17,6 +17,7 @@ export class PiProcess extends EventEmitter {
   private expectedExits = new WeakSet<ChildProcessWithoutNullStreams>();
   private sequence = 0;
   private status: ProcessStatus;
+  private sessionDir: string | undefined;
 
   constructor(private cwd: string, private readonly appRoot: string) {
     super();
@@ -25,6 +26,13 @@ export class PiProcess extends EventEmitter {
 
   getStatus(): ProcessStatus {
     return { ...this.status };
+  }
+
+  /** Synchronize the desktop workspace after Pi switches an existing session in-process. */
+  setWorkspaceCwd(cwd: string): void {
+    if (!cwd || this.cwd === cwd) return;
+    this.cwd = cwd;
+    this.setStatus({ ...this.status, cwd });
   }
 
   async start(): Promise<void> {
@@ -75,9 +83,10 @@ export class PiProcess extends EventEmitter {
     });
   }
 
-  async restart(cwd = this.cwd): Promise<void> {
+  async restart(cwd = this.cwd, sessionDir?: string): Promise<void> {
     await this.stop();
     this.cwd = cwd;
+    this.sessionDir = sessionDir;
     await this.start();
   }
 
@@ -134,6 +143,9 @@ export class PiProcess extends EventEmitter {
     env: NodeJS.ProcessEnv;
     shell: boolean;
   } {
+    const sessionEnv = this.sessionDir
+      ? { PI_CODING_AGENT_SESSION_DIR: this.sessionDir }
+      : {};
     const bundledRpcEntry = join(
       this.appRoot,
       "node_modules",
@@ -149,8 +161,8 @@ export class PiProcess extends EventEmitter {
         executable: process.execPath,
         args: [bundledRpcEntry],
         env: process.versions.electron
-          ? { ...process.env, ELECTRON_RUN_AS_NODE: "1" }
-          : process.env,
+          ? { ...process.env, ...sessionEnv, ELECTRON_RUN_AS_NODE: "1" }
+          : { ...process.env, ...sessionEnv },
         shell: false,
       };
     }
@@ -158,7 +170,7 @@ export class PiProcess extends EventEmitter {
     return {
       executable: process.platform === "win32" ? "pi.cmd" : "pi",
       args: ["--mode", "rpc"],
-      env: process.env,
+      env: { ...process.env, ...sessionEnv },
       shell: process.platform === "win32",
     };
   }

@@ -1,3 +1,4 @@
+import { AppChrome } from "../components/layout/AppChrome";
 import { MainLayout } from "../components/layout/MainLayout";
 import { Sidebar } from "../components/layout/Sidebar";
 import { TopBar } from "../components/layout/TopBar";
@@ -19,18 +20,21 @@ export function WorkspacePage() {
   const resourceView = sidebarView === "mcp" || sidebarView === "memory";
 
   return (
-    <MainLayout
-      sidebar={<Sidebar />}
-      topbar={<TopBar />}
-      activity={resourceView ? (sidebarView === "mcp" ? <McpPanel /> : <MemoryPanel />) : (
-        <>
-          <AgentStatusStrip />
-          <ChatPanel />
-          <Composer />
-        </>
-      )}
-      detail={<DetailPanel />}
-      overlay={<><SettingsDialog /><ProviderSettingsDialog /><ExtensionDialog /></>}
-    />
+    <div className="app-frame">
+      <AppChrome />
+      <MainLayout
+        sidebar={<Sidebar />}
+        topbar={<TopBar />}
+        activity={resourceView ? (sidebarView === "mcp" ? <McpPanel /> : <MemoryPanel />) : (
+          <>
+            <AgentStatusStrip />
+            <ChatPanel />
+            <Composer />
+          </>
+        )}
+        detail={<DetailPanel />}
+        overlay={<><SettingsDialog /><ProviderSettingsDialog /><ExtensionDialog /></>}
+      />
+    </div>
   );
 }

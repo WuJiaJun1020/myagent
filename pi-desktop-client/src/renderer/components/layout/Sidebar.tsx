@@ -1,5 +1,5 @@
 import {
-  Bot,
+  ChevronDown,
   Database,
   Files,
   FolderOpen,
@@ -67,20 +67,11 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <span className="brand-mark"><Bot size={17} strokeWidth={2.2} /></span>
-        <span className="brand-copy"><strong>Pi Workspace</strong><small>Agent desktop</small></span>
+        <span className="brand-copy"><strong>Pi Workspace</strong></span>
+        <ChevronDown size={14} strokeWidth={1.8} aria-hidden="true" />
       </div>
 
-      <button className="workspace-button" type="button" onClick={() => void selectWorkspace()}>
-        <FolderOpen size={16} />
-        <span>
-          <small>当前工作区</small>
-          <strong>{getWorkspaceName(status.cwd)}</strong>
-        </span>
-      </button>
-
       <nav className="sidebar-nav" aria-label="工作区导航">
-        <span className="section-label">Workspace</span>
         <button className={`nav-item ${sidebarView === "activity" ? "active" : ""}`} type="button" onClick={() => setSidebarView("activity")}>
           <MessageSquareText size={16} />
           <span>Agent 活动</span>
@@ -106,6 +97,14 @@ export function Sidebar() {
           </button>
         ))}
       </nav>
+
+      <section className="sidebar-projects" aria-label="项目">
+        <span className="section-label">项目</span>
+        <button className="workspace-button" type="button" title="选择工作区" onClick={() => void selectWorkspace()}>
+          <FolderOpen size={16} />
+          <strong>{getWorkspaceName(status.cwd)}</strong>
+        </button>
+      </section>
 
       {sidebarView === "files" ? <FileTree /> : sidebarView === "activity" ? <SessionHistory /> : <ResourceSidebarSummary view={sidebarView} />}
 

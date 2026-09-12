@@ -1,8 +1,6 @@
-import { Activity, BrainCircuit, BriefcaseBusiness, LoaderCircle, MessageCircle, Moon, PanelLeft, PanelRight, Settings, Sparkles, Sun } from "lucide-react";
+import { Activity, BrainCircuit, BriefcaseBusiness, LoaderCircle, MessageCircle, Sparkles } from "lucide-react";
 import type { DesktopModel, ThinkingLevel } from "../../../shared/contracts/agent-session";
-import { TooltipIconButton } from "../ui/tooltip-icon-button";
 import { useAgentStore } from "../../stores/agent-store";
-import { useSettingsStore } from "../../stores/settings-store";
 import { useUiStore } from "../../stores/ui-store";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import { useSessionStore } from "../../stores/session-store";
@@ -23,13 +21,7 @@ export function TopBar() {
   const status = useAgentStore((state) => state.processStatus);
   const busy = useAgentStore((state) => state.busy);
   const queueSize = useAgentStore((state) => state.queue.steering.length + state.queue.followUp.length);
-  const sidebarOpen = useUiStore((state) => state.sidebarOpen);
-  const detailPanelOpen = useUiStore((state) => state.detailPanelOpen);
   const sidebarView = useUiStore((state) => state.sidebarView);
-  const toggleSidebar = useUiStore((state) => state.toggleSidebar);
-  const toggleDetailPanel = useUiStore((state) => state.toggleDetailPanel);
-  const resolvedTheme = useSettingsStore((state) => state.resolvedTheme);
-  const setTheme = useSettingsStore((state) => state.setTheme);
   const activeFilePath = useWorkspaceStore((state) => state.activeFilePath);
   const session = useSessionStore((state) => state.session);
   const models = useSessionStore((state) => state.models);
@@ -37,8 +29,7 @@ export function TopBar() {
   const mutation = useSessionStore((state) => state.mutation);
   const selectModel = useSessionStore((state) => state.selectModel);
   const selectThinkingLevel = useSessionStore((state) => state.selectThinkingLevel);
-  const setSessionMode = useSessionStore((state) => state.setSessionMode);
-  const setSettingsOpen = useUiStore((state) => state.setSettingsOpen);
+  const createSession = useSessionStore((state) => state.createSession);
   const controlsDisabled = busy || Boolean(mutation);
   const modelValue = session?.model ? `${session.model.provider}${MODEL_SEPARATOR}${session.model.id}` : "";
   const workspaceSection = sidebarView === "files"
@@ -52,14 +43,6 @@ export function TopBar() {
   return (
     <header className="topbar">
       <div className="topbar-primary">
-        <TooltipIconButton
-          className={`topbar-icon-button ${sidebarOpen ? "active" : ""}`}
-          label={sidebarOpen ? "隐藏侧边栏" : "显示侧边栏"}
-          onClick={toggleSidebar}
-        >
-          <PanelLeft size={17} />
-        </TooltipIconButton>
-        <span className="topbar-divider" />
         <div className="workspace-heading">
           <strong>{getWorkspaceName(status.cwd)}</strong>
           <span>/</span>
@@ -75,8 +58,8 @@ export function TopBar() {
             type="button"
             className={session?.mode === "chat" ? "active" : ""}
             disabled={controlsDisabled || !session}
-            title="纯聊天：不使用本地工具或项目上下文"
-            onClick={() => void setSessionMode("chat")}
+            title="新建纯聊天：不使用本地工具或项目上下文"
+            onClick={() => void createSession("chat")}
           >
             <MessageCircle size={13} /><span>聊天</span>
           </button>
@@ -84,8 +67,8 @@ export function TopBar() {
             type="button"
             className={session?.mode !== "chat" ? "active" : ""}
             disabled={controlsDisabled || !session}
-            title="工作模式：可读取项目、修改文件并运行工具"
-            onClick={() => void setSessionMode("work")}
+            title="新建工作会话：可读取项目、修改文件并运行工具"
+            onClick={() => void createSession("work")}
           >
             <BriefcaseBusiness size={13} /><span>工作</span>
           </button>
@@ -126,23 +109,6 @@ export function TopBar() {
           <span>{busy ? "执行中" : status.state === "running" ? "就绪" : "离线"}</span>
           {queueSize > 0 && <small>{queueSize} 排队</small>}
         </div>
-        <TooltipIconButton
-          className="topbar-icon-button"
-          label={resolvedTheme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
-          onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-        >
-          {resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-        </TooltipIconButton>
-        <TooltipIconButton className="topbar-icon-button" label="打开设置" onClick={() => setSettingsOpen(true)}>
-          <Settings size={16} />
-        </TooltipIconButton>
-        <TooltipIconButton
-          className={`topbar-icon-button ${detailPanelOpen ? "active" : ""}`}
-          label={detailPanelOpen ? "隐藏详情面板" : "显示详情面板"}
-          onClick={toggleDetailPanel}
-        >
-          <PanelRight size={17} />
-        </TooltipIconButton>
       </div>
     </header>
   );

@@ -1,8 +1,8 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { getDefaultPiSessionDir, listPiSessions } from "./pi-session-index";
+import { getDefaultPiSessionDir, listAllPiSessions, listPiSessions } from "./pi-session-index";
 
 const temporaryDirectories: string[] = [];
 
@@ -59,9 +59,40 @@ describe("listPiSessions", () => {
     expect(sessions.map((session) => session.id)).toEqual(["a"]);
   });
 
+  it("reuses unchanged session indexes and refreshes a transcript after it changes", async () => {
+    const directory = await createTemporaryDirectory();
+    const cwd = join(directory, "workspace");
+    const sessionPath = join(directory, "session.jsonl");
+    await writeFile(sessionPath, `${JSON.stringify({ type: "session", id: "session", timestamp: "2026-01-01T00:00:00.000Z", cwd })}\n`, "utf8");
+
+    expect((await listPiSessions(cwd, { sessionDir: directory }))[0]?.name).toBeUndefined();
+    await appendFile(sessionPath, `${JSON.stringify({ type: "session_info", id: "name", parentId: null, timestamp: "2026-01-01T00:00:01.000Z", name: "更新后的名称" })}\n`, "utf8");
+
+    expect((await listPiSessions(cwd, { sessionDir: directory }))[0]?.name).toBe("更新后的名称");
+  });
+
   it("encodes the workspace path exactly like Pi's default session directory", () => {
     expect(getDefaultPiSessionDir("D:\\Code\\demo", "D:\\AgentData")).toBe(
       join("D:\\AgentData", "sessions", "--D--Code-demo--"),
     );
+  });
+
+  it("indexes histories from multiple default workspaces without exposing a shared session directory", async () => {
+    const root = await createTemporaryDirectory();
+    const agentDir = join(root, "agent");
+    const firstWorkspace = join(root, "workspace-a");
+    const secondWorkspace = join(root, "workspace-b");
+    const firstDirectory = getDefaultPiSessionDir(firstWorkspace, agentDir);
+    const secondDirectory = getDefaultPiSessionDir(secondWorkspace, agentDir);
+    await Promise.all([mkdir(firstDirectory, { recursive: true }), mkdir(secondDirectory, { recursive: true })]);
+    await Promise.all([
+      writeFile(join(firstDirectory, "first.jsonl"), `${JSON.stringify({ type: "session", id: "first", timestamp: "2026-01-01T00:00:00.000Z", cwd: firstWorkspace })}\n`, "utf8"),
+      writeFile(join(secondDirectory, "second.jsonl"), `${JSON.stringify({ type: "session", id: "second", timestamp: "2026-01-02T00:00:00.000Z", cwd: secondWorkspace })}\n`, "utf8"),
+    ]);
+
+    const sessions = await listAllPiSessions(firstWorkspace, { agentDir });
+
+    expect(sessions.map((session) => session.id)).toEqual(["second", "first"]);
+    expect(sessions.map((session) => session.cwd)).toEqual([secondWorkspace, firstWorkspace]);
   });
 });
