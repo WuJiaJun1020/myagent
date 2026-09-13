@@ -1,16 +1,19 @@
 import {
+  BriefcaseBusiness,
+  Blocks,
   ChevronDown,
   Database,
   Files,
   FolderOpen,
+  MessageCircle,
   MessageSquareText,
-  PlugZap,
-  RotateCw,
   Search,
+  Settings,
 } from "lucide-react";
 import { agentGateway } from "../../services/agent-gateway";
 import { useAgentStore } from "../../stores/agent-store";
 import { useUiStore } from "../../stores/ui-store";
+import { useSessionStore } from "../../stores/session-store";
 import { FileTree } from "../../features/files/FileTree";
 import { SessionHistory } from "../../features/sessions/SessionHistory";
 import { ResourceSidebarSummary } from "../../features/resources/ResourceSidebarSummary";
@@ -31,7 +34,12 @@ export function Sidebar() {
   const resetSession = useAgentStore((state) => state.resetSession);
   const sidebarView = useUiStore((state) => state.sidebarView);
   const setSidebarView = useUiStore((state) => state.setSidebarView);
+  const setSettingsOpen = useUiStore((state) => state.setSettingsOpen);
   const clearDetailSelection = useUiStore((state) => state.clearDetailSelection);
+  const session = useSessionStore((state) => state.session);
+  const mutation = useSessionStore((state) => state.mutation);
+  const createSession = useSessionStore((state) => state.createSession);
+  const controlsDisabled = busy || Boolean(mutation) || !session;
 
   async function selectWorkspace(): Promise<void> {
     try {
@@ -40,17 +48,6 @@ export function Sidebar() {
         resetSession();
         clearDetailSelection();
       }
-      setStatus(nextStatus);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    }
-  }
-
-  async function restart(): Promise<void> {
-    try {
-      const nextStatus = await agentGateway.restart();
-      resetSession();
-      clearDetailSelection();
       setStatus(nextStatus);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -72,18 +69,48 @@ export function Sidebar() {
       </div>
 
       <nav className="sidebar-nav" aria-label="工作区导航">
-        <button className={`nav-item ${sidebarView === "activity" ? "active" : ""}`} type="button" onClick={() => setSidebarView("activity")}>
-          <MessageSquareText size={16} />
-          <span>Agent 活动</span>
-          {busy && <span className="nav-running-dot" aria-label="执行中" />}
-        </button>
+        <div className={`nav-session-row ${sidebarView === "activity" ? "active" : ""}`}>
+          <button className="nav-item nav-session-entry" type="button" onClick={() => setSidebarView("activity")}>
+            <MessageSquareText size={16} />
+            <span>会话</span>
+            {busy && <span className="nav-running-dot" aria-label="执行中" />}
+          </button>
+          <div className="sidebar-mode-switch" role="group" aria-label="会话模式">
+            <button
+              type="button"
+              className={session?.mode === "chat" ? "active" : ""}
+              disabled={controlsDisabled}
+              aria-pressed={session?.mode === "chat"}
+              title="新建纯聊天"
+              onClick={() => {
+                setSidebarView("activity");
+                void createSession("chat");
+              }}
+            >
+              <MessageCircle size={12} /><span>聊天</span>
+            </button>
+            <button
+              type="button"
+              className={session?.mode === "work" ? "active" : ""}
+              disabled={controlsDisabled}
+              aria-pressed={session?.mode === "work"}
+              title="新建工作会话"
+              onClick={() => {
+                setSidebarView("activity");
+                void createSession("work");
+              }}
+            >
+              <BriefcaseBusiness size={12} /><span>工作</span>
+            </button>
+          </div>
+        </div>
         <button className={`nav-item ${sidebarView === "files" ? "active" : ""}`} type="button" onClick={() => setSidebarView("files")}>
           <Files size={16} />
           <span>项目文件</span>
         </button>
         <button className={`nav-item ${sidebarView === "mcp" ? "active" : ""}`} type="button" onClick={() => setSidebarView("mcp")}>
-          <PlugZap size={16} />
-          <span>MCP 工具</span>
+          <Blocks size={16} />
+          <span>资源中心</span>
         </button>
         <button className={`nav-item ${sidebarView === "memory" ? "active" : ""}`} type="button" onClick={() => setSidebarView("memory")}>
           <Database size={16} />
@@ -113,8 +140,8 @@ export function Sidebar() {
           <span className="connection-dot" />
           <span><strong>{statusLabel}</strong><small>{status.state === "running" ? "本地 RPC" : "Pi runtime"}</small></span>
         </div>
-        <button className="icon-button" type="button" title="重启 Pi Agent" onClick={() => void restart()}>
-          <RotateCw size={15} />
+        <button className="icon-button" type="button" aria-label="打开设置" title="设置" onClick={() => setSettingsOpen(true)}>
+          <Settings size={15} />
         </button>
       </div>
     </aside>

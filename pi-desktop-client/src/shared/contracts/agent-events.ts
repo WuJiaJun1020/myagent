@@ -34,7 +34,7 @@ export type AgentMessage = {
 
 export type ToolOutputBlock =
   | { type: "text"; text: string }
-  | { type: "media"; mediaType: string; label: string };
+  | { type: "media"; mediaType: string; label: string; src?: string };
 
 export type ToolResult = {
   output: ToolOutputBlock[];
@@ -58,6 +58,12 @@ export type RetryState = {
   maxAttempts?: number;
   delayMs?: number;
   message?: string;
+};
+
+export type ExtensionWidget = {
+  key: string;
+  lines: string[];
+  placement: "aboveEditor" | "belowEditor";
 };
 
 export type AgentEvent =
@@ -95,9 +101,12 @@ export type AgentEvent =
       isError: boolean;
     }
   | { type: "file.changed"; meta: AgentEventMeta; change: FileChange }
-  | { type: "terminal.output"; meta: AgentEventMeta; terminalId: string; delta: string }
   | { type: "queue.changed"; meta: AgentEventMeta; steering: string[]; followUp: string[] }
   | { type: "compaction.changed"; meta: AgentEventMeta; state: CompactionState }
   | { type: "retry.changed"; meta: AgentEventMeta; state: RetryState }
+  | { type: "extension.notice"; meta: AgentEventMeta; severity: "info" | "warning" | "error"; message: string }
+  | { type: "extension.status"; meta: AgentEventMeta; key: string; text?: string }
+  | { type: "extension.widget"; meta: AgentEventMeta; key: string; widget?: ExtensionWidget }
+  | { type: "composer.draft"; meta: AgentEventMeta; text: string }
   | { type: "interaction.requested"; meta: AgentEventMeta; request: InteractionRequest }
   | { type: "error.raised"; meta: AgentEventMeta; message: string };

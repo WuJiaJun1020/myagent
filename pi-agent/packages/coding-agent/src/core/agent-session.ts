@@ -1673,6 +1673,53 @@ export class AgentSession {
 		return { steering, followUp };
 	}
 
+	/**
+	 * Delete a queued message or move it between the steering and follow-up queues.
+	 * The underlying AgentMessage is moved intact so image attachments are preserved.
+	 */
+	updateQueueItem(
+		source: "steer" | "followUp",
+		index: number,
+		action: "steer" | "followUp" | "delete",
+	): { steering: string[]; followUp: string[] } {
+		if (!Number.isInteger(index) || index < 0) {
+			throw new Error("Queue index must be a non-negative integer");
+		}
+		if (action === source) {
+			return {
+				steering: [...this._steeringMessages],
+				followUp: [...this._followUpMessages],
+			};
+		}
+
+		const sourceMessages = source === "steer" ? this._steeringMessages : this._followUpMessages;
+		const text = sourceMessages[index];
+		if (text === undefined) {
+			throw new Error("Queued message no longer exists");
+		}
+
+		const message =
+			source === "steer" ? this.agent.removeSteeringMessage(index) : this.agent.removeFollowUpMessage(index);
+		if (!message) {
+			throw new Error("Queued message is already being delivered");
+		}
+
+		sourceMessages.splice(index, 1);
+		if (action === "steer") {
+			this._steeringMessages.push(text);
+			this.agent.steer(message);
+		} else if (action === "followUp") {
+			this._followUpMessages.push(text);
+			this.agent.followUp(message);
+		}
+		this._emitQueueUpdate();
+
+		return {
+			steering: [...this._steeringMessages],
+			followUp: [...this._followUpMessages],
+		};
+	}
+
 	/** Number of pending messages (includes both steering and follow-up) */
 	get pendingMessageCount(): number {
 		return this._steeringMessages.length + this._followUpMessages.length;

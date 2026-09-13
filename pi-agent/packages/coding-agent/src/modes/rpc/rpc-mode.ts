@@ -12,6 +12,8 @@
  */
 
 import * as crypto from "node:crypto";
+import { dirname, relative, resolve } from "node:path";
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { AuthEvent, AuthInteraction, AuthPrompt } from "@earendil-works/pi-ai";
 import type { AgentSessionRuntime } from "../../core/agent-session-runtime.ts";
 import type {
@@ -20,13 +22,21 @@ import type {
 	ExtensionWidgetOptions,
 	WorkingIndicatorOptions,
 } from "../../core/extensions/index.ts";
+import { resolveModelScopeFromModels } from "../../core/model-resolver.ts";
 import {
 	flushRawStdout,
 	takeOverStdout,
 	waitForRawStdoutBackpressure,
 	writeRawStdout,
 } from "../../core/output-guard.ts";
+import { DefaultPackageManager, type ResolvedResource } from "../../core/package-manager.ts";
 import { SessionManager } from "../../core/session-manager.ts";
+import type { PackageSource, Settings } from "../../core/settings-manager.ts";
+import {
+	getProjectTrustParentPath,
+	hasTrustRequiringProjectResources,
+	ProjectTrustStore,
+} from "../../core/trust-manager.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { type Theme, theme } from "../interactive/theme/theme.ts";
 import { toJsonEvent } from "../json-event.ts";
@@ -36,6 +46,12 @@ import type {
 	RpcCommand,
 	RpcExtensionUIRequest,
 	RpcExtensionUIResponse,
+	RpcHostSettings,
+	RpcHostSettingsState,
+	RpcManagedResourceType,
+	RpcPackageScope,
+	RpcPackageState,
+	RpcProjectTrustState,
 	RpcProviderAuthEvent,
 	RpcProviderAuthMethod,
 	RpcProviderAuthRequest,
@@ -54,6 +70,10 @@ export type {
 	RpcCommand,
 	RpcExtensionUIRequest,
 	RpcExtensionUIResponse,
+	RpcHostSettings,
+	RpcHostSettingsState,
+	RpcPackageState,
+	RpcProjectTrustState,
 	RpcProviderAuthEvent,
 	RpcProviderAuthRequest,
 	RpcProviderAuthResponse,
@@ -63,6 +83,56 @@ export type {
 	RpcSessionMode,
 	RpcSessionState,
 } from "./rpc-types.ts";
+
+const THINKING_LEVELS = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+const BUILTIN_TOOL_NAMES = new Set(["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"]);
+const MANAGED_RESOURCE_TYPES = ["extensions", "skills", "prompts", "themes"] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalStringArray(value: unknown, field: string): string[] | undefined {
+	if (value === undefined) return undefined;
+	if (!Array.isArray(value) || !value.every((item) => typeof item === "string" && item.trim().length > 0)) {
+		throw new Error(`${field} must be an array of non-empty strings`);
+	}
+	return value.map((item) => item.trim());
+}
+
+function pickHostSettings(settings: Settings): RpcHostSettings {
+	return {
+		...(settings.defaultProvider ? { defaultProvider: settings.defaultProvider } : {}),
+		...(settings.defaultModel ? { defaultModel: settings.defaultModel } : {}),
+		...(settings.defaultThinkingLevel ? { defaultThinkingLevel: settings.defaultThinkingLevel } : {}),
+		...(settings.modelThinkingLevels ? { modelThinkingLevels: { ...settings.modelThinkingLevels } } : {}),
+		...(settings.enabledModels ? { enabledModels: [...settings.enabledModels] } : {}),
+		...(settings.shellPath ? { shellPath: settings.shellPath } : {}),
+		...(settings.defaultProjectTrust ? { defaultProjectTrust: settings.defaultProjectTrust } : {}),
+		...(settings.compaction
+			? {
+					compaction: {
+						...(settings.compaction.enabled === undefined ? {} : { enabled: settings.compaction.enabled }),
+						...(settings.compaction.reserveTokens === undefined
+							? {}
+							: { reserveTokens: settings.compaction.reserveTokens }),
+						...(settings.compaction.keepRecentTokens === undefined
+							? {}
+							: { keepRecentTokens: settings.compaction.keepRecentTokens }),
+					},
+				}
+			: {}),
+		...(settings.retry
+			? {
+					retry: {
+						...(settings.retry.enabled === undefined ? {} : { enabled: settings.retry.enabled }),
+						...(settings.retry.maxRetries === undefined ? {} : { maxRetries: settings.retry.maxRetries }),
+					},
+				}
+			: {}),
+		...(settings.defaultTools ? { defaultTools: [...settings.defaultTools] } : {}),
+	};
+}
 
 /**
  * Run in RPC mode.
@@ -111,6 +181,275 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 	const sessionModeEntryType = "pi.rpc.session-mode";
 	const approvalPolicyEntryType = "pi.rpc.approval-policy";
 	let approvalPolicy: RpcApprovalPolicy = "auto";
+
+	function getSettingsState(): RpcHostSettingsState {
+		const manager = session.settingsManager;
+		const compaction = manager.getCompactionSettings();
+		const retry = manager.getRetrySettings();
+		return {
+			global: pickHostSettings(manager.getGlobalSettings()),
+			project: pickHostSettings(manager.getProjectSettings()),
+			effective: {
+				...(manager.getDefaultProvider() ? { defaultProvider: manager.getDefaultProvider() } : {}),
+				...(manager.getDefaultModel() ? { defaultModel: manager.getDefaultModel() } : {}),
+				...(manager.getDefaultThinkingLevel() ? { defaultThinkingLevel: manager.getDefaultThinkingLevel() } : {}),
+				modelThinkingLevels: manager.getAllModelThinkingLevels(),
+				...(manager.getEnabledModels() ? { enabledModels: manager.getEnabledModels() } : {}),
+				...(manager.getShellPath() ? { shellPath: manager.getShellPath() } : {}),
+				defaultProjectTrust: manager.getDefaultProjectTrust(),
+				compaction,
+				retry: { enabled: retry.enabled, maxRetries: retry.maxRetries },
+				...(manager.getDefaultTools() ? { defaultTools: manager.getDefaultTools() } : {}),
+			},
+			projectTrusted: manager.isProjectTrusted(),
+		};
+	}
+
+	function getProjectTrustState(): RpcProjectTrustState {
+		const cwd = runtimeHost.cwd;
+		const store = new ProjectTrustStore(runtimeHost.services.agentDir);
+		const entry = store.getEntry(cwd);
+		return {
+			cwd,
+			requiresTrust: hasTrustRequiringProjectResources(cwd),
+			effectiveTrusted: session.settingsManager.isProjectTrusted(),
+			savedDecision: entry?.decision ?? null,
+			...(entry ? { savedPath: entry.path } : {}),
+			defaultPolicy: session.settingsManager.getDefaultProjectTrust(),
+		};
+	}
+
+	function createPackageManager(): DefaultPackageManager {
+		return new DefaultPackageManager({
+			cwd: runtimeHost.cwd,
+			agentDir: runtimeHost.services.agentDir,
+			settingsManager: session.settingsManager,
+		});
+	}
+
+	async function getPackageState(manager = createPackageManager()): Promise<RpcPackageState> {
+		const resolved = await manager.resolve(async () => "skip");
+		const resources = MANAGED_RESOURCE_TYPES.flatMap((resourceType) =>
+			resolved[resourceType].map((resource) => ({
+				type: resourceType,
+				path: resource.path,
+				enabled: resource.enabled,
+				sourceInfo: {
+					path: resource.path,
+					source: resource.metadata.source,
+					scope: resource.metadata.scope,
+					origin: resource.metadata.origin,
+					...(resource.metadata.baseDir ? { baseDir: resource.metadata.baseDir } : {}),
+				},
+			})),
+		).sort((left, right) => left.type.localeCompare(right.type) || left.path.localeCompare(right.path));
+		return {
+			packages: manager.listConfiguredPackages().map((pkg) => ({
+				...pkg,
+				installed: pkg.installedPath !== undefined,
+			})),
+			resources,
+			projectTrusted: session.settingsManager.isProjectTrusted(),
+		};
+	}
+
+	function resourcePathMatches(left: string, right: string): boolean {
+		const leftPath = resolve(left);
+		const rightPath = resolve(right);
+		return process.platform === "win32"
+			? leftPath.toLocaleLowerCase() === rightPath.toLocaleLowerCase()
+			: leftPath === rightPath;
+	}
+
+	function replaceResourcePattern(entries: string[], pattern: string, enabled: boolean): string[] {
+		const updated = entries.filter((entry) => {
+			const target =
+				entry.startsWith("!") || entry.startsWith("+") || entry.startsWith("-") ? entry.slice(1) : entry;
+			return target !== pattern;
+		});
+		updated.push(`${enabled ? "+" : "-"}${pattern}`);
+		return updated;
+	}
+
+	function setScopedPackages(scope: RpcPackageScope, packages: PackageSource[]): void {
+		if (scope === "project") session.settingsManager.setProjectPackages(packages);
+		else session.settingsManager.setPackages(packages);
+	}
+
+	function setTopLevelResourcePaths(type: RpcManagedResourceType, scope: RpcPackageScope, paths: string[]): void {
+		const manager = session.settingsManager;
+		if (type === "extensions") {
+			if (scope === "project") manager.setProjectExtensionPaths(paths);
+			else manager.setExtensionPaths(paths);
+		} else if (type === "skills") {
+			if (scope === "project") manager.setProjectSkillPaths(paths);
+			else manager.setSkillPaths(paths);
+		} else if (type === "prompts") {
+			if (scope === "project") manager.setProjectPromptTemplatePaths(paths);
+			else manager.setPromptTemplatePaths(paths);
+		} else if (scope === "project") manager.setProjectThemePaths(paths);
+		else manager.setThemePaths(paths);
+	}
+
+	async function setManagedResourceEnabled(
+		command: Extract<RpcCommand, { type: "set_resource_enabled" }>,
+	): Promise<void> {
+		if (!MANAGED_RESOURCE_TYPES.includes(command.resourceType)) throw new Error("Unsupported resource type");
+		const manager = createPackageManager();
+		const resolved = await manager.resolve(async () => "skip");
+		const resource: ResolvedResource | undefined = resolved[command.resourceType].find(
+			(candidate) =>
+				resourcePathMatches(candidate.path, command.path) &&
+				candidate.metadata.source === command.source &&
+				candidate.metadata.scope === command.scope,
+		);
+		if (!resource) throw new Error(`Resource not found: ${command.path}`);
+
+		const settings =
+			command.scope === "project"
+				? session.settingsManager.getProjectSettings()
+				: session.settingsManager.getGlobalSettings();
+		const baseDir = resource.metadata.baseDir ?? dirname(resource.path);
+		const pattern = relative(baseDir, resource.path);
+		if (resource.metadata.origin === "package") {
+			const packages = [...(settings.packages ?? [])];
+			const packageIndex = packages.findIndex(
+				(entry) => (typeof entry === "string" ? entry : entry.source) === resource.metadata.source,
+			);
+			if (packageIndex < 0) throw new Error(`Package not found: ${resource.metadata.source}`);
+			const current = packages[packageIndex];
+			if (current === undefined) throw new Error(`Package not found: ${resource.metadata.source}`);
+			const configured = typeof current === "string" ? { source: current } : { ...current };
+			configured[command.resourceType] = replaceResourcePattern(
+				configured[command.resourceType] ?? [],
+				pattern,
+				command.enabled,
+			);
+			packages[packageIndex] = configured;
+			setScopedPackages(command.scope, packages);
+			return;
+		}
+
+		const current = (settings[command.resourceType] ?? []) as string[];
+		setTopLevelResourcePaths(
+			command.resourceType,
+			command.scope,
+			replaceResourcePattern(current, pattern, command.enabled),
+		);
+	}
+
+	async function updateHostSettings(value: unknown): Promise<RpcHostSettingsState> {
+		if (!isRecord(value)) throw new Error("patch must be an object");
+		const allowed = new Set([
+			"defaultProvider",
+			"defaultModel",
+			"defaultThinkingLevel",
+			"modelThinkingLevels",
+			"enabledModels",
+			"shellPath",
+			"defaultProjectTrust",
+			"compaction",
+			"retry",
+			"defaultTools",
+		]);
+		const unknown = Object.keys(value).filter((key) => !allowed.has(key));
+		if (unknown.length > 0) throw new Error(`Unsupported settings: ${unknown.join(", ")}`);
+
+		const manager = session.settingsManager;
+		if (value.defaultProvider !== undefined || value.defaultModel !== undefined) {
+			if (
+				typeof value.defaultProvider !== "string" ||
+				!value.defaultProvider.trim() ||
+				typeof value.defaultModel !== "string" ||
+				!value.defaultModel.trim()
+			) {
+				throw new Error("defaultProvider and defaultModel must be non-empty strings and updated together");
+			}
+			manager.setDefaultModelAndProvider(value.defaultProvider.trim(), value.defaultModel.trim());
+		}
+		if (value.defaultThinkingLevel !== undefined) {
+			if (
+				typeof value.defaultThinkingLevel !== "string" ||
+				!THINKING_LEVELS.has(value.defaultThinkingLevel as ThinkingLevel)
+			) {
+				throw new Error("defaultThinkingLevel is invalid");
+			}
+			manager.setDefaultThinkingLevel(value.defaultThinkingLevel as ThinkingLevel);
+		}
+		if (value.modelThinkingLevels !== undefined) {
+			if (!isRecord(value.modelThinkingLevels)) throw new Error("modelThinkingLevels must be an object");
+			const next = new Map<string, ThinkingLevel>();
+			for (const [key, level] of Object.entries(value.modelThinkingLevels)) {
+				if (!key.includes("/") || typeof level !== "string" || !THINKING_LEVELS.has(level as ThinkingLevel)) {
+					throw new Error(`Invalid model thinking level for ${key}`);
+				}
+				next.set(key, level as ThinkingLevel);
+			}
+			for (const key of Object.keys(manager.getGlobalSettings().modelThinkingLevels ?? {})) {
+				if (next.has(key)) continue;
+				const separator = key.indexOf("/");
+				manager.removeModelThinkingLevel(key.slice(0, separator), key.slice(separator + 1));
+			}
+			for (const [key, level] of next) {
+				const separator = key.indexOf("/");
+				manager.setModelThinkingLevel(key.slice(0, separator), key.slice(separator + 1), level);
+			}
+		}
+		if (value.enabledModels !== undefined) {
+			const patterns = optionalStringArray(value.enabledModels, "enabledModels") ?? [];
+			const { scopedModels, diagnostics } = resolveModelScopeFromModels(
+				patterns,
+				session.modelRuntime.getAvailableSnapshot(),
+			);
+			if (diagnostics.length > 0) throw new Error(diagnostics.map((item) => item.message).join("; "));
+			manager.setEnabledModels(patterns);
+			session.setScopedModels(scopedModels);
+		}
+		if (value.shellPath !== undefined) {
+			if (typeof value.shellPath !== "string") throw new Error("shellPath must be a string");
+			manager.setShellPath(value.shellPath.trim() || undefined);
+		}
+		if (value.defaultProjectTrust !== undefined) {
+			if (!new Set(["ask", "always", "never"]).has(String(value.defaultProjectTrust))) {
+				throw new Error("defaultProjectTrust must be ask, always, or never");
+			}
+			manager.setDefaultProjectTrust(value.defaultProjectTrust as "ask" | "always" | "never");
+		}
+		if (value.compaction !== undefined) {
+			if (!isRecord(value.compaction)) throw new Error("compaction must be an object");
+			if (value.compaction.enabled !== undefined) {
+				if (typeof value.compaction.enabled !== "boolean") throw new Error("compaction.enabled must be a boolean");
+				manager.setCompactionEnabled(value.compaction.enabled);
+			}
+			if (value.compaction.reserveTokens !== undefined || value.compaction.keepRecentTokens !== undefined) {
+				const current = manager.getCompactionSettings();
+				manager.setCompactionTokenSettings(
+					value.compaction.reserveTokens === undefined
+						? current.reserveTokens
+						: Number(value.compaction.reserveTokens),
+					value.compaction.keepRecentTokens === undefined
+						? current.keepRecentTokens
+						: Number(value.compaction.keepRecentTokens),
+				);
+			}
+		}
+		if (value.retry !== undefined) {
+			if (!isRecord(value.retry)) throw new Error("retry must be an object");
+			if (value.retry.enabled !== undefined) {
+				if (typeof value.retry.enabled !== "boolean") throw new Error("retry.enabled must be a boolean");
+				manager.setRetryEnabled(value.retry.enabled);
+			}
+			if (value.retry.maxRetries !== undefined) manager.setRetryMaxRetries(Number(value.retry.maxRetries));
+		}
+		if (value.defaultTools !== undefined) {
+			const tools = optionalStringArray(value.defaultTools, "defaultTools") ?? [];
+			const invalid = tools.filter((tool) => !BUILTIN_TOOL_NAMES.has(tool));
+			if (invalid.length > 0) throw new Error(`Unknown built-in tools: ${invalid.join(", ")}`);
+			manager.setDefaultTools([...new Set(tools)]);
+		}
+		await manager.flush();
+		return getSettingsState();
+	}
 
 	type PersistedSessionMode = { mode: RpcSessionMode; workToolNames: string[] };
 
@@ -667,6 +1006,12 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				return success(id, "clear_queue", session.clearQueue());
 			}
 
+			case "update_queue_item": {
+				const source = command.source === "follow_up" ? "followUp" : command.source;
+				const action = command.action === "follow_up" ? "followUp" : command.action;
+				return success(id, "update_queue_item", session.updateQueueItem(source, command.index, action));
+			}
+
 			case "new_session": {
 				if (
 					command.sessionDir !== undefined &&
@@ -684,9 +1029,6 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 							}
 						: undefined;
 				const result = await runtimeHost.newSession(options);
-				if (!result.cancelled) {
-					await rebindSession();
-				}
 				return success(id, "new_session", result);
 			}
 
@@ -709,10 +1051,130 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 					approvalPolicy,
 					contextUsage: session.getContextUsage(),
 					autoCompactionEnabled: session.autoCompactionEnabled,
+					autoRetryEnabled: session.autoRetryEnabled,
+					isRetrying: session.isRetrying,
 					messageCount: session.messages.length,
 					pendingMessageCount: session.pendingMessageCount,
 				};
 				return success(id, "get_state", state);
+			}
+
+			case "get_settings": {
+				return success(id, "get_settings", getSettingsState());
+			}
+
+			case "update_settings": {
+				return success(id, "update_settings", await updateHostSettings(command.patch));
+			}
+
+			case "get_project_trust": {
+				return success(id, "get_project_trust", getProjectTrustState());
+			}
+
+			case "set_project_trust": {
+				if (session.isStreaming || session.isCompacting) {
+					return error(
+						id,
+						"set_project_trust",
+						"Wait for the current task or compaction to finish before changing project trust",
+					);
+				}
+				if (command.decision !== true && command.decision !== false && command.decision !== null) {
+					return error(id, "set_project_trust", "decision must be true, false, or null");
+				}
+				if (command.target !== undefined && command.target !== "current" && command.target !== "parent") {
+					return error(id, "set_project_trust", "target must be current or parent");
+				}
+				const cwd = runtimeHost.cwd;
+				const store = new ProjectTrustStore(runtimeHost.services.agentDir);
+				if (command.target === "parent") {
+					const parent = getProjectTrustParentPath(cwd);
+					if (!parent) return error(id, "set_project_trust", "Current directory has no parent");
+					store.setMany([
+						{ path: parent, decision: command.decision },
+						{ path: cwd, decision: null },
+					]);
+				} else {
+					store.set(cwd, command.decision);
+				}
+				const saved = store.get(cwd);
+				const defaultPolicy = session.settingsManager.getDefaultProjectTrust();
+				const effectiveTrusted = !hasTrustRequiringProjectResources(cwd)
+					? true
+					: (saved ?? defaultPolicy === "always");
+				session.settingsManager.setProjectTrusted(effectiveTrusted);
+				await session.reload();
+				return success(id, "set_project_trust", getProjectTrustState());
+			}
+
+			case "reload_resources": {
+				if (session.isStreaming || session.isCompacting) {
+					return error(
+						id,
+						"reload_resources",
+						"Wait for the current task or compaction to finish before reloading",
+					);
+				}
+				await session.reload();
+				return success(id, "reload_resources");
+			}
+
+			case "get_package_state": {
+				return success(id, "get_package_state", await getPackageState());
+			}
+
+			case "install_package": {
+				if (session.isStreaming || session.isCompacting) {
+					return error(
+						id,
+						"install_package",
+						"Wait for the current task or compaction to finish before installing",
+					);
+				}
+				const source = command.source.trim();
+				if (!source || source.length > 2_048 || source.includes("\0")) {
+					return error(id, "install_package", "Package source must be a valid non-empty string");
+				}
+				if (command.scope !== "user" && command.scope !== "project") {
+					return error(id, "install_package", "Package scope must be user or project");
+				}
+				const manager = createPackageManager();
+				await manager.installAndPersist(source, { local: command.scope === "project" });
+				await session.reload();
+				return success(id, "install_package", await getPackageState(manager));
+			}
+
+			case "remove_package": {
+				if (session.isStreaming || session.isCompacting) {
+					return error(id, "remove_package", "Wait for the current task or compaction to finish before removing");
+				}
+				const manager = createPackageManager();
+				await manager.removeAndPersist(command.source, { local: command.scope === "project" });
+				await session.reload();
+				return success(id, "remove_package", await getPackageState(manager));
+			}
+
+			case "update_package": {
+				if (session.isStreaming || session.isCompacting) {
+					return error(id, "update_package", "Wait for the current task or compaction to finish before updating");
+				}
+				const manager = createPackageManager();
+				await manager.update(command.source, { local: command.scope === "project" });
+				await session.reload();
+				return success(id, "update_package", await getPackageState(manager));
+			}
+
+			case "set_resource_enabled": {
+				if (session.isStreaming || session.isCompacting) {
+					return error(
+						id,
+						"set_resource_enabled",
+						"Wait for the current task or compaction to finish before changing resources",
+					);
+				}
+				await setManagedResourceEnabled(command);
+				await session.reload();
+				return success(id, "set_resource_enabled", await getPackageState());
 			}
 
 			// =================================================================
@@ -926,6 +1388,31 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				return success(id, "export_html", { path });
 			}
 
+			case "export_jsonl": {
+				const path = session.exportToJsonl(command.outputPath);
+				return success(id, "export_jsonl", { path });
+			}
+
+			case "import_session": {
+				if (
+					typeof command.inputPath !== "string" ||
+					!command.inputPath.trim() ||
+					command.inputPath.includes("\0")
+				) {
+					return error(id, "import_session", "inputPath must be a non-empty path");
+				}
+				if (
+					command.cwdOverride !== undefined &&
+					(typeof command.cwdOverride !== "string" ||
+						!command.cwdOverride.trim() ||
+						command.cwdOverride.includes("\0"))
+				) {
+					return error(id, "import_session", "cwdOverride must be a non-empty path");
+				}
+				const result = await runtimeHost.importFromJsonl(command.inputPath, command.cwdOverride);
+				return success(id, "import_session", result);
+			}
+
 			case "switch_session": {
 				if (
 					command.cwdOverride !== undefined &&
@@ -939,17 +1426,11 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 					command.sessionPath,
 					command.cwdOverride === undefined ? undefined : { cwdOverride: command.cwdOverride },
 				);
-				if (!result.cancelled) {
-					await rebindSession();
-				}
 				return success(id, "switch_session", result);
 			}
 
 			case "fork": {
 				const result = await runtimeHost.fork(command.entryId);
-				if (!result.cancelled) {
-					await rebindSession();
-				}
 				return success(id, "fork", { text: result.selectedText, cancelled: result.cancelled });
 			}
 
@@ -959,9 +1440,6 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 					return error(id, "clone", "Cannot clone session: no current entry selected");
 				}
 				const result = await runtimeHost.fork(leafId, { position: "at" });
-				if (!result.cancelled) {
-					await rebindSession();
-				}
 				return success(id, "clone", { cancelled: result.cancelled });
 			}
 
@@ -986,6 +1464,23 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			case "get_tree": {
 				const sessionManager = session.sessionManager;
 				return success(id, "get_tree", { tree: sessionManager.getTree(), leafId: sessionManager.getLeafId() });
+			}
+
+			case "navigate_tree": {
+				if (typeof command.targetId !== "string" || !command.targetId.trim()) {
+					return error(id, "navigate_tree", "targetId must be a non-empty entry ID");
+				}
+				const result = await session.navigateTree(command.targetId, {
+					summarize: command.summarize,
+					customInstructions: command.customInstructions,
+					replaceInstructions: command.replaceInstructions,
+					label: command.label,
+				});
+				return success(id, "navigate_tree", {
+					...(result.editorText === undefined ? {} : { editorText: result.editorText }),
+					cancelled: result.cancelled,
+					...(result.aborted === undefined ? {} : { aborted: result.aborted }),
+				});
 			}
 
 			case "get_last_assistant_text": {
@@ -1069,6 +1564,9 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				const resourceLoader = session.resourceLoader;
 				const activeToolNames = new Set(session.getActiveToolNames());
 				const extensionsResult = resourceLoader.getExtensions();
+				const skillsResult = resourceLoader.getSkills();
+				const promptsResult = resourceLoader.getPrompts();
+				const themesResult = resourceLoader.getThemes();
 				const contextResources: RpcResourceState["contextResources"] = [];
 				const appendContextResource = (
 					kind: RpcResourceState["contextResources"][number]["kind"],
@@ -1121,6 +1619,26 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 						path: item.path,
 						error: item.error.slice(0, 4_000),
 					})),
+					skills: skillsResult.skills.slice(0, 1_000).map((skill) => ({
+						name: skill.name,
+						description: skill.description?.slice(0, 4_000),
+						path: skill.filePath,
+						sourceInfo: skill.sourceInfo,
+					})),
+					prompts: promptsResult.prompts.slice(0, 1_000).map((prompt) => ({
+						name: prompt.name,
+						description: prompt.description?.slice(0, 4_000),
+						...(prompt.argumentHint ? { argumentHint: prompt.argumentHint } : {}),
+						path: prompt.filePath,
+						sourceInfo: prompt.sourceInfo,
+					})),
+					diagnostics: [...skillsResult.diagnostics, ...promptsResult.diagnostics, ...themesResult.diagnostics]
+						.slice(0, 300)
+						.map((item) => ({
+							type: item.type,
+							message: item.message.slice(0, 4_000),
+							...(item.path ? { path: item.path } : {}),
+						})),
 					contextResources,
 					capabilities: { nativeMcp: false, semanticMemory: false },
 				};
@@ -1147,6 +1665,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 					commands.push({
 						name: template.name,
 						description: template.description,
+						...(template.argumentHint ? { argumentHint: template.argumentHint } : {}),
 						source: "prompt",
 						sourceInfo: template.sourceInfo,
 					});

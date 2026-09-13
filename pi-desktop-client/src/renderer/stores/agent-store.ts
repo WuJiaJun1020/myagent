@@ -17,6 +17,7 @@ type AgentStore = AgentRuntimeState & {
   setError: (message: string | null) => void;
   dismissInteraction: (id: string) => void;
   hydrateRuntimeSnapshot: (snapshot: AgentRuntimeSnapshot) => void;
+  syncRuntimeSnapshotMetadata: (snapshot: AgentRuntimeSnapshot) => void;
   resetSession: () => void;
 };
 
@@ -43,6 +44,12 @@ export const useAgentStore = create<AgentStore>((set) => ({
     activeSessionId: snapshot.session.id,
     lastSequence: snapshot.sequence,
     activityRevision: state.activityRevision + 1,
+  })),
+  syncRuntimeSnapshotMetadata: (snapshot) => set((state) => ({
+    busy: snapshot.session.isStreaming,
+    compaction: snapshot.session.isCompacting ? { phase: "running" } : { phase: "idle" },
+    activeSessionId: snapshot.session.id,
+    lastSequence: Math.max(state.lastSequence, snapshot.sequence),
   })),
   resetSession: () => set((state) => ({
     ...createInitialAgentRuntimeState(),

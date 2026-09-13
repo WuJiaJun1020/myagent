@@ -37,6 +37,7 @@ import { APP_NAME, ENV_SESSION_DIR, expandTildePath, getAgentDir, getPackageDir,
 import { type CreateAgentSessionRuntimeFactory, createAgentSessionRuntime } from "./core/agent-session-runtime.ts";
 import {
 	type AgentSessionRuntimeDiagnostic,
+	type AgentSessionServices,
 	createAgentSessionFromServices,
 	createAgentSessionServices,
 } from "./core/agent-session-services.ts";
@@ -716,64 +717,81 @@ export async function main(args: string[], options?: MainOptions) {
 		sessionManager,
 		sessionStartEvent,
 		projectTrustContext,
+		reuseServices,
 	}) => {
 		const isInitialRuntime = sessionStartEvent === undefined;
 		const projectTrustDiagnostics: AgentSessionRuntimeDiagnostic[] = [];
+		let reusableServices: AgentSessionServices | undefined =
+			reuseServices?.cwd === cwd && reuseServices.agentDir === agentDir ? reuseServices : undefined;
+		if (reusableServices) {
+			const refreshExtensions = reusableServices.resourceLoader.refreshExtensionsForSession;
+			if (refreshExtensions) {
+				await refreshExtensions.call(reusableServices.resourceLoader);
+			} else {
+				reusableServices = undefined;
+			}
+		}
 		const cachedProjectTrust = projectTrustByCwd.get(cwd);
 		const hasTrustRequiringResources = hasTrustRequiringProjectResources(cwd);
 		const shouldResolveProjectTrust =
-			parsed.projectTrustOverride === undefined && cachedProjectTrust === undefined && hasTrustRequiringResources;
+			!reusableServices &&
+			parsed.projectTrustOverride === undefined &&
+			cachedProjectTrust === undefined &&
+			hasTrustRequiringResources;
 		const projectTrusted = shouldResolveProjectTrust
 			? false
 			: (cachedProjectTrust ??
 				parsed.projectTrustOverride ??
 				(!hasTrustRequiringResources || trustStore.get(cwd) === true));
-		const runtimeSettingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted });
-		const services = await createAgentSessionServices({
-			cwd,
-			agentDir,
-			settingsManager: runtimeSettingsManager,
-			modelRuntimeSignal: AbortSignal.timeout(15_000),
-			extensionFlagValues: parsed.unknownFlags,
-			resourceLoaderReloadOptions: shouldResolveProjectTrust
-				? {
-						resolveProjectTrust: async ({ extensionsResult }) => {
-							const trusted = await resolveProjectTrusted({
-								cwd,
-								trustStore,
-								trustOverride: parsed.projectTrustOverride,
-								defaultProjectTrust: startupSettingsManager.getDefaultProjectTrust(),
-								extensionsResult,
-								projectTrustContext:
-									projectTrustContext ??
-									createProjectTrustContext({
-										cwd,
-										mode: isInitialRuntime ? trustPromptMode : appMode,
-										settingsManager: startupSettingsManager,
-										hasUI: isInitialRuntime && trustPromptMode === "interactive",
-									}),
-								onExtensionError: (message) => projectTrustDiagnostics.push({ type: "warning", message }),
-							});
-							projectTrustByCwd.set(cwd, trusted);
-							return trusted;
-						},
-					}
-				: undefined,
-			resourceLoaderOptions: {
-				additionalExtensionPaths: resolvedExtensionPaths,
-				additionalSkillPaths: resolvedSkillPaths,
-				additionalPromptTemplatePaths: resolvedPromptTemplatePaths,
-				additionalThemePaths: resolvedThemePaths,
-				noExtensions: parsed.noExtensions,
-				noSkills: parsed.noSkills,
-				noPromptTemplates: parsed.noPromptTemplates,
-				noThemes: parsed.noThemes,
-				noContextFiles: parsed.noContextFiles,
-				systemPrompt: parsed.systemPrompt,
-				appendSystemPrompt: parsed.appendSystemPrompt,
-				extensionFactories,
-			},
-		});
+		const runtimeSettingsManager =
+			reusableServices?.settingsManager ?? SettingsManager.create(cwd, agentDir, { projectTrusted });
+		const services =
+			reusableServices ??
+			(await createAgentSessionServices({
+				cwd,
+				agentDir,
+				settingsManager: runtimeSettingsManager,
+				modelRuntimeSignal: AbortSignal.timeout(15_000),
+				extensionFlagValues: parsed.unknownFlags,
+				resourceLoaderReloadOptions: shouldResolveProjectTrust
+					? {
+							resolveProjectTrust: async ({ extensionsResult }) => {
+								const trusted = await resolveProjectTrusted({
+									cwd,
+									trustStore,
+									trustOverride: parsed.projectTrustOverride,
+									defaultProjectTrust: startupSettingsManager.getDefaultProjectTrust(),
+									extensionsResult,
+									projectTrustContext:
+										projectTrustContext ??
+										createProjectTrustContext({
+											cwd,
+											mode: isInitialRuntime ? trustPromptMode : appMode,
+											settingsManager: startupSettingsManager,
+											hasUI: isInitialRuntime && trustPromptMode === "interactive",
+										}),
+									onExtensionError: (message) => projectTrustDiagnostics.push({ type: "warning", message }),
+								});
+								projectTrustByCwd.set(cwd, trusted);
+								return trusted;
+							},
+						}
+					: undefined,
+				resourceLoaderOptions: {
+					additionalExtensionPaths: resolvedExtensionPaths,
+					additionalSkillPaths: resolvedSkillPaths,
+					additionalPromptTemplatePaths: resolvedPromptTemplatePaths,
+					additionalThemePaths: resolvedThemePaths,
+					noExtensions: parsed.noExtensions,
+					noSkills: parsed.noSkills,
+					noPromptTemplates: parsed.noPromptTemplates,
+					noThemes: parsed.noThemes,
+					noContextFiles: parsed.noContextFiles,
+					systemPrompt: parsed.systemPrompt,
+					appendSystemPrompt: parsed.appendSystemPrompt,
+					extensionFactories,
+				},
+			}));
 		const { settingsManager, modelRuntime, resourceLoader } = services;
 		const diagnostics: AgentSessionRuntimeDiagnostic[] = [
 			...projectTrustDiagnostics,

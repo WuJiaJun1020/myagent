@@ -13,6 +13,7 @@ import type { FileChange } from "../../shared/contracts/workspace";
 
 type UnknownRecord = Record<string, unknown>;
 const MAX_TOOL_OUTPUT_LENGTH = 200_000;
+const MAX_MEDIA_BASE64_LENGTH = 5 * 1024 * 1024;
 
 function limitToolOutput(text: string): string {
   if (text.length <= MAX_TOOL_OUTPUT_LENGTH) return text;
@@ -71,10 +72,13 @@ function toOutputBlocks(value: unknown): ToolOutputBlock[] {
       continue;
     }
     if (type === "image" || type === "audio") {
+      const mimeType = readString(item.mimeType) ?? type;
+      const data = readString(item.data);
       blocks.push({
         type: "media",
-        mediaType: readString(item.mimeType) ?? type,
+        mediaType: mimeType,
         label: type === "image" ? "图片结果" : "音频结果",
+        ...(data && data.length <= MAX_MEDIA_BASE64_LENGTH ? { src: `data:${mimeType};base64,${data}` } : {}),
       });
     }
   }
@@ -274,17 +278,33 @@ export class PiEventAdapter {
           },
         }];
       }
-      case "bash_execution_update": {
-        const delta = readString(event.delta);
-        if (!delta) return [];
-        return [{
-          type: "terminal.output",
-          meta: this.createMeta(),
-          terminalId: readString(event.id) ?? "session-bash",
-          delta,
-        }];
-      }
       case "extension_ui_request": {
+        const method = readString(event.method);
+        if (method === "notify") {
+          const severity = event.notifyType === "warning" || event.notifyType === "error" ? event.notifyType : "info";
+          const message = readString(event.message);
+          return message ? [{ type: "extension.notice", meta: this.createMeta(), severity, message }] : [];
+        }
+        if (method === "setStatus") {
+          const key = readString(event.statusKey);
+          return key ? [{ type: "extension.status", meta: this.createMeta(), key, text: readString(event.statusText) }] : [];
+        }
+        if (method === "setWidget") {
+          const key = readString(event.widgetKey);
+          if (!key) return [];
+          const lines = readStringArray(event.widgetLines);
+          const placement = event.widgetPlacement === "aboveEditor" ? "aboveEditor" : "belowEditor";
+          return [{
+            type: "extension.widget",
+            meta: this.createMeta(),
+            key,
+            widget: lines.length > 0 ? { key, lines, placement } : undefined,
+          }];
+        }
+        if (method === "set_editor_text") {
+          const text = readString(event.text);
+          return text === undefined ? [] : [{ type: "composer.draft", meta: this.createMeta(), text }];
+        }
         const request = toInteractionRequest(event);
         return request ? [{ type: "interaction.requested", meta: this.createMeta(), request }] : [];
       }

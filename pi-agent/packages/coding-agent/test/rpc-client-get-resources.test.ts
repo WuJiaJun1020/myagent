@@ -31,6 +31,40 @@ describe("RpcClient getResources", () => {
 		expect(send).toHaveBeenCalledWith({ type: "get_resources" });
 		expect(result).toEqual(resources);
 	});
+
+	it("manages packages and resource activation with typed commands", async () => {
+		const client = new RpcClient();
+		const privateClient = client as unknown as RpcClientPrivate;
+		const state = { packages: [], resources: [], projectTrusted: true };
+		const send = vi.fn(async () => ({ type: "response", command: "packages", success: true, data: state }));
+		privateClient.send = send;
+		privateClient.getData = <T>(response: unknown): T => (response as { data: T }).data;
+
+		await expect(client.getPackageState()).resolves.toEqual(state);
+		expect(send).toHaveBeenLastCalledWith({ type: "get_package_state" });
+
+		await client.installPackage("./fixture", "project");
+		expect(send).toHaveBeenLastCalledWith(
+			{ type: "install_package", source: "./fixture", scope: "project" },
+			600_000,
+		);
+
+		await client.setResourceEnabled({
+			resourceType: "skills",
+			path: "D:/fixture/skills/review/SKILL.md",
+			source: "./fixture",
+			scope: "project",
+			enabled: false,
+		});
+		expect(send).toHaveBeenLastCalledWith({
+			type: "set_resource_enabled",
+			resourceType: "skills",
+			path: "D:/fixture/skills/review/SKILL.md",
+			source: "./fixture",
+			scope: "project",
+			enabled: false,
+		});
+	});
 });
 
 describe("RpcClient provider authentication", () => {

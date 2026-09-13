@@ -6,16 +6,24 @@ import { useWorkspaceStore } from "../stores/workspace-store";
 import { useSessionStore } from "../stores/session-store";
 import { useResourceStore } from "../stores/resource-store";
 import { useProviderStore } from "../stores/provider-store";
+import { usePiSettingsStore } from "../stores/pi-settings-store";
+import { useUiStore } from "../stores/ui-store";
 
-function applyProcessStatus(status: ProcessStatus): void {
+export function applyProcessStatus(status: ProcessStatus): void {
   const previous = useAgentStore.getState().processStatus;
   const sessionTransition = useSessionStore.getState().mutation === "session";
   if (previous.cwd !== status.cwd) {
-    useAgentStore.getState().resetSession();
-    if (sessionTransition) useSessionStore.getState().prepareWorkspaceTransition();
-    else useSessionStore.getState().reset();
-    useResourceStore.getState().reset();
-    useProviderStore.getState().reset();
+    // During an in-process session switch Pi reports the destination cwd before
+    // the destination snapshot is ready. Keep the current presentation intact
+    // until switchSession applies that snapshot atomically; clearing here makes
+    // the workspace empty state flash between the two updates.
+    if (!sessionTransition) {
+      useAgentStore.getState().resetSession();
+      useSessionStore.getState().reset();
+      useResourceStore.getState().reset();
+      useProviderStore.getState().reset();
+      usePiSettingsStore.getState().reset();
+    }
   }
   useAgentStore.getState().setProcessStatus(status);
   useWorkspaceStore.getState().setWorkspace(status.cwd);
@@ -32,6 +40,7 @@ export function useAgentEvents(): void {
     const offEvent = agentGateway.subscribe((event) => {
       useAgentStore.getState().applyAgentEvent(event);
       if (event.type === "file.changed") useWorkspaceStore.getState().recordFileChange(event.change);
+      if (event.type === "composer.draft") useUiStore.getState().setComposerDraft(event.text);
       if (event.type === "run.settled") {
         const cwd = useAgentStore.getState().processStatus.cwd;
         void useResourceStore.getState().initialize(cwd);

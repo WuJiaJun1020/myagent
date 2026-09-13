@@ -192,6 +192,7 @@ export class PiProcess extends EventEmitter {
         if (message.success === false) pending.reject(new Error(message.error ?? "Pi 命令失败"));
         else pending.resolve(message);
       }
+      return;
     }
     this.emit("event", message);
   }

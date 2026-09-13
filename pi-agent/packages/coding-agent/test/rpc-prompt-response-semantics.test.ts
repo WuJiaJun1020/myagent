@@ -147,6 +147,7 @@ async function createRuntimeHost(options: { withAuth: boolean; responseDelayMs: 
 		session,
 		newSession: vi.fn(async () => ({ cancelled: true })),
 		switchSession: vi.fn(async () => ({ cancelled: true })),
+		importFromJsonl: vi.fn(async () => ({ cancelled: true })),
 		fork: vi.fn(async () => ({ cancelled: true, selectedText: "" })),
 		dispose: vi.fn(async () => {}),
 		setRebindSession: vi.fn(),
@@ -369,6 +370,41 @@ describe("RPC prompt response semantics", () => {
 		}
 	});
 
+	it("does not bind extensions twice after the runtime switches sessions", async () => {
+		const { lineHandler, cleanup, runtimeHost } = await startRpcMode({ withAuth: true, responseDelayMs: 0 });
+
+		try {
+			const registeredRebind = vi.mocked(runtimeHost.setRebindSession).mock.calls[0]?.[0];
+			expect(registeredRebind).toBeTypeOf("function");
+			const bindExtensions = vi.spyOn(runtimeHost.session, "bindExtensions");
+			vi.mocked(runtimeHost.switchSession).mockImplementation(async () => {
+				await registeredRebind?.(runtimeHost.session);
+				return { cancelled: false };
+			});
+
+			lineHandler(
+				JSON.stringify({
+					id: "single-rebind",
+					type: "switch_session",
+					sessionPath: "/sessions/target.jsonl",
+				}),
+			);
+
+			await vi.waitFor(() => {
+				expect(parseOutputLines(rpcIo.outputLines)).toContainEqual({
+					id: "single-rebind",
+					type: "response",
+					command: "switch_session",
+					success: true,
+					data: { cancelled: false },
+				});
+			});
+			expect(bindExtensions).toHaveBeenCalledTimes(1);
+		} finally {
+			await cleanup();
+		}
+	});
+
 	it("creates a session in the requested storage directory", async () => {
 		const { lineHandler, cleanup, runtimeHost } = await startRpcMode({ withAuth: true, responseDelayMs: 0 });
 
@@ -404,6 +440,37 @@ describe("RPC prompt response semantics", () => {
 					command: "new_session",
 					success: false,
 					error: "sessionDir must be a non-empty path",
+				});
+			});
+		} finally {
+			await cleanup();
+		}
+	});
+
+	it("imports a session through the runtime host with an optional workspace override", async () => {
+		const { lineHandler, cleanup, runtimeHost } = await startRpcMode({ withAuth: true, responseDelayMs: 0 });
+
+		try {
+			lineHandler(
+				JSON.stringify({
+					id: "import-session",
+					type: "import_session",
+					inputPath: "/exports/pi-session.jsonl",
+					cwdOverride: "/workspaces/imported",
+				}),
+			);
+
+			await vi.waitFor(() => {
+				expect(runtimeHost.importFromJsonl).toHaveBeenCalledWith(
+					"/exports/pi-session.jsonl",
+					"/workspaces/imported",
+				);
+				expect(parseOutputLines(rpcIo.outputLines)).toContainEqual({
+					id: "import-session",
+					type: "response",
+					command: "import_session",
+					success: true,
+					data: { cancelled: true },
 				});
 			});
 		} finally {

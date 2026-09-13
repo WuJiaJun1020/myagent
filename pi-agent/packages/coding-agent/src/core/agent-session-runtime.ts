@@ -28,8 +28,8 @@ export interface CreateAgentSessionRuntimeResult extends CreateAgentSessionResul
 /**
  * Creates a full runtime for a target cwd and session manager.
  *
- * The factory closes over process-global fixed inputs, recreates cwd-bound
- * services for the effective cwd, resolves session options against those
+ * The factory closes over process-global fixed inputs, reuses compatible
+ * cwd-bound services when offered, resolves session options against those
  * services, and finally creates the AgentSession.
  */
 export type CreateAgentSessionRuntimeFactory = (options: {
@@ -38,6 +38,7 @@ export type CreateAgentSessionRuntimeFactory = (options: {
 	sessionManager: SessionManager;
 	sessionStartEvent?: SessionStartEvent;
 	projectTrustContext?: ProjectTrustContext;
+	reuseServices?: AgentSessionServices;
 }) => Promise<CreateAgentSessionRuntimeResult>;
 
 /**
@@ -209,6 +210,7 @@ export class AgentSessionRuntime {
 		const previousSessionFile = this.session.sessionFile;
 		const sessionManager = SessionManager.open(sessionPath, undefined, options?.cwdOverride);
 		assertSessionCwdExists(sessionManager, this.cwd);
+		const reuseServices = sessionManager.getCwd() === this.cwd ? this.services : undefined;
 		await this.teardownCurrent("resume", sessionManager.getSessionFile());
 		this.apply(
 			await this.createRuntime({
@@ -217,6 +219,7 @@ export class AgentSessionRuntime {
 				sessionManager,
 				sessionStartEvent: { type: "session_start", reason: "resume", previousSessionFile },
 				projectTrustContext: options?.projectTrustContextFactory?.(sessionManager.getCwd()),
+				reuseServices,
 			}),
 		);
 		await this.finishSessionReplacement(options?.withSession);
@@ -235,6 +238,7 @@ export class AgentSessionRuntime {
 		}
 
 		const previousSessionFile = this.session.sessionFile;
+		const reuseServices = this.services;
 		const sessionDir = options?.sessionDir ?? this.session.sessionManager.getSessionDir();
 		const sessionManager = this.session.sessionManager.isPersisted()
 			? SessionManager.create(this.cwd, sessionDir)
@@ -250,6 +254,7 @@ export class AgentSessionRuntime {
 				agentDir: this.services.agentDir,
 				sessionManager,
 				sessionStartEvent: { type: "session_start", reason: "new", previousSessionFile },
+				reuseServices,
 			}),
 		);
 		if (options?.setup) {
@@ -288,6 +293,7 @@ export class AgentSessionRuntime {
 		}
 
 		const previousSessionFile = this.session.sessionFile;
+		const reuseServices = this.services;
 		if (this.session.sessionManager.isPersisted()) {
 			const currentSessionFile = this.session.sessionFile;
 			if (!currentSessionFile) {
@@ -304,6 +310,7 @@ export class AgentSessionRuntime {
 						agentDir: this.services.agentDir,
 						sessionManager,
 						sessionStartEvent: { type: "session_start", reason: "fork", previousSessionFile },
+						reuseServices,
 					}),
 				);
 				await this.finishSessionReplacement(options?.withSession);
@@ -327,6 +334,7 @@ export class AgentSessionRuntime {
 					agentDir: this.services.agentDir,
 					sessionManager,
 					sessionStartEvent: { type: "session_start", reason: "fork", previousSessionFile },
+					reuseServices,
 				}),
 			);
 			await this.finishSessionReplacement(options?.withSession);
@@ -346,6 +354,7 @@ export class AgentSessionRuntime {
 				agentDir: this.services.agentDir,
 				sessionManager,
 				sessionStartEvent: { type: "session_start", reason: "fork", previousSessionFile },
+				reuseServices,
 			}),
 		);
 		await this.finishSessionReplacement(options?.withSession);
@@ -391,6 +400,7 @@ export class AgentSessionRuntime {
 
 		const sessionManager = SessionManager.open(destinationPath, sessionDir, cwdOverride);
 		assertSessionCwdExists(sessionManager, this.cwd);
+		const reuseServices = sessionManager.getCwd() === this.cwd ? this.services : undefined;
 		await this.teardownCurrent("resume", sessionManager.getSessionFile());
 		this.apply(
 			await this.createRuntime({
@@ -398,6 +408,7 @@ export class AgentSessionRuntime {
 				agentDir: this.services.agentDir,
 				sessionManager,
 				sessionStartEvent: { type: "session_start", reason: "resume", previousSessionFile },
+				reuseServices,
 			}),
 		);
 		await this.finishSessionReplacement();

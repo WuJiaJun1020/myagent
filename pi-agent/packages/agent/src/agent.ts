@@ -156,6 +156,13 @@ class PendingMessageQueue {
 	clear(): void {
 		this.messages = [];
 	}
+
+	removeAt(index: number): AgentMessage | undefined {
+		if (!Number.isInteger(index) || index < 0 || index >= this.messages.length) {
+			return undefined;
+		}
+		return this.messages.splice(index, 1)[0];
+	}
 }
 
 type ActiveRun = {
@@ -294,9 +301,19 @@ export class Agent {
 		this.steeringQueue.clear();
 	}
 
+	/** Remove and return one queued steering message by its current queue index. */
+	removeSteeringMessage(index: number): AgentMessage | undefined {
+		return this.steeringQueue.removeAt(index);
+	}
+
 	/** Remove all queued follow-up messages. */
 	clearFollowUpQueue(): void {
 		this.followUpQueue.clear();
+	}
+
+	/** Remove and return one queued follow-up message by its current queue index. */
+	removeFollowUpMessage(index: number): AgentMessage | undefined {
+		return this.followUpQueue.removeAt(index);
 	}
 
 	/** Remove all queued steering and follow-up messages. */

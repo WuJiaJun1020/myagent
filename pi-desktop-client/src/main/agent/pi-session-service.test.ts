@@ -2,7 +2,7 @@ import { appendFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { SessionMode } from "../../shared/contracts/agent-session";
+import type { SessionMode, ThinkingLevel } from "../../shared/contracts/agent-session";
 import type { RpcCommand, RpcMessage } from "../../shared/rpc";
 import { PiEventAdapter } from "./pi-event-adapter";
 import { PiSessionService } from "./pi-session-service";
@@ -19,6 +19,8 @@ class FakePi {
   currentId = "current";
   currentMode: SessionMode = "chat";
   currentApprovalPolicy: "ask" | "auto" = "auto";
+  readonly thinkingLevelBySession = new Map<string, ThinkingLevel>();
+  readonly thinkingLevelsBySession = new Map<string, ThinkingLevel[]>();
   readonly commands: RpcCommand[] = [];
   readonly restarts: Array<{ cwd: string; sessionDir?: string }> = [];
   private sessionDirectory: string;
@@ -58,7 +60,7 @@ class FakePi {
         sessionMode: this.currentMode,
         approvalPolicy: this.currentApprovalPolicy,
         contextUsage: { tokens: 1234, contextWindow: 32_000, percent: 3.85625 },
-        thinkingLevel: "off",
+        thinkingLevel: this.thinkingLevelBySession.get(this.currentId) ?? "off",
         isStreaming: false,
         isCompacting: false,
         messageCount: 0,
@@ -67,7 +69,12 @@ class FakePi {
     }
     if (command.type === "get_messages") return { type: "response", command: command.type, success: true, data: { messages: [] } };
     if (command.type === "get_available_models") return { type: "response", command: command.type, success: true, data: { models: [] } };
-    if (command.type === "get_available_thinking_levels") return { type: "response", command: command.type, success: true, data: { levels: ["off"] } };
+    if (command.type === "get_available_thinking_levels") return {
+      type: "response",
+      command: command.type,
+      success: true,
+      data: { levels: this.thinkingLevelsBySession.get(this.currentId) ?? ["off"] },
+    };
     if (command.type === "get_commands") return { type: "response", command: command.type, success: true, data: { commands: [
       { name: "review", description: "Review changes", source: "prompt", sourceInfo: { origin: "user" } },
     ] } };
@@ -93,6 +100,9 @@ class FakePi {
       this.currentApprovalPolicy = command.policy as "ask" | "auto";
       return { type: "response", command: command.type, success: true, data: { policy: this.currentApprovalPolicy } };
     }
+    if (command.type === "navigate_tree") {
+      return { type: "response", command: command.type, success: true, data: { cancelled: false, editorText: "restored draft" } };
+    }
     if (command.type === "switch_session") {
       const sessionPath = typeof command.sessionPath === "string" ? command.sessionPath : "";
       this.currentId = basename(sessionPath, ".jsonl");
@@ -116,12 +126,21 @@ async function setup() {
   await mkdir(sessions);
   await mkdir(chatSessions);
   for (const id of ["current", "older"]) {
-    await writeFile(join(sessions, `${id}.jsonl`), `${JSON.stringify({ type: "session", id, cwd, timestamp: new Date().toISOString() })}\n`, "utf8");
+    await writeFile(join(sessions, `${id}.jsonl`), [
+      JSON.stringify({ type: "session", id, cwd, timestamp: new Date().toISOString() }),
+      JSON.stringify({ type: "message", id: `${id}-message`, parentId: null, timestamp: new Date().toISOString(), message: { role: "user", content: "hello", timestamp: Date.now() } }),
+      "",
+    ].join("\n"), "utf8");
   }
-  await writeFile(join(sessions, "other-work.jsonl"), `${JSON.stringify({ type: "session", id: "other-work", cwd: otherWorkspace, timestamp: new Date().toISOString() })}\n`, "utf8");
+  await writeFile(join(sessions, "other-work.jsonl"), [
+    JSON.stringify({ type: "session", id: "other-work", cwd: otherWorkspace, timestamp: new Date().toISOString() }),
+    JSON.stringify({ type: "message", id: "other-work-message", parentId: null, timestamp: new Date().toISOString(), message: { role: "user", content: "work", timestamp: Date.now() } }),
+    "",
+  ].join("\n"), "utf8");
   await writeFile(join(chatSessions, "global-chat.jsonl"), [
     JSON.stringify({ type: "session", id: "global-chat", cwd: otherWorkspace, timestamp: new Date().toISOString() }),
     JSON.stringify({ type: "custom", id: "mode", parentId: null, timestamp: new Date().toISOString(), customType: "pi.rpc.session-mode", data: { mode: "chat", workToolNames: [] } }),
+    JSON.stringify({ type: "message", id: "global-chat-message", parentId: "mode", timestamp: new Date().toISOString(), message: { role: "user", content: "chat", timestamp: Date.now() } }),
     "",
   ].join("\n"), "utf8");
   const fakePi = new FakePi(cwd, sessions);
@@ -201,6 +220,9 @@ describe("PiSessionService mutations", () => {
   it("switches to a work session's original workspace before resuming it", async () => {
     const { service, fakePi, otherWorkspace } = await setup();
     await service.getSnapshot();
+    const modelRequestsBeforeSwitch = fakePi.commands.filter((command) => command.type === "get_available_models").length;
+    const thinkingRequestsBeforeSwitch = fakePi.commands.filter((command) => command.type === "get_available_thinking_levels").length;
+    const commandRequestsBeforeSwitch = fakePi.commands.filter((command) => command.type === "get_commands").length;
 
     const snapshot = await service.switchSession("other-work");
 
@@ -210,5 +232,54 @@ describe("PiSessionService mutations", () => {
     expect(latestSwitchCommand(fakePi.commands)).toMatchObject({
       sessionPath: expect.stringContaining("other-work.jsonl"),
     });
+    expect(fakePi.commands.filter((command) => command.type === "get_available_models")).toHaveLength(modelRequestsBeforeSwitch);
+    expect(fakePi.commands.filter((command) => command.type === "get_commands")).toHaveLength(commandRequestsBeforeSwitch);
+    expect(fakePi.commands.filter((command) => command.type === "get_available_thinking_levels")).toHaveLength(thinkingRequestsBeforeSwitch + 1);
+  });
+
+  it("refreshes model-specific thinking levels when switching sessions", async () => {
+    const { service, fakePi } = await setup();
+    fakePi.thinkingLevelBySession.set("current", "high");
+    fakePi.thinkingLevelsBySession.set("current", ["off", "high", "max"]);
+    fakePi.thinkingLevelBySession.set("other-work", "low");
+    fakePi.thinkingLevelsBySession.set("other-work", ["off", "low", "high", "max"]);
+
+    const initial = await service.getSnapshot();
+    expect(initial.session.thinkingLevel).toBe("high");
+    expect(initial.thinkingLevels).toEqual(["off", "high", "max"]);
+
+    const switched = await service.switchSession("other-work");
+    expect(switched.session.thinkingLevel).toBe("low");
+    expect(switched.thinkingLevels).toEqual(["off", "low", "high", "max"]);
+  });
+
+  it("forwards branch summary options when navigating the session tree", async () => {
+    const { service, fakePi } = await setup();
+    const result = await service.navigateCurrentSessionTree("message-1", {
+      summarize: true,
+      customInstructions: "保留测试结果",
+      replaceInstructions: true,
+    });
+
+    expect(fakePi.commands.find((command) => command.type === "navigate_tree")).toEqual({
+      type: "navigate_tree",
+      targetId: "message-1",
+      summarize: true,
+      customInstructions: "保留测试结果",
+      replaceInstructions: true,
+    });
+    expect(result.editorText).toBe("restored draft");
+  });
+
+  it("drops an empty current session from recents after switching away", async () => {
+    const { service, sessions } = await setup();
+    await rm(join(sessions, "current.jsonl"));
+
+    const initial = await service.getSnapshot();
+    expect(initial.sessions.find((session) => session.id === "current")).toMatchObject({ current: true, messageCount: 0 });
+
+    const switched = await service.switchSession("older");
+    expect(switched.sessions.some((session) => session.id === "current")).toBe(false);
+    expect(switched.sessions.find((session) => session.id === "older")?.current).toBe(true);
   });
 });

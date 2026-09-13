@@ -50,6 +50,56 @@ describe("WorkspaceFileService", () => {
 
     await expect(files.readFile("image.bin")).rejects.toThrow("二进制文件");
   });
+
+  it("searches workspace files for composer references and skips generated directories", async () => {
+    const workspace = await createWorkspace();
+    await mkdir(join(workspace, "src"));
+    await mkdir(join(workspace, "node_modules"));
+    await writeFile(join(workspace, "src", "Composer.tsx"), "export {}\n", "utf8");
+    await writeFile(join(workspace, "node_modules", "Composer.js"), "", "utf8");
+    const files = new WorkspaceFileService(() => workspace);
+
+    await expect(files.searchFiles("composer")).resolves.toEqual([
+      { name: "Composer.tsx", path: "src/Composer.tsx" },
+    ]);
+  });
+
+  it("saves a text file only when its on-disk version still matches", async () => {
+    const workspace = await createWorkspace();
+    await writeFile(join(workspace, "note.txt"), "before\n", "utf8");
+    const files = new WorkspaceFileService(() => workspace);
+    const opened = await files.readFile("note.txt");
+
+    await expect(files.saveFile({
+      path: "note.txt",
+      content: "after\n",
+      expectedModifiedAt: opened.modifiedAt,
+    })).resolves.toMatchObject({ content: "after\n" });
+
+    await expect(files.saveFile({
+      path: "note.txt",
+      content: "later\n",
+      expectedModifiedAt: opened.modifiedAt - 10_000,
+    })).rejects.toThrow("磁盘上变更");
+  });
+
+  it("reverts an Agent file change only when no later edit conflicts", async () => {
+    const workspace = await createWorkspace();
+    await writeFile(join(workspace, "note.txt"), "agent output\n", "utf8");
+    const files = new WorkspaceFileService(() => workspace);
+
+    await files.revertAgentChange({
+      path: "note.txt",
+      changeType: "modified",
+      beforeContent: "before\n",
+      afterContent: "agent output\n",
+      unifiedDiff: "",
+      toolCallId: "tool-1",
+      timestamp: Date.now(),
+    });
+
+    await expect(files.readFile("note.txt")).resolves.toMatchObject({ content: "before\n" });
+  });
 });
 
 describe("FileChangeTracker", () => {

@@ -1,18 +1,20 @@
 {
   "name": "pi-desktop-client",
-  "version": "0.1.1",
+  "version": "0.3.11",
   "private": true,
   "description": "A desktop Agent workspace powered by Pi RPC mode",
   "main": "dist/main/index.cjs",
   "scripts": {
-    "build:main": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outfile=dist/main/index.cjs && esbuild src/preload/index.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outfile=dist/preload/index.cjs",
+    "build:main": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --external:node-pty --outfile=dist/main/index.cjs && esbuild src/preload/index.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outfile=dist/preload/index.cjs",
     "dev": "npm run build:main && concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env PI_CLIENT_DEV_URL=http://127.0.0.1:5173 electron .\"",
     "build": "npm run build:main && vite build",
     "start": "npm run build && electron .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "verify:renderer": "node scripts/verify-renderer.cjs",
+    "verify:pty": "electron scripts/verify-pty.cjs",
     "dist:win": "npm run build && npm run verify:renderer && electron-builder --win portable --x64",
+    "dist:win:setup": "npm run build && npm run verify:renderer && electron-builder --win nsis --x64",
     "verify:package": "node scripts/verify-packaged-runtime.cjs --runtime-only",
     "verify:portable": "node scripts/verify-packaged-runtime.cjs"
   },
@@ -20,15 +22,24 @@
     "@earendil-works/pi-coding-agent": "file:../pi-agent/packages/coding-agent",
     "@radix-ui/react-tooltip": "^1.2.16",
     "@tanstack/react-virtual": "^3.14.11",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-search": "^0.16.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^13.2.0",
+    "node-pty": "^1.1.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.6.0",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/noto-sans-sc": "^5.3.0",
+    "@fontsource/lxgw-wenkai": "^5.3.0",
+    "@fontsource/maple-mono": "^5.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.3.0",
     "@types/react": "^19.1.12",
@@ -52,9 +63,28 @@
     "appId": "com.local.pidesktop",
     "productName": "Pi Desktop",
     "asar": true,
+    "npmRebuild": false,
     "asarUnpack": [
       "node_modules/@earendil-works/pi-coding-agent/**/*",
       "node_modules/**/*.node"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/@fontsource-variable/noto-sans-sc/LICENSE",
+        "to": "licenses/Noto-Sans-SC-OFL.txt"
+      },
+      {
+        "from": "node_modules/@fontsource/lxgw-wenkai/LICENSE",
+        "to": "licenses/LXGW-WenKai-OFL.txt"
+      },
+      {
+        "from": "node_modules/@fontsource-variable/jetbrains-mono/LICENSE",
+        "to": "licenses/JetBrains-Mono-OFL.txt"
+      },
+      {
+        "from": "node_modules/@fontsource/maple-mono/LICENSE",
+        "to": "licenses/Maple-Mono-OFL.txt"
+      }
     ],
     "directories": {
       "output": "release"
@@ -73,6 +103,13 @@
         }
       ],
       "artifactName": "Pi-Desktop-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "artifactName": "Pi-Desktop-Setup-${version}-${arch}.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     }
   }
 }

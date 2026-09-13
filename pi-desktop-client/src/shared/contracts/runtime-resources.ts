@@ -44,6 +44,59 @@ export type RuntimeResourceIssue = {
   message: string;
 };
 
+export type RuntimeCommandResource = {
+  name: string;
+  description?: string;
+  argumentHint?: string;
+  kind: "skill" | "prompt";
+  source: RuntimeToolSource;
+};
+
+export type RuntimeExtensionSummary = {
+  id: string;
+  name: string;
+  path: string;
+  source: RuntimeToolSource;
+  toolNames: string[];
+  commandNames: string[];
+};
+
+export type RuntimePackageScope = "user" | "project";
+export type RuntimeManagedResourceType = "extensions" | "skills" | "prompts" | "themes";
+
+export type RuntimePackageSummary = {
+  id: string;
+  source: string;
+  scope: RuntimePackageScope;
+  filtered: boolean;
+  installed: boolean;
+  installedPath?: string;
+};
+
+export type RuntimeManagedResource = {
+  id: string;
+  type: RuntimeManagedResourceType;
+  name: string;
+  path: string;
+  displayPath: string;
+  enabled: boolean;
+  sourceId: string;
+  source: RuntimeToolSource;
+};
+
+export type RuntimeResourceMutation =
+  | { type: "install"; source: string; scope: RuntimePackageScope }
+  | { type: "remove"; source: string; scope: RuntimePackageScope }
+  | { type: "update"; source: string; scope: RuntimePackageScope }
+  | {
+      type: "set-enabled";
+      resourceType: RuntimeManagedResourceType;
+      path: string;
+      source: string;
+      scope: RuntimePackageScope;
+      enabled: boolean;
+    };
+
 export type RuntimeResourceSnapshot = {
   capabilities: {
     nativeMcp: boolean;
@@ -52,6 +105,11 @@ export type RuntimeResourceSnapshot = {
   tools: RuntimeToolSummary[];
   mcpServers: McpServerSummary[];
   memories: MemoryResource[];
+  commandResources: RuntimeCommandResource[];
+  extensions: RuntimeExtensionSummary[];
+  packages: RuntimePackageSummary[];
+  managedResources: RuntimeManagedResource[];
+  projectTrusted: boolean;
   issues: RuntimeResourceIssue[];
   updatedAt: number;
 };

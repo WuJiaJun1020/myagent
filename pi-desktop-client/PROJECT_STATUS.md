@@ -1,6 +1,6 @@
 # 项目状态
 
-最后更新：2026-09-11
+最后更新：2026-09-12
 
 ## 当前目标
 
@@ -52,16 +52,24 @@
 - 支持各 Provider 自带的 API Key 交互、OAuth/订阅登录、浏览器授权、设备码、认证取消和凭据移除
 - 凭据仍由 Pi 写入 `auth.json`；Renderer 不读取已保存密钥，也不把密钥写入前端 Store、持久化设置或日志
 - Provider 认证完成后自动刷新动态模型目录、会话快照和按 Provider 分组的模型选择器
+- 0.2.0 新增 Pi 原生资源中心：统一展示 Packages、Skills、Extensions、Prompt Templates 和 Tool Registry
+- 客户端可通过受控 Pi RPC 安装、更新和移除 npm、Git、URL 或本地 Package，并选择用户级或项目级作用域
+- 支持逐项启用/禁用 Skill、Extension 和 Prompt；变更后由 Pi Runtime 重载，Extension 注册的 Tool 与命令贡献会同步展示
+- Package 操作不由 Renderer 执行 Shell 或直接修改 `settings.json`；项目级安装继续遵循 Project Trust
+- 0.3.0 新增在线 Package 商店：从 npm Registry 搜索 `pi-package`，展示下载量、发布时间、许可证、发布身份、桌面兼容性和官方目录/源码链接
+- 在线安装必须先查看 npm manifest；详情会显示资源入口、依赖、Node.js 要求、安装脚本风险，并可选择最新版或固定版本安装
+- Package Catalog 网络请求只从 Electron Main Process 发出，Renderer 不能任意访问网络或直接执行安装命令
 
 ## 已验证
 
 - `npm.cmd run typecheck` 通过
-- `npm.cmd test` 通过（11 个测试文件、32 个测试）
+- `npm.cmd test` 通过（16 个测试文件、58 个测试）
 - `npm.cmd run build` 通过
 - `npm.cmd run verify:renderer` 通过
 - 阶段 6 所需的 `get_state`、`get_messages`、`get_available_models` 和 `get_available_thinking_levels` 已在真实本地 Pi RPC 上验证成功
 - 阶段 7 的 `get_resources` 已在真实本地 Pi RPC 上验证成功，返回 8 个内置 Tool、Extension 信息、上下文资源和能力声明
 - Pi Coding Agent 的 `rpc-client-get-resources` 回归测试与完整 build 均通过
+- Pi Package 管理 RPC 已用本地 Extension 完成安装、停用、重新加载和移除闭环冒烟测试；临时项目配置已清理
 - Pi monorepo `npm.cmd run check` 通过；Provider RPC 与 Azure OpenAI 图形化认证的定向回归测试各 2 项通过
 - Azure OpenAI 的 API Key 配置会同时要求 Base URL 或 Resource Name，避免出现“显示已接入但请求时缺少端点”的状态
 - 本次新增 Provider RPC 源码已通过 Pi 全量 `check`，并已重新执行 `npm.cmd run build` 生成运行时 bundle；真实 RPC `get_providers` 冒烟验证成功，当前识别到 42 个 Provider

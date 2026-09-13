@@ -32,6 +32,25 @@ function outputText(tool: ToolCallState): string {
   return tool.output.map((block) => block.type === "text" ? block.text : `[${block.mediaType}] ${block.label}`).join("\n");
 }
 
+function MediaPreviews({ tool }: { tool: ToolCallState }) {
+  const media = tool.output.filter((block) => block.type === "media");
+  if (media.length === 0) return null;
+  return (
+    <section className="detail-section media-preview-section">
+      <h3><FileText size={14} />媒体结果</h3>
+      <div className="media-preview-list">
+        {media.map((block, index) => (
+          <figure key={`${block.label}-${index}`}>
+            {block.src && block.mediaType.startsWith("image/") ? <img src={block.src} alt={block.label} /> : null}
+            {block.src && block.mediaType.startsWith("audio/") ? <audio controls src={block.src} /> : null}
+            <figcaption>{block.src ? block.label : `${block.label}（内容过大或格式不支持预览）`}</figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function JsonDetail({ tool, heading = "调用参数" }: { tool: ToolCallState; heading?: string }) {
   return (
     <>
@@ -43,6 +62,7 @@ function JsonDetail({ tool, heading = "调用参数" }: { tool: ToolCallState; h
         <h3><FileText size={14} />执行输出</h3>
         <pre>{outputText(tool) || "暂时没有输出。"}</pre>
       </section>
+      <MediaPreviews tool={tool} />
     </>
   );
 }

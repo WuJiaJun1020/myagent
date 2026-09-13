@@ -14,6 +14,7 @@ import type {
 
 type UnknownRecord = Record<string, unknown>;
 const MAX_HISTORY_TEXT = 200_000;
+const MAX_MEDIA_BASE64_LENGTH = 5 * 1024 * 1024;
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -70,10 +71,13 @@ function toOutputBlocks(value: unknown): ToolOutputBlock[] {
     if (typeof item.text === "string") {
       output.push({ type: "text", text: limitText(item.text) });
     } else if (item.type === "image" || item.type === "audio") {
+      const mimeType = readString(item.mimeType) ?? String(item.type);
+      const data = readString(item.data);
       output.push({
         type: "media",
-        mediaType: readString(item.mimeType) ?? String(item.type),
+        mediaType: mimeType,
         label: item.type === "image" ? "图片结果" : "音频结果",
+        ...(data && data.length <= MAX_MEDIA_BASE64_LENGTH ? { src: `data:${mimeType};base64,${data}` } : {}),
       });
     }
   }

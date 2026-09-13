@@ -1,5 +1,5 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxToolCall, type ImageContent } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, InputEvent } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
@@ -430,6 +430,47 @@ describe("AgentSession queue characterization", () => {
 
 		expect(countsAtQueuedMessageStart).toEqual([0]);
 		expect(harness.session.pendingMessageCount).toBe(0);
+	});
+
+	it("moves and deletes individual queued messages without losing image content", async () => {
+		const waiting = await createWaitingHarness();
+		const { harness, waitForToolStart, promptPromise, releaseToolExecution } = waiting;
+		harnesses.push(harness);
+		const image = {
+			type: "image",
+			data: "aW1hZ2U=",
+			mimeType: "image/png",
+		} satisfies ImageContent;
+
+		harness.setResponses([
+			fauxAssistantMessage(fauxToolCall("wait", {}), { stopReason: "toolUse" }),
+			fauxAssistantMessage("steered"),
+		]);
+
+		await waitForToolStart;
+		await harness.session.followUp("move me", [image]);
+		await harness.session.followUp("delete me");
+
+		expect(harness.session.updateQueueItem("followUp", 0, "steer")).toEqual({
+			steering: ["move me"],
+			followUp: ["delete me"],
+		});
+		expect(harness.session.updateQueueItem("followUp", 0, "delete")).toEqual({
+			steering: ["move me"],
+			followUp: [],
+		});
+
+		releaseToolExecution();
+		await promptPromise;
+
+		expect(getUserTexts(harness)).toEqual(["start", "move me"]);
+		const movedMessage = harness.session.messages.find(
+			(message) => message.role === "user" && getMessageText(message) === "move me",
+		);
+		expect(movedMessage?.role === "user" && Array.isArray(movedMessage.content)).toBe(true);
+		if (movedMessage?.role === "user" && Array.isArray(movedMessage.content)) {
+			expect(movedMessage.content).toContainEqual(image);
+		}
 	});
 
 	it("throws when queueing an extension command with steer", async () => {

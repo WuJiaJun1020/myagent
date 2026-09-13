@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adaptPiResources } from "./pi-resource-service";
+import { adaptPiPackageState, adaptPiResources } from "./pi-resource-service";
 
 describe("adaptPiResources", () => {
   it("classifies built-in and MCP tools while preserving runtime activation", () => {
@@ -64,5 +64,41 @@ describe("adaptPiResources", () => {
       expect.objectContaining({ name: "AGENTS.md", scope: "workspace", kind: "instructions", content: "Workspace rules", enabled: true }),
       expect.objectContaining({ name: "SYSTEM.md", scope: "ancestor", kind: "system", content: "Parent system rules", enabled: true }),
     ]);
+  });
+});
+
+describe("adaptPiPackageState", () => {
+  it("keeps raw resource identity while presenting readable paths", () => {
+    const cwd = "D:\\Code\\workspace";
+    const state = adaptPiPackageState({
+      projectTrusted: true,
+      packages: [{
+        source: "npm:example-pi-package",
+        scope: "project",
+        filtered: true,
+        installed: true,
+        installedPath: "D:\\Code\\workspace\\.pi\\npm\\example-pi-package",
+      }],
+      resources: [{
+        type: "skills",
+        path: "D:\\Code\\workspace\\.pi\\npm\\example-pi-package\\skills\\review\\SKILL.md",
+        enabled: false,
+        sourceInfo: {
+          path: "D:\\Code\\workspace\\.pi\\npm\\example-pi-package\\skills\\review\\SKILL.md",
+          source: "npm:example-pi-package",
+          scope: "project",
+          origin: "package",
+        },
+      }],
+    }, cwd);
+
+    expect(state.projectTrusted).toBe(true);
+    expect(state.packages[0]).toMatchObject({ scope: "project", installed: true, installedPath: "./.pi/npm/example-pi-package" });
+    expect(state.managedResources[0]).toMatchObject({
+      name: "review",
+      sourceId: "npm:example-pi-package",
+      enabled: false,
+      displayPath: "./.pi/npm/example-pi-package/skills/review/SKILL.md",
+    });
   });
 });

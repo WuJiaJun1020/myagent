@@ -4,6 +4,7 @@ export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhi
 export type SessionMode = "work" | "chat";
 export type SessionScope = "workspace" | "global";
 export type ApprovalPolicy = "ask" | "auto";
+export type QueueProcessingMode = "all" | "one-at-a-time";
 
 export type ContextUsage = {
   tokens: number | null;
@@ -14,7 +15,9 @@ export type ContextUsage = {
 export type SlashCommand = {
   name: string;
   description?: string;
+  argumentHint?: string;
   source: "extension" | "prompt" | "skill";
+  sourceLabel?: string;
 };
 
 export type DesktopModel = {
@@ -38,6 +41,11 @@ export type AgentSessionState = {
   thinkingLevel: ThinkingLevel;
   isStreaming: boolean;
   isCompacting: boolean;
+  isRetrying: boolean;
+  steeringMode: QueueProcessingMode;
+  followUpMode: QueueProcessingMode;
+  autoCompactionEnabled: boolean;
+  autoRetryEnabled: boolean;
   messageCount: number;
   pendingMessageCount: number;
 };
@@ -57,6 +65,62 @@ export type SessionListItem = {
     current: boolean;
     available: boolean;
   };
+};
+
+export type SessionStatistics = {
+  userMessages: number;
+  assistantMessages: number;
+  toolCalls: number;
+  toolResults: number;
+  totalMessages: number;
+  tokens: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    total: number;
+  };
+  cost: number;
+};
+
+export type SessionTreeNode = {
+  id: string;
+  type: string;
+  label?: string;
+  preview: string;
+  children: SessionTreeNode[];
+};
+
+export type SessionForkTarget = {
+  entryId: string;
+  text: string;
+};
+
+export type SessionOverview = {
+  stats: SessionStatistics;
+  tree: SessionTreeNode[];
+  leafId: string | null;
+  forkTargets: SessionForkTarget[];
+};
+
+export type SessionTreeNavigation = {
+  snapshot: AgentRuntimeSnapshot;
+  editorText?: string;
+};
+
+export type SessionTreeNavigationOptions = {
+  summarize: boolean;
+  customInstructions?: string;
+  replaceInstructions?: boolean;
+  label?: string;
+};
+
+export type ImageAttachment = {
+  id: string;
+  name: string;
+  mimeType: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+  size: number;
+  previewDataUrl: string;
 };
 
 export type SnapshotToolCall = {
@@ -87,4 +151,9 @@ export type AgentRuntimeSnapshot = {
   thinkingLevels: ThinkingLevel[];
   commands: SlashCommand[];
   history: AgentHistorySnapshot;
+};
+
+export type AgentSessionConfiguration = {
+  session: AgentSessionState;
+  thinkingLevels: ThinkingLevel[];
 };

@@ -1,0 +1,10 @@
+{
+  "packages": [
+    {
+      "source": "..\\..\\pi-agent\\packages\\coding-agent\\examples\\extensions\\hello.ts",
+      "extensions": [
+        "+hello.ts"
+      ]
+    }
+  ]
+}

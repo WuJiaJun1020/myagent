@@ -5,6 +5,7 @@ import { useUiStore } from "../../stores/ui-store";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import { useResourceStore } from "../../stores/resource-store";
 import { CodeViewer } from "../files/CodeViewer";
+import { FileChangeReviewActions } from "../files/FileChangeReviewActions";
 import { resolveToolRenderer, ToolCategoryIcon, ToolDetailRenderer } from "./ToolRenderer";
 
 function formatDuration(startedAt: number, completedAt?: number): string {
@@ -58,6 +59,7 @@ export function DetailPanel() {
           </div>
           {toolSource && <div className="detail-tool-source"><span className={`tool-source-badge ${toolSource.kind}`}>{toolSource.kind === "mcp" ? "MCP Extension" : toolSource.label}</span><code>{toolSource.path}</code></div>}
           <ToolDetailRenderer tool={tool} />
+          {tool.fileChange && <FileChangeReviewActions change={tool.fileChange} />}
         </div>
       ) : (
         <div className="detail-content overview">

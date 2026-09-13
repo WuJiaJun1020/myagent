@@ -8,10 +8,10 @@ type MainLayoutProps = {
   topbar: ReactNode;
   activity: ReactNode;
   detail: ReactNode;
-  overlay: ReactNode;
+  inactive?: boolean;
 };
 
-export function MainLayout({ sidebar, topbar, activity, detail, overlay }: MainLayoutProps) {
+export function MainLayout({ sidebar, topbar, activity, detail, inactive = false }: MainLayoutProps) {
   const sidebarOpen = useUiStore((state) => state.sidebarOpen);
   const detailPanelOpen = useUiStore((state) => state.detailPanelOpen);
   const sidebarWidth = useSettingsStore((state) => state.sidebarWidth);
@@ -28,6 +28,8 @@ export function MainLayout({ sidebar, topbar, activity, detail, overlay }: MainL
       className="workspace-shell"
       data-sidebar-open={sidebarOpen}
       data-detail-open={detailPanelOpen}
+      data-inactive={inactive}
+      aria-hidden={inactive}
       style={layoutStyle}
     >
       {sidebarOpen && (
@@ -62,7 +64,6 @@ export function MainLayout({ sidebar, topbar, activity, detail, overlay }: MainL
           )}
         </div>
       </div>
-      {overlay}
     </div>
   );
 }

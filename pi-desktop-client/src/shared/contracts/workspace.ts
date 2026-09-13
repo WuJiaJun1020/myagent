@@ -14,6 +14,11 @@ export type WorkspaceDirectoryListing = {
   truncated: boolean;
 };
 
+export type WorkspaceFileReference = {
+  name: string;
+  path: string;
+};
+
 export type WorkspaceTextFile = {
   name: string;
   path: string;
@@ -21,6 +26,13 @@ export type WorkspaceTextFile = {
   size: number;
   modifiedAt: number;
   truncated: boolean;
+};
+
+export type WorkspaceFileSaveRequest = {
+  path: string;
+  content: string;
+  /** The mtime observed when the file was opened. Used to prevent overwriting an external edit. */
+  expectedModifiedAt: number;
 };
 
 export type FileChangeType = "created" | "modified" | "deleted" | "renamed";
@@ -34,4 +46,27 @@ export type FileChange = {
   toolCallId: string;
   timestamp: number;
   truncated?: boolean;
+};
+
+export type WorkspaceGitFile = {
+  path: string;
+  indexStatus: string;
+  workTreeStatus: string;
+  renamedFrom?: string;
+};
+
+export type WorkspaceGitStatus = {
+  available: boolean;
+  branch?: string;
+  ahead?: number;
+  behind?: number;
+  files: WorkspaceGitFile[];
+  error?: string;
+};
+
+export type WorkspaceGitDiff = {
+  path: string;
+  staged: boolean;
+  diff: string;
+  truncated: boolean;
 };

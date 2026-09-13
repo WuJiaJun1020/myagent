@@ -115,7 +115,7 @@ export interface PackageManager {
 	installAndPersist(source: string, options?: { local?: boolean }): Promise<void>;
 	remove(source: string, options?: { local?: boolean }): Promise<void>;
 	removeAndPersist(source: string, options?: { local?: boolean }): Promise<boolean>;
-	update(source?: string): Promise<void>;
+	update(source?: string, options?: { local?: boolean }): Promise<void>;
 	listConfiguredPackages(): ConfiguredPackage[];
 	resolveExtensionSources(
 		sources: string[],
@@ -1056,20 +1056,22 @@ export class DefaultPackageManager implements PackageManager {
 		return this.removeSourceFromSettings(source, options);
 	}
 
-	async update(source?: string): Promise<void> {
+	async update(source?: string, options?: { local?: boolean }): Promise<void> {
 		const globalSettings = this.settingsManager.getGlobalSettings();
 		const projectSettings = this.settingsManager.getProjectSettings();
 		const identity = source ? this.getPackageIdentity(source) : undefined;
+		const requestedScope: InstalledSourceScope | undefined =
+			options?.local === undefined ? undefined : options.local ? "project" : "user";
 		let matched = false;
 		const updateSources: ConfiguredUpdateSource[] = [];
 
-		for (const pkg of globalSettings.packages ?? []) {
+		for (const pkg of requestedScope === "project" ? [] : (globalSettings.packages ?? [])) {
 			const sourceStr = typeof pkg === "string" ? pkg : pkg.source;
 			if (identity && this.getPackageIdentity(sourceStr, "user") !== identity) continue;
 			matched = true;
 			updateSources.push({ source: sourceStr, scope: "user" });
 		}
-		for (const pkg of projectSettings.packages ?? []) {
+		for (const pkg of requestedScope === "user" ? [] : (projectSettings.packages ?? [])) {
 			const sourceStr = typeof pkg === "string" ? pkg : pkg.source;
 			if (identity && this.getPackageIdentity(sourceStr, "project") !== identity) continue;
 			matched = true;
@@ -1340,7 +1342,13 @@ export class DefaultPackageManager implements PackageManager {
 			const stats = statSync(resolved);
 			if (stats.isFile()) {
 				metadata.baseDir = dirname(resolved);
-				this.addResource(accumulator.extensions, resolved, metadata, true);
+				const patterns = filter?.extensions;
+				const enabled =
+					filter?.autoload === false
+						? patterns !== undefined &&
+							applyAutoloadDisabledPatterns([resolved], patterns, metadata.baseDir).get(resolved) === true
+						: patterns === undefined || applyPatterns([resolved], patterns, metadata.baseDir).has(resolved);
+				this.addResource(accumulator.extensions, resolved, metadata, enabled);
 				return;
 			}
 			if (stats.isDirectory()) {
@@ -1427,6 +1435,7 @@ export class DefaultPackageManager implements PackageManager {
 	}
 
 	private packageSourcesMatch(existing: PackageSource, inputSource: string, scope: SourceScope): boolean {
+		if (this.getPackageSourceString(existing) === inputSource) return true;
 		const left = this.getSourceMatchKeyForSettings(this.getPackageSourceString(existing), scope);
 		const right = this.getSourceMatchKeyForInput(inputSource);
 		return left === right;

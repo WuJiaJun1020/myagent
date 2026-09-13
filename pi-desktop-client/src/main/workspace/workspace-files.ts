@@ -1,10 +1,12 @@
-import { lstat, open, readdir, realpath, stat } from "node:fs/promises";
-import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { lstat, open, readdir, realpath, stat, unlink, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { RpcMessage } from "../../shared/rpc";
 import type {
   FileChange,
   WorkspaceDirectoryListing,
   WorkspaceEntry,
+  WorkspaceFileReference,
+  WorkspaceFileSaveRequest,
   WorkspaceTextFile,
 } from "../../shared/contracts/workspace";
 
@@ -12,6 +14,9 @@ const MAX_DIRECTORY_ENTRIES = 500;
 const MAX_FILE_BYTES = 1_000_000;
 const MAX_CHANGE_BYTES = 500_000;
 const MAX_DIFF_LENGTH = 200_000;
+const MAX_SEARCH_RESULTS = 60;
+const MAX_SEARCH_ENTRIES = 20_000;
+const SEARCH_IGNORED_DIRECTORIES = new Set([".git", "node_modules", "dist", "release", ".cache"]);
 
 type FileSnapshot = {
   exists: boolean;
@@ -161,6 +166,49 @@ export class WorkspaceFileService {
     return { path: normalizedPath, entries, truncated: allEntries.length > visibleEntries.length };
   }
 
+  async searchFiles(value: unknown): Promise<WorkspaceFileReference[]> {
+    if (typeof value !== "string" || value.length > 200) throw new Error("文件搜索内容无效");
+    const query = value.trim().replaceAll("\\", "/").toLocaleLowerCase();
+    const root = await this.resolveExistingPath("");
+    const matches: Array<WorkspaceFileReference & { score: number }> = [];
+    const directories = [{ absolute: root, relative: "" }];
+    let visited = 0;
+
+    while (directories.length > 0 && visited < MAX_SEARCH_ENTRIES) {
+      const current = directories.shift()!;
+      let entries;
+      try {
+        entries = await readdir(current.absolute, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      entries.sort((left, right) => left.name.localeCompare(right.name, "zh-CN", { numeric: true }));
+      for (const entry of entries) {
+        visited += 1;
+        if (visited > MAX_SEARCH_ENTRIES) break;
+        if (entry.isSymbolicLink()) continue;
+        const path = joinRelative(current.relative, entry.name);
+        if (entry.isDirectory()) {
+          if (!SEARCH_IGNORED_DIRECTORIES.has(entry.name) && !path.startsWith(".pi/npm/") && !path.startsWith(".pi/git/")) {
+            directories.push({ absolute: join(current.absolute, entry.name), relative: path });
+          }
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        const normalized = path.toLocaleLowerCase();
+        const name = entry.name.toLocaleLowerCase();
+        if (query && !normalized.includes(query)) continue;
+        const score = query === "" ? 3 : name === query ? 0 : name.startsWith(query) ? 1 : name.includes(query) ? 2 : 3;
+        matches.push({ name: entry.name, path, score });
+      }
+    }
+
+    return matches
+      .sort((left, right) => left.score - right.score || left.path.length - right.path.length || left.path.localeCompare(right.path))
+      .slice(0, MAX_SEARCH_RESULTS)
+      .map(({ name, path }) => ({ name, path }));
+  }
+
   async readFile(requestPath: unknown): Promise<WorkspaceTextFile> {
     const normalizedPath = normalizeRequestPath(requestPath);
     if (!normalizedPath) throw new Error("请选择工作区内的文件");
@@ -176,6 +224,52 @@ export class WorkspaceFileService {
       modifiedAt: fileStat.mtimeMs,
       truncated,
     };
+  }
+
+  async saveFile(request: WorkspaceFileSaveRequest): Promise<WorkspaceTextFile> {
+    if (!isRecord(request)) throw new Error("保存请求无效");
+    const normalizedPath = normalizeRequestPath(request.path);
+    if (!normalizedPath) throw new Error("请选择工作区内的文件");
+    if (typeof request.content !== "string") throw new Error("文件内容必须是文本");
+    if (!Number.isFinite(request.expectedModifiedAt)) throw new Error("文件版本信息无效，请重新打开文件");
+    if (Buffer.byteLength(request.content, "utf8") > MAX_FILE_BYTES) {
+      throw new Error("编辑器最多保存 1 MB 的文本文件");
+    }
+
+    const absolutePath = await this.resolveExistingPath(normalizedPath);
+    const fileStat = await stat(absolutePath);
+    if (!fileStat.isFile()) throw new Error("请求的路径不是普通文件");
+    if (Math.abs(fileStat.mtimeMs - request.expectedModifiedAt) > 1) {
+      throw new Error("文件已在磁盘上变更，请重新加载后再保存，避免覆盖外部修改");
+    }
+    const current = await readLimitedFile(absolutePath, MAX_FILE_BYTES);
+    if (current.truncated) throw new Error("大文件只能预览，不能在客户端直接保存");
+
+    await writeFile(absolutePath, request.content, "utf8");
+    return this.readFile(normalizedPath);
+  }
+
+  async revertAgentChange(change: FileChange): Promise<void> {
+    if (!isRecord(change) || typeof change.path !== "string") throw new Error("Agent 变更无效");
+    if (change.beforeContent !== undefined && typeof change.beforeContent !== "string") throw new Error("Agent 变更内容无效");
+    if (change.afterContent !== undefined && typeof change.afterContent !== "string") throw new Error("Agent 变更内容无效");
+    if (change.truncated) throw new Error("变更内容已截断，无法安全撤销");
+    const normalizedPath = normalizeRequestPath(change.path);
+    if (!normalizedPath) throw new Error("Agent 变更路径无效");
+    const current = await this.snapshot(normalizedPath);
+    const expectedExists = change.afterContent !== undefined;
+    if (current.exists !== expectedExists || current.content !== change.afterContent) {
+      throw new Error("文件已在 Agent 变更后被修改，无法安全撤销；请先在 Diff 中人工处理");
+    }
+
+    if (change.beforeContent === undefined) {
+      const absolutePath = await this.resolveExistingPath(normalizedPath);
+      await unlink(absolutePath);
+      return;
+    }
+
+    const absolutePath = await this.resolveWritablePath(normalizedPath);
+    await writeFile(absolutePath, change.beforeContent, "utf8");
   }
 
   async snapshot(requestPath: unknown): Promise<FileSnapshot> {
@@ -202,6 +296,17 @@ export class WorkspaceFileService {
     const resolvedPath = await realpath(lexicalPath);
     assertContained(rootPath, resolvedPath);
     return resolvedPath;
+  }
+
+  private async resolveWritablePath(requestPath: string): Promise<string> {
+    const workspaceRoot = this.getWorkspaceRoot();
+    if (!workspaceRoot) throw new Error("尚未选择工作区");
+    const rootPath = await realpath(workspaceRoot);
+    const lexicalPath = resolve(rootPath, requestPath);
+    assertContained(rootPath, lexicalPath);
+    const parentPath = await realpath(dirname(lexicalPath));
+    assertContained(rootPath, parentPath);
+    return join(parentPath, basename(lexicalPath));
   }
 }
 

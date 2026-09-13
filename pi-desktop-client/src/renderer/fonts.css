@@ -1,0 +1,20 @@
+@import "@fontsource-variable/jetbrains-mono/wght.css";
+@import "@fontsource-variable/noto-sans-sc/wght.css";
+
+/* Only ship the WOFF2 faces used by the app. Importing Fontsource's static CSS
+   would also make Vite copy the much larger legacy WOFF files. */
+@font-face {
+  font-family: "LXGW WenKai";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("@fontsource/lxgw-wenkai/files/lxgw-wenkai-latin-500-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Maple Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("@fontsource/maple-mono/files/maple-mono-latin-400-normal.woff2") format("woff2");
+}

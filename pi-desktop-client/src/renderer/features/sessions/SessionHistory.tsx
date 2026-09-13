@@ -6,6 +6,7 @@ import {
   LoaderCircle,
   MessageCircle,
   MessageSquarePlus,
+  PanelTopOpen,
   Pencil,
   Trash2,
   X,
@@ -16,6 +17,7 @@ import { TooltipIconButton } from "../../components/ui/tooltip-icon-button";
 import type { SessionListItem } from "../../../shared/contracts/agent-session";
 import { useAgentStore } from "../../stores/agent-store";
 import { useSessionStore } from "../../stores/session-store";
+import { useUiStore } from "../../stores/ui-store";
 
 type WorkspacePopover = {
   title: string;
@@ -32,12 +34,14 @@ export function SessionHistory() {
   const sessions = useSessionStore((state) => state.sessions);
   const currentMode = useSessionStore((state) => state.session?.mode ?? "work");
   const mutation = useSessionStore((state) => state.mutation);
+  const pendingSessionId = useSessionStore((state) => state.pendingSessionId);
   const error = useSessionStore((state) => state.error);
   const createSession = useSessionStore((state) => state.createSession);
   const switchSession = useSessionStore((state) => state.switchSession);
   const renameSession = useSessionStore((state) => state.renameSession);
   const deleteSession = useSessionStore((state) => state.deleteSession);
   const clearError = useSessionStore((state) => state.clearError);
+  const setSessionOverviewOpen = useUiStore((state) => state.setSessionOverviewOpen);
   const busy = useAgentStore((state) => state.busy);
   const controlsDisabled = busy || Boolean(mutation);
   const sessionChanging = mutation === "session" || mutation === "initializing";
@@ -79,9 +83,10 @@ export function SessionHistory() {
   function renderSession(session: SessionListItem) {
     const title = session.name || session.firstMessage || "未命名会话";
     const unavailable = session.scope === "workspace" && !session.workspace?.available;
+    const selected = pendingSessionId ? session.id === pendingSessionId : session.current;
     return (
       <div
-        className={`session-row ${session.current ? "active" : ""}`}
+        className={`session-row ${selected ? "active" : ""}`}
         key={session.id}
         onMouseEnter={(event) => showWorkspacePopover(event, session, title)}
         onMouseLeave={() => setWorkspacePopover(null)}
@@ -102,7 +107,7 @@ export function SessionHistory() {
         ) : (
           <>
             <button
-              className="session-item"
+              className={`session-item ${unavailable ? "unavailable" : ""}`}
               type="button"
               disabled={controlsDisabled || unavailable}
               aria-label={unavailable ? `${title}，原工作目录不可用` : title}
@@ -112,7 +117,7 @@ export function SessionHistory() {
               <span>
                 <strong>{title}</strong>
               </span>
-              {session.current && <i aria-label="当前会话" />}
+              {selected && <i aria-label={pendingSessionId ? "正在切换到此会话" : "当前会话"} />}
             </button>
             <div className="session-actions">
               <button type="button" aria-label={`重命名 ${title}`} title="重命名" disabled={controlsDisabled} onClick={() => startRename(session.id, session.name || title)}><Pencil size={12} /></button>
@@ -148,14 +153,19 @@ export function SessionHistory() {
     <section className="sidebar-sessions session-history">
       <header>
         <span className="section-label">最近会话</span>
-        <TooltipIconButton
-          className="session-new-button"
-          label={`新建${currentMode === "chat" ? "聊天" : "工作"}会话`}
-          disabled={controlsDisabled}
-          onClick={() => void createSession(currentMode)}
-        >
-          <MessageSquarePlus size={14} />
-        </TooltipIconButton>
+        <span className="session-header-actions">
+          <TooltipIconButton className="session-overview-button" label="打开当前会话概览" disabled={controlsDisabled} onClick={() => setSessionOverviewOpen(true)}>
+            <PanelTopOpen size={14} />
+          </TooltipIconButton>
+          <TooltipIconButton
+            className="session-new-button"
+            label={`新建${currentMode === "chat" ? "聊天" : "工作"}会话`}
+            disabled={controlsDisabled}
+            onClick={() => void createSession(currentMode)}
+          >
+            <MessageSquarePlus size={14} />
+          </TooltipIconButton>
+        </span>
       </header>
       {error && (
         <div className="session-error" role="alert">

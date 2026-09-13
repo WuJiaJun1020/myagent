@@ -2,14 +2,22 @@ import { existsSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import type {
   AgentRuntimeSnapshot,
+  AgentSessionConfiguration,
   AgentSessionState,
   ApprovalPolicy,
   DesktopModel,
   SessionListItem,
   SessionMode,
+  SessionOverview,
+  QueueProcessingMode,
+  SessionStatistics,
+  SessionTreeNavigation,
+  SessionTreeNavigationOptions,
+  SessionTreeNode,
   SlashCommand,
   ThinkingLevel,
 } from "../../shared/contracts/agent-session";
+import { normalizeThinkingLevels } from "../../shared/thinking-levels";
 import type { RpcMessage } from "../../shared/rpc";
 import { PiProcess } from "../pi-process";
 import { getDefaultPiSessionDir, getDesktopChatSessionDir, listAllPiSessions, type PiSessionIndexEntry } from "../sessions/pi-session-index";
@@ -20,6 +28,7 @@ type UnknownRecord = Record<string, unknown>;
 type DesktopSessionIndexEntry = PiSessionIndexEntry & {
   requiresWorkMode: boolean;
 };
+type SnapshotCapabilities = Pick<AgentRuntimeSnapshot, "models" | "thinkingLevels" | "commands">;
 const RPC_TIMEOUT = 30_000;
 const MAX_SESSION_NAME_LENGTH = 120;
 
@@ -46,6 +55,10 @@ function parseSessionMode(value: unknown): SessionMode {
 
 function parseApprovalPolicy(value: unknown): ApprovalPolicy {
   return value === "ask" ? "ask" : "auto";
+}
+
+function parseQueueProcessingMode(value: unknown): QueueProcessingMode {
+  return value === "one-at-a-time" ? "one-at-a-time" : "all";
 }
 
 function parseContextUsage(value: unknown): AgentSessionState["contextUsage"] {
@@ -94,6 +107,11 @@ function parseSessionState(value: UnknownRecord): AgentSessionState {
     thinkingLevel,
     isStreaming: value.isStreaming === true,
     isCompacting: value.isCompacting === true,
+    isRetrying: value.isRetrying === true,
+    steeringMode: parseQueueProcessingMode(value.steeringMode),
+    followUpMode: parseQueueProcessingMode(value.followUpMode),
+    autoCompactionEnabled: value.autoCompactionEnabled !== false,
+    autoRetryEnabled: value.autoRetryEnabled === true,
     messageCount: readNumber(value.messageCount) ?? 0,
     pendingMessageCount: readNumber(value.pendingMessageCount) ?? 0,
   };
@@ -107,7 +125,17 @@ function parseCommands(value: UnknownRecord): SlashCommand[] {
     const name = readString(item.name);
     const source = item.source;
     if (!name || (source !== "extension" && source !== "prompt" && source !== "skill")) continue;
-    commands.push({ name, description: readString(item.description), source });
+    const sourceInfo = isRecord(item.sourceInfo) ? item.sourceInfo : undefined;
+    const description = readString(item.description);
+    const argumentHint = readString(item.argumentHint);
+    const sourceLabel = sourceInfo ? readString(sourceInfo.source) : undefined;
+    commands.push({
+      name,
+      ...(description ? { description } : {}),
+      ...(argumentHint ? { argumentHint } : {}),
+      source,
+      ...(sourceLabel ? { sourceLabel } : {}),
+    });
   }
   return commands.sort((left, right) => left.name.localeCompare(right.name));
 }
@@ -126,9 +154,102 @@ function parseThinkingLevels(value: UnknownRecord): ThinkingLevel[] {
   return levels.length > 0 ? levels : ["off"];
 }
 
+function truncatePreview(value: string, limit = 120): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) return "无文本内容";
+  return normalized.length > limit ? `${normalized.slice(0, limit)}…` : normalized;
+}
+
+function readContentPreview(value: unknown): string | undefined {
+  if (typeof value === "string") return truncatePreview(value);
+  if (!Array.isArray(value)) return undefined;
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    if (typeof item.text === "string") return truncatePreview(item.text);
+    if (typeof item.thinking === "string") return truncatePreview(item.thinking);
+  }
+  return undefined;
+}
+
+function parseSessionStatistics(value: UnknownRecord): SessionStatistics {
+  const tokens = isRecord(value.tokens) ? value.tokens : {};
+  return {
+    userMessages: readNumber(value.userMessages) ?? 0,
+    assistantMessages: readNumber(value.assistantMessages) ?? 0,
+    toolCalls: readNumber(value.toolCalls) ?? 0,
+    toolResults: readNumber(value.toolResults) ?? 0,
+    totalMessages: readNumber(value.totalMessages) ?? 0,
+    tokens: {
+      input: readNumber(tokens.input) ?? 0,
+      output: readNumber(tokens.output) ?? 0,
+      cacheRead: readNumber(tokens.cacheRead) ?? 0,
+      cacheWrite: readNumber(tokens.cacheWrite) ?? 0,
+      total: readNumber(tokens.total) ?? 0,
+    },
+    cost: readNumber(value.cost) ?? 0,
+  };
+}
+
+function sessionTreePreview(entry: UnknownRecord): string {
+  const type = readString(entry.type) ?? "entry";
+  if (type === "message" && isRecord(entry.message)) {
+    const role = readString(entry.message.role);
+    const content = readContentPreview(entry.message.content);
+    return `${role === "user" ? "用户" : role === "assistant" ? "Pi" : "消息"} · ${content ?? "无文本内容"}`;
+  }
+  if (type === "custom_message") return `自定义消息 · ${readContentPreview(entry.content) ?? "无文本内容"}`;
+  if (type === "tool_result") return `工具结果 · ${readString(entry.toolName) ?? "tool"}`;
+  if (type === "compaction") return "上下文压缩";
+  if (type === "branch_summary") return `分支摘要 · ${truncatePreview(readString(entry.summary) ?? "")}`;
+  if (type === "session_info") return `会话信息 · ${readString(entry.name) ?? ""}`.trim();
+  return type.replace(/_/g, " ");
+}
+
+function parseSessionTreeNode(value: unknown): SessionTreeNode | undefined {
+  if (!isRecord(value) || !isRecord(value.entry)) return undefined;
+  const id = readString(value.entry.id);
+  const type = readString(value.entry.type);
+  if (!id || !type) return undefined;
+  const children = Array.isArray(value.children)
+    ? value.children.map(parseSessionTreeNode).filter((node): node is SessionTreeNode => Boolean(node))
+    : [];
+  return {
+    id,
+    type,
+    ...(typeof value.label === "string" && value.label.trim() ? { label: truncatePreview(value.label, 80) } : {}),
+    preview: sessionTreePreview(value.entry),
+    children,
+  };
+}
+
+function parseSessionOverview(
+  statsValue: UnknownRecord,
+  treeValue: UnknownRecord,
+  forkValue: UnknownRecord,
+): SessionOverview {
+  const tree = Array.isArray(treeValue.tree)
+    ? treeValue.tree.map(parseSessionTreeNode).filter((node): node is SessionTreeNode => Boolean(node))
+    : [];
+  const forkTargets = Array.isArray(forkValue.messages)
+    ? forkValue.messages.flatMap((item) => {
+      if (!isRecord(item)) return [];
+      const entryId = readString(item.entryId);
+      const text = readString(item.text);
+      return entryId && text ? [{ entryId, text: truncatePreview(text, 160) }] : [];
+    })
+    : [];
+  return {
+    stats: parseSessionStatistics(statsValue),
+    tree,
+    leafId: readString(treeValue.leafId) ?? null,
+    forkTargets,
+  };
+}
+
 export class PiSessionService {
   private readonly sessionIndex = new Map<string, DesktopSessionIndexEntry>();
   private recentSessions: SessionListItem[] = [];
+  private snapshotCapabilities: SnapshotCapabilities | undefined;
 
   constructor(
     private readonly pi: PiProcess,
@@ -137,32 +258,139 @@ export class PiSessionService {
     private readonly chatSessionDirectory: (cwd: string) => string = getDesktopChatSessionDir,
   ) {}
 
-  async getSnapshot(synchronizeSession = false, cachedSessions?: SessionListItem[]): Promise<AgentRuntimeSnapshot> {
+  async getSnapshot(
+    synchronizeSession = false,
+    cachedSessions?: SessionListItem[],
+    reuseCapabilities = false,
+  ): Promise<AgentRuntimeSnapshot> {
     const { session, sessionFile } = await this.getNormalizedCurrentSession();
     if (synchronizeSession) this.eventAdapter.synchronizeSession(session.id);
 
-    const [messagesResponse, modelsResponse, thinkingResponse, commandsResponse, sessions] = await Promise.all([
+    const cachedCapabilities = this.snapshotCapabilities;
+    const capabilitiesPromise = reuseCapabilities && cachedCapabilities
+      ? this.pi.send({ type: "get_available_thinking_levels" }, RPC_TIMEOUT).then((thinkingResponse) => ({
+        models: cachedCapabilities.models,
+        thinkingLevels: parseThinkingLevels(responseData(thinkingResponse)),
+        commands: cachedCapabilities.commands,
+      }))
+      : Promise.all([
+        this.pi.send({ type: "get_available_models" }, RPC_TIMEOUT),
+        this.pi.send({ type: "get_available_thinking_levels" }, RPC_TIMEOUT),
+        this.pi.send({ type: "get_commands" }, RPC_TIMEOUT),
+      ]).then(([modelsResponse, thinkingResponse, commandsResponse]) => ({
+        models: parseModels(responseData(modelsResponse)),
+        thinkingLevels: parseThinkingLevels(responseData(thinkingResponse)),
+        commands: parseCommands(responseData(commandsResponse)),
+      }));
+    const [messagesResponse, sessions, capabilities] = await Promise.all([
       this.pi.send({ type: "get_messages" }, RPC_TIMEOUT),
-      this.pi.send({ type: "get_available_models" }, RPC_TIMEOUT),
-      this.pi.send({ type: "get_available_thinking_levels" }, RPC_TIMEOUT),
-      this.pi.send({ type: "get_commands" }, RPC_TIMEOUT),
       cachedSessions ? Promise.resolve(cachedSessions) : this.listSessions(session, sessionFile),
+      capabilitiesPromise,
     ]);
     const messageData = responseData(messagesResponse);
+    const normalizedCapabilities = {
+      ...capabilities,
+      thinkingLevels: normalizeThinkingLevels(capabilities.thinkingLevels, session.thinkingLevel),
+    };
+    this.snapshotCapabilities = normalizedCapabilities;
 
     return {
       sequence: this.eventAdapter.getSequence(),
       session,
       sessions,
-      models: parseModels(responseData(modelsResponse)),
-      thinkingLevels: parseThinkingLevels(responseData(thinkingResponse)),
-      commands: parseCommands(responseData(commandsResponse)),
+      ...normalizedCapabilities,
       history: adaptRpcHistory(session.id, messageData.messages),
     };
   }
 
   async getSessionState(): Promise<AgentSessionState> {
     return (await this.getNormalizedCurrentSession()).session;
+  }
+
+  async getSessionConfiguration(): Promise<AgentSessionConfiguration> {
+    const { session } = await this.getNormalizedCurrentSession();
+    const response = await this.pi.send({ type: "get_available_thinking_levels" }, RPC_TIMEOUT);
+    return {
+      session,
+      thinkingLevels: normalizeThinkingLevels(parseThinkingLevels(responseData(response)), session.thinkingLevel),
+    };
+  }
+
+  async getSessionOverview(): Promise<SessionOverview> {
+    const [statsResponse, treeResponse, forkResponse] = await Promise.all([
+      this.pi.send({ type: "get_session_stats" }, RPC_TIMEOUT),
+      this.pi.send({ type: "get_tree" }, RPC_TIMEOUT),
+      this.pi.send({ type: "get_fork_messages" }, RPC_TIMEOUT),
+    ]);
+    return parseSessionOverview(
+      responseData(statsResponse),
+      responseData(treeResponse),
+      responseData(forkResponse),
+    );
+  }
+
+  async cloneCurrentSession(): Promise<AgentRuntimeSnapshot> {
+    this.eventAdapter.beginSession();
+    const response = await this.pi.send({ type: "clone" }, RPC_TIMEOUT);
+    if (isRecord(response.data) && response.data.cancelled === true) return this.getSnapshot(false);
+    return this.getSnapshot(true);
+  }
+
+  async forkCurrentSession(entryId: unknown): Promise<AgentRuntimeSnapshot> {
+    const targetId = validateSessionId(entryId);
+    this.eventAdapter.beginSession();
+    const response = await this.pi.send({ type: "fork", entryId: targetId }, RPC_TIMEOUT);
+    if (isRecord(response.data) && response.data.cancelled === true) return this.getSnapshot(false);
+    return this.getSnapshot(true);
+  }
+
+  async navigateCurrentSessionTree(entryId: unknown, options: SessionTreeNavigationOptions): Promise<SessionTreeNavigation> {
+    const targetId = validateSessionId(entryId);
+    if (!isRecord(options) || typeof options.summarize !== "boolean") throw new Error("会话树跳转选项无效");
+    const customInstructions = readString(options.customInstructions)?.trim();
+    const label = readString(options.label)?.trim();
+    const response = await this.pi.send({
+      type: "navigate_tree",
+      targetId,
+      summarize: options.summarize,
+      ...(customInstructions ? { customInstructions, replaceInstructions: options.replaceInstructions === true } : {}),
+      ...(label ? { label } : {}),
+    }, RPC_TIMEOUT);
+    const data = responseData(response);
+    if (data.cancelled === true) return { snapshot: await this.getSnapshot(false) };
+    const snapshot = await this.getSnapshot(true);
+    const editorText = readString(data.editorText);
+    return { snapshot, ...(editorText === undefined ? {} : { editorText }) };
+  }
+
+  async exportCurrentSession(outputPath: string, format: "html" | "jsonl"): Promise<string> {
+    if (!outputPath.trim()) throw new Error("导出路径无效");
+    const response = await this.pi.send({ type: format === "html" ? "export_html" : "export_jsonl", outputPath }, RPC_TIMEOUT);
+    const path = readString(responseData(response).path);
+    if (!path) throw new Error("Pi 未返回导出文件路径");
+    return path;
+  }
+
+  async importSession(inputPath: string): Promise<AgentRuntimeSnapshot> {
+    if (!inputPath.trim()) throw new Error("导入文件路径无效");
+    this.eventAdapter.beginSession();
+    const response = await this.pi.send({ type: "import_session", inputPath }, RPC_TIMEOUT);
+    if (isRecord(response.data) && response.data.cancelled === true) return this.getSnapshot(false);
+    const { session, sessionFile } = await this.getNormalizedCurrentSession();
+    const currentWorkspace = this.pi.getStatus().cwd;
+    const imported = (await listAllPiSessions(currentWorkspace, {
+      activeSessionFile: sessionFile,
+      additionalSessionDirs: [this.chatSessionDirectory(currentWorkspace)],
+    })).find((candidate) => candidate.id === session.id);
+    if (
+      imported
+      && !this.isDesktopChatSession(sessionFile, currentWorkspace)
+      && imported.cwd
+      && existsSync(imported.cwd)
+    ) {
+      this.pi.setWorkspaceCwd(imported.cwd);
+    }
+    return this.getSnapshot(true);
   }
 
   async newSession(mode: unknown = "work"): Promise<AgentRuntimeSnapshot> {
@@ -187,9 +415,9 @@ export class PiSessionService {
 
   async switchSession(sessionId: unknown): Promise<AgentRuntimeSnapshot> {
     const id = validateSessionId(sessionId);
-    const { session: currentState, sessionFile } = await this.getNormalizedCurrentSession();
     let target = this.sessionIndex.get(id);
     if (!target) {
+      const { session: currentState, sessionFile } = await this.getNormalizedCurrentSession();
       await this.listSessions(currentState, sessionFile);
       target = this.sessionIndex.get(id);
     }
@@ -211,7 +439,7 @@ export class PiSessionService {
     if (isRecord(response.data) && response.data.cancelled === true) return this.getSnapshot(false);
     if (target.mode === "work") this.pi.setWorkspaceCwd(target.cwd);
     if (target.requiresWorkMode) await this.pi.send({ type: "set_session_mode", mode: "work" }, RPC_TIMEOUT);
-    return this.getSnapshot(true, this.cachedSessionsWithCurrent(id));
+    return this.getSnapshot(true, this.cachedSessionsWithCurrent(id), true);
   }
 
   async renameSession(sessionId: unknown, name: unknown): Promise<AgentRuntimeSnapshot> {
@@ -260,6 +488,30 @@ export class PiSessionService {
     return this.getSnapshot(false);
   }
 
+  async setSteeringMode(mode: unknown): Promise<AgentRuntimeSnapshot> {
+    if (mode !== "all" && mode !== "one-at-a-time") throw new Error("转向队列策略无效");
+    await this.pi.send({ type: "set_steering_mode", mode }, RPC_TIMEOUT);
+    return this.getSnapshot(false);
+  }
+
+  async setFollowUpMode(mode: unknown): Promise<AgentRuntimeSnapshot> {
+    if (mode !== "all" && mode !== "one-at-a-time") throw new Error("后续任务队列策略无效");
+    await this.pi.send({ type: "set_follow_up_mode", mode }, RPC_TIMEOUT);
+    return this.getSnapshot(false);
+  }
+
+  async setAutoCompaction(enabled: unknown): Promise<AgentRuntimeSnapshot> {
+    if (typeof enabled !== "boolean") throw new Error("自动压缩设置无效");
+    await this.pi.send({ type: "set_auto_compaction", enabled }, RPC_TIMEOUT);
+    return this.getSnapshot(false);
+  }
+
+  async setAutoRetry(enabled: unknown): Promise<AgentRuntimeSnapshot> {
+    if (typeof enabled !== "boolean") throw new Error("自动重试设置无效");
+    await this.pi.send({ type: "set_auto_retry", enabled }, RPC_TIMEOUT);
+    return this.getSnapshot(false);
+  }
+
   async setModel(provider: unknown, modelId: unknown): Promise<AgentRuntimeSnapshot> {
     if (typeof provider !== "string" || typeof modelId !== "string") throw new Error("模型参数无效");
     const modelsResponse = await this.pi.send({ type: "get_available_models" }, RPC_TIMEOUT);
@@ -299,7 +551,10 @@ export class PiSessionService {
 
   private cachedSessionsWithCurrent(sessionId: string): SessionListItem[] | undefined {
     if (!this.recentSessions.some((session) => session.id === sessionId)) return undefined;
-    return this.recentSessions.map((session) => ({ ...session, current: session.id === sessionId }));
+    this.recentSessions = this.recentSessions
+      .filter((session) => session.id === sessionId || session.messageCount > 0)
+      .map((session) => ({ ...session, current: session.id === sessionId }));
+    return this.recentSessions;
   }
 
   private async listSessions(current: AgentSessionState, activeSessionFile?: string): Promise<SessionListItem[]> {
@@ -309,36 +564,38 @@ export class PiSessionService {
       additionalSessionDirs: [this.chatSessionDirectory(cwd)],
     });
     this.sessionIndex.clear();
-    const sessions = sessionInfos.map((source): SessionListItem => {
-      const isGlobalChat = this.isDesktopChatSession(source.path, cwd);
-      const session: DesktopSessionIndexEntry = {
-        ...source,
-        mode: isGlobalChat ? "chat" : "work",
-        requiresWorkMode: !isGlobalChat && source.mode === "chat",
-      };
-      this.sessionIndex.set(session.id, session);
-      const scope = session.mode === "chat" ? "global" : "workspace";
-      return {
-        id: session.id,
-        name: session.name,
-        mode: session.mode,
-        scope,
-        firstMessage: session.firstMessage,
-        createdAt: session.createdAt,
-        modifiedAt: session.modifiedAt,
-        messageCount: session.messageCount,
-        current: session.id === current.id,
-        ...(scope === "workspace"
-          ? {
-              workspace: {
-                name: workspaceName(session.cwd),
-                current: sameWorkspace(session.cwd, cwd),
-                available: Boolean(session.cwd) && existsSync(session.cwd),
-              },
-            }
-          : {}),
-      };
-    });
+    const sessions = sessionInfos
+      .filter((source) => source.id === current.id || source.messageCount > 0)
+      .map((source): SessionListItem => {
+        const isGlobalChat = this.isDesktopChatSession(source.path, cwd);
+        const session: DesktopSessionIndexEntry = {
+          ...source,
+          mode: isGlobalChat ? "chat" : "work",
+          requiresWorkMode: !isGlobalChat && source.mode === "chat",
+        };
+        this.sessionIndex.set(session.id, session);
+        const scope = session.mode === "chat" ? "global" : "workspace";
+        return {
+          id: session.id,
+          name: session.name,
+          mode: session.mode,
+          scope,
+          firstMessage: session.firstMessage,
+          createdAt: session.createdAt,
+          modifiedAt: session.modifiedAt,
+          messageCount: session.messageCount,
+          current: session.id === current.id,
+          ...(scope === "workspace"
+            ? {
+                workspace: {
+                  name: workspaceName(session.cwd),
+                  current: sameWorkspace(session.cwd, cwd),
+                  available: Boolean(session.cwd) && existsSync(session.cwd),
+                },
+              }
+            : {}),
+        };
+      });
 
     if (!sessions.some((session) => session.id === current.id)) {
       const isGlobalChat = this.isDesktopChatSession(activeSessionFile, cwd);

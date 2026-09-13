@@ -19,13 +19,13 @@ export function MessageItem({ message, hideThinking = false }: MessageItemProps)
   if (message.role === "user") {
     return (
       <article className="timeline-message user-message">
-        <div className="message-avatar user"><UserRound size={15} /></div>
         <div className="message-column">
           <div className="message-meta"><strong>你</strong></div>
           <div className="user-message-bubble">
             {textBlocks.map((block) => <p key={block.contentIndex}>{block.text}</p>)}
           </div>
         </div>
+        <div className="message-avatar user"><UserRound size={15} /></div>
       </article>
     );
   }

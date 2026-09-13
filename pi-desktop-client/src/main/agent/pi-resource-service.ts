@@ -4,7 +4,13 @@ import type {
   McpServerSummary,
   MemoryResource,
   RuntimeResourceIssue,
+  RuntimeExtensionSummary,
+  RuntimeManagedResource,
+  RuntimeManagedResourceType,
+  RuntimePackageSummary,
+  RuntimeResourceMutation,
   RuntimeResourceSnapshot,
+  RuntimeCommandResource,
   RuntimeSourceScope,
   RuntimeToolPermission,
   RuntimeToolSource,
@@ -137,6 +143,36 @@ function parseIssues(value: unknown, cwd: string): RuntimeResourceIssue[] {
   });
 }
 
+function parseDiagnostics(value: unknown, cwd: string): RuntimeResourceIssue[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): RuntimeResourceIssue[] => {
+    if (!isRecord(item)) return [];
+    const message = readString(item.message);
+    if (!message) return [];
+    const path = readString(item.path);
+    return [{ source: path ? displayPath(path, cwd) : "Pi 资源加载器", message: message.slice(0, 4_000) }];
+  });
+}
+
+function parseCommandResources(value: unknown, kind: RuntimeCommandResource["kind"], cwd: string): RuntimeCommandResource[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): RuntimeCommandResource[] => {
+    if (!isRecord(item)) return [];
+    const name = readString(item.name);
+    const source = sourceInfo(item.sourceInfo, cwd);
+    if (!name || !source) return [];
+    const description = readString(item.description);
+    const argumentHint = readString(item.argumentHint);
+    return [{
+      name,
+      kind,
+      source,
+      ...(description ? { description: description.slice(0, MAX_DESCRIPTION_LENGTH) } : {}),
+      ...(argumentHint ? { argumentHint: argumentHint.slice(0, 200) } : {}),
+    }];
+  });
+}
+
 function parseMcpServers(
   value: unknown,
   issues: RuntimeResourceIssue[],
@@ -187,6 +223,24 @@ function parseMcpServers(
   return [...servers.values()];
 }
 
+function parseExtensions(value: unknown, cwd: string): RuntimeExtensionSummary[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): RuntimeExtensionSummary[] => {
+    if (!isRecord(item)) return [];
+    const path = readString(item.path);
+    const source = sourceInfo(item.sourceInfo, cwd);
+    if (!path || !source) return [];
+    return [{
+      id: `${source.scope}:${path}`,
+      name: basename(path, extname(path)) || source.label,
+      path: displayPath(path, cwd),
+      source,
+      toolNames: readStringArray(item.toolNames),
+      commandNames: readStringArray(item.commandNames),
+    }];
+  });
+}
+
 function memoryScope(path: string, cwd: string): MemoryResource["scope"] {
   const agentDir = resolve(cwd, process.env.PI_CODING_AGENT_DIR ?? resolve(homedir(), ".pi", "agent"));
   if (isWithin(path, agentDir)) return "user";
@@ -224,7 +278,7 @@ function parseMemories(value: unknown, cwd: string): MemoryResource[] {
 export function adaptPiResources(value: unknown, cwd: string): RuntimeResourceSnapshot {
   if (!isRecord(value)) throw new Error("Pi 返回了无效的资源状态");
   const tools = parseTools(value.tools, cwd);
-  const issues = parseIssues(value.extensionErrors, cwd);
+  const issues = [...parseIssues(value.extensionErrors, cwd), ...parseDiagnostics(value.diagnostics, cwd)];
   return {
     capabilities: {
       nativeMcp: isRecord(value.capabilities) && value.capabilities.nativeMcp === true,
@@ -233,8 +287,72 @@ export function adaptPiResources(value: unknown, cwd: string): RuntimeResourceSn
     tools,
     mcpServers: parseMcpServers(value.extensions, issues, tools, cwd),
     memories: parseMemories(value.contextResources, cwd),
+    commandResources: [
+      ...parseCommandResources(value.skills, "skill", cwd),
+      ...parseCommandResources(value.prompts, "prompt", cwd),
+    ],
+    extensions: parseExtensions(value.extensions, cwd),
+    packages: [],
+    managedResources: [],
+    projectTrusted: false,
     issues,
     updatedAt: Date.now(),
+  };
+}
+
+function managedResourceName(type: RuntimeManagedResourceType, path: string): string {
+  if (type === "skills" && basename(path).toLocaleLowerCase() === "skill.md") return basename(resolve(path, ".."));
+  return basename(path, extname(path)) || path;
+}
+
+export function adaptPiPackageState(value: unknown, cwd: string): Pick<
+  RuntimeResourceSnapshot,
+  "packages" | "managedResources" | "projectTrusted"
+> {
+  if (!isRecord(value)) throw new Error("Pi 返回了无效的 Package 状态");
+  const packages: RuntimePackageSummary[] = Array.isArray(value.packages)
+    ? value.packages.flatMap((item): RuntimePackageSummary[] => {
+        if (!isRecord(item)) return [];
+        const source = readString(item.source);
+        const scope = item.scope === "user" || item.scope === "project" ? item.scope : undefined;
+        if (!source || !scope) return [];
+        const installedPath = readString(item.installedPath);
+        return [{
+          id: `${scope}:${source}`,
+          source,
+          scope,
+          filtered: item.filtered === true,
+          installed: item.installed === true,
+          ...(installedPath ? { installedPath: displayPath(installedPath, cwd) } : {}),
+        }];
+      })
+    : [];
+  const managedResources: RuntimeManagedResource[] = Array.isArray(value.resources)
+    ? value.resources.flatMap((item): RuntimeManagedResource[] => {
+        if (!isRecord(item)) return [];
+        const type = item.type === "extensions" || item.type === "skills" || item.type === "prompts" || item.type === "themes"
+          ? item.type
+          : undefined;
+        const path = readString(item.path);
+        const sourceId = isRecord(item.sourceInfo) ? readString(item.sourceInfo.source) : undefined;
+        const source = sourceInfo(item.sourceInfo, cwd);
+        if (!type || !path || !sourceId || !source || (source.scope !== "user" && source.scope !== "project")) return [];
+        return [{
+          id: `${type}:${path}`,
+          type,
+          name: managedResourceName(type, path),
+          path,
+          displayPath: displayPath(path, cwd),
+          enabled: item.enabled === true,
+          sourceId,
+          source,
+        }];
+      })
+    : [];
+  return {
+    packages,
+    managedResources,
+    projectTrusted: value.projectTrusted === true,
   };
 }
 
@@ -242,8 +360,36 @@ export class PiResourceService {
   constructor(private readonly pi: PiProcess) {}
 
   async getSnapshot(): Promise<RuntimeResourceSnapshot> {
-    const response = await this.pi.send({ type: "get_resources" }, RPC_TIMEOUT);
-    if (!isRecord(response.data)) throw new Error(`Pi RPC ${response.command ?? "get_resources"} 缺少有效数据`);
-    return adaptPiResources(response.data, this.pi.getStatus().cwd);
+    const [resourceResponse, packageResponse] = await Promise.all([
+      this.pi.send({ type: "get_resources" }, RPC_TIMEOUT),
+      this.pi.send({ type: "get_package_state" }, RPC_TIMEOUT),
+    ]);
+    if (!isRecord(resourceResponse.data)) throw new Error(`Pi RPC ${resourceResponse.command ?? "get_resources"} 缺少有效数据`);
+    if (!isRecord(packageResponse.data)) throw new Error(`Pi RPC ${packageResponse.command ?? "get_package_state"} 缺少有效数据`);
+    const cwd = this.pi.getStatus().cwd;
+    return {
+      ...adaptPiResources(resourceResponse.data, cwd),
+      ...adaptPiPackageState(packageResponse.data, cwd),
+    };
+  }
+
+  async mutate(mutation: RuntimeResourceMutation): Promise<RuntimeResourceSnapshot> {
+    if (mutation.type === "install") {
+      await this.pi.send({ type: "install_package", source: mutation.source, scope: mutation.scope }, 10 * 60_000);
+    } else if (mutation.type === "remove") {
+      await this.pi.send({ type: "remove_package", source: mutation.source, scope: mutation.scope }, 5 * 60_000);
+    } else if (mutation.type === "update") {
+      await this.pi.send({ type: "update_package", source: mutation.source, scope: mutation.scope }, 10 * 60_000);
+    } else {
+      await this.pi.send({
+        type: "set_resource_enabled",
+        resourceType: mutation.resourceType,
+        path: mutation.path,
+        source: mutation.source,
+        scope: mutation.scope,
+        enabled: mutation.enabled,
+      }, 60_000);
+    }
+    return this.getSnapshot();
   }
 }

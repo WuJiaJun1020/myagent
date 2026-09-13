@@ -28,7 +28,7 @@ export function ToolCallCard({ tool }: ToolCallCardProps) {
       className={`tool-card ${tool.status} ${detailSelection?.type === "tool" && detailSelection.id === tool.id ? "selected" : ""}`}
       type="button"
       layout={animationEnabled ? "position" : false}
-      initial={animationEnabled ? { opacity: 0, y: 5 } : false}
+      initial={false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: animationEnabled ? 0.18 : 0 }}
       onClick={() => selectToolCall(tool.id)}

@@ -87,11 +87,21 @@ describe("AgentSessionRuntime characterization", () => {
 				noThemes: true,
 			},
 		};
-		const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
-			const services = await createAgentSessionServices({
-				...runtimeOptions,
-				cwd,
-			});
+		const createRuntime: CreateAgentSessionRuntimeFactory = async ({
+			cwd,
+			sessionManager,
+			sessionStartEvent,
+			reuseServices,
+		}) => {
+			let services = reuseServices;
+			if (services) {
+				await services.resourceLoader.refreshExtensionsForSession?.();
+			} else {
+				services = await createAgentSessionServices({
+					...runtimeOptions,
+					cwd,
+				});
+			}
 			return {
 				...(await createAgentSessionFromServices({
 					services,
@@ -107,7 +117,7 @@ describe("AgentSessionRuntime characterization", () => {
 		const runtime = await createAgentSessionRuntime(createRuntime, {
 			cwd: tempDir,
 			agentDir: tempDir,
-			sessionManager: SessionManager.create(tempDir),
+			sessionManager: SessionManager.create(tempDir, join(tempDir, "sessions")),
 		});
 		await runtime.session.bindExtensions({});
 
@@ -121,6 +131,46 @@ describe("AgentSessionRuntime characterization", () => {
 
 		return { runtime, faux, tempDir };
 	}
+
+	it("reuses cwd-bound services for same-workspace session replacements", async () => {
+		const { runtime } = await createRuntimeForTest(() => {});
+		const initialServices = runtime.services;
+
+		await runtime.session.prompt("hello");
+		const firstSessionFile = runtime.session.sessionFile!;
+		await runtime.newSession();
+
+		expect(runtime.services).toBe(initialServices);
+
+		await runtime.switchSession(firstSessionFile);
+
+		expect(runtime.services).toBe(initialServices);
+	});
+
+	it("recreates extension APIs before binding a replacement session", async () => {
+		const { runtime } = await createRuntimeForTest((pi: ExtensionAPI) => {
+			pi.on("session_start", (event) => {
+				if (event.reason === "new") {
+					pi.appendEntry("fresh-extension-runtime", { active: true });
+				}
+			});
+		});
+		const initialExtensionRuntime = runtime.services.resourceLoader.getExtensions().runtime;
+		runtime.setRebindSession(async (session) => {
+			await session.bindExtensions({});
+		});
+
+		await runtime.newSession();
+
+		expect(runtime.services.resourceLoader.getExtensions().runtime).not.toBe(initialExtensionRuntime);
+		expect(runtime.session.sessionManager.getEntries()).toContainEqual(
+			expect.objectContaining({
+				type: "custom",
+				customType: "fresh-extension-runtime",
+				data: { active: true },
+			}),
+		);
+	});
 
 	it("persists message_end assistant replacements to the session manager", async () => {
 		const { runtime } = await createRuntimeForTest((pi: ExtensionAPI) => {
@@ -316,7 +366,8 @@ describe("AgentSessionRuntime characterization", () => {
 		events.length = 0;
 		const otherDir = join(tmpdir(), `pi-runtime-other-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		mkdirSync(otherDir, { recursive: true });
-		const otherSession = SessionManager.create(otherDir);
+		cleanups.push(() => rmSync(otherDir, { recursive: true, force: true }));
+		const otherSession = SessionManager.create(otherDir, join(otherDir, "sessions"));
 		otherSession.appendMessage({ role: "user", content: [{ type: "text", text: "other" }], timestamp: Date.now() });
 		const otherSessionFile = otherSession.getSessionFile();
 		cancelReason = "resume";
@@ -602,10 +653,13 @@ describe("AgentSessionRuntime characterization", () => {
 		const otherRuntime = await createAgentSessionRuntime(createOtherRuntime, {
 			cwd: secondDir,
 			agentDir: tempDir,
-			sessionManager: SessionManager.create(secondDir),
+			sessionManager: SessionManager.create(secondDir, join(secondDir, "sessions")),
 		});
 		cleanups.push(async () => {
 			await otherRuntime.dispose();
+			if (existsSync(secondDir)) {
+				rmSync(secondDir, { recursive: true, force: true });
+			}
 		});
 		await otherRuntime.session.prompt("other");
 		const otherSessionFile = otherRuntime.session.sessionFile!;
@@ -675,7 +729,7 @@ describe("AgentSessionRuntime characterization", () => {
 		const otherRuntime = await createAgentSessionRuntime(createOtherRuntime, {
 			cwd: otherDir,
 			agentDir: tempDir,
-			sessionManager: SessionManager.create(otherDir),
+			sessionManager: SessionManager.create(otherDir, join(otherDir, "sessions")),
 		});
 		cleanups.push(async () => {
 			await otherRuntime.dispose();

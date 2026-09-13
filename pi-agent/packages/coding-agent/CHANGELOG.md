@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added RPC APIs for project trust, host settings, resource reload diagnostics, queue editing, branch navigation, and portable JSONL session import/export.
+- Added typed RPC APIs for listing, installing, updating, and removing Pi packages and enabling or disabling package resources by scope.
 - Added `ctx.modelRegistry.stream()` and `streamSimple()` for extension model calls through configured providers with resolved authentication ([#8964](https://github.com/earendil-works/pi/issues/8964)).
 - Added per-model `reserveTokens` and `keepRecentTokens` settings through `compaction.modelOverrides`, with ordinary compaction settings as fallback ([#8133](https://github.com/earendil-works/pi-mono/issues/8133)).
 
@@ -14,6 +16,7 @@
 
 ### Fixed
 
+- Fixed resource filtering and removal of local single-file extension packages when clients use their normalized settings source.
 - Capped agent-level retry backoff at `retry.maxAgentDelayMs` (60s by default) so long retry runs stay responsive during prolonged transient outages ([#8826](https://github.com/earendil-works/pi/issues/8826)).
 - Fixed direct RPC `steer` and `follow_up` commands bypassing extension `input` handlers ([#8718](https://github.com/earendil-works/pi/issues/8718)).
 - Fixed premature missing-model errors after login by waiting for catalog discovery. Radius now defaults to `balanced`, falling back to the first available Radius model when needed.

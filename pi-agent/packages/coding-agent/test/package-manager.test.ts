@@ -1341,6 +1341,20 @@ Content`,
 			expect(settingsManager.getGlobalSettings().packages ?? []).toHaveLength(0);
 		});
 
+		it("should remove a project package using its normalized settings source", () => {
+			const pkgDir = join(tempDir, "remove-project-pkg");
+			mkdirSync(join(pkgDir, "extensions"), { recursive: true });
+			writeFileSync(join(pkgDir, "extensions", "index.ts"), "export default function() {}");
+			packageManager.addSourceToSettings("./remove-project-pkg", { local: true });
+			const configured = settingsManager.getProjectSettings().packages?.[0];
+			if (typeof configured !== "string") throw new Error("Expected normalized string source");
+
+			const removed = packageManager.removeSourceFromSettings(configured, { local: true });
+
+			expect(removed).toBe(true);
+			expect(settingsManager.getProjectSettings().packages ?? []).toHaveLength(0);
+		});
+
 		it("should return false when adding the same git source with the same ref", () => {
 			const first = packageManager.addSourceToSettings("git:github.com/user/repo@v1");
 			expect(first).toBe(true);
@@ -1704,6 +1718,17 @@ Content`,
 	});
 
 	describe("pattern filtering in package filters", () => {
+		it("should allow a local single-file extension package to be disabled", async () => {
+			const extensionPath = join(tempDir, "single-extension.ts");
+			writeFileSync(extensionPath, "export default function() {}");
+			settingsManager.setPackages([{ source: extensionPath, extensions: ["-single-extension.ts"] }]);
+
+			const result = await packageManager.resolve();
+
+			expect(result.extensions).toHaveLength(1);
+			expect(result.extensions[0]).toMatchObject({ path: extensionPath, enabled: false });
+		});
+
 		it("should apply user filters on top of manifest filters (not replace)", async () => {
 			// Manifest excludes baz.ts, user excludes bar.ts
 			// Result should exclude BOTH

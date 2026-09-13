@@ -17,6 +17,12 @@ import type {
 	RpcApprovalPolicy,
 	RpcCommand,
 	RpcExtensionUIRequest,
+	RpcHostSettings,
+	RpcHostSettingsState,
+	RpcManagedResourceType,
+	RpcPackageScope,
+	RpcPackageState,
+	RpcProjectTrustState,
 	RpcProviderAuthEvent,
 	RpcProviderAuthRequest,
 	RpcProviderAuthResponse,
@@ -241,6 +247,16 @@ export class RpcClient {
 		return this.getData(response);
 	}
 
+	/** Delete a queued message or move it between steering and follow-up delivery. */
+	async updateQueueItem(
+		source: "steer" | "follow_up",
+		index: number,
+		action: "steer" | "follow_up" | "delete",
+	): Promise<{ steering: string[]; followUp: string[] }> {
+		const response = await this.send({ type: "update_queue_item", source, index, action });
+		return this.getData(response);
+	}
+
 	/**
 	 * Start a new session, optionally with parent tracking.
 	 * @param parentSession - Optional parent session path for lineage tracking
@@ -256,6 +272,30 @@ export class RpcClient {
 	 */
 	async getState(): Promise<RpcSessionState> {
 		const response = await this.send({ type: "get_state" });
+		return this.getData(response);
+	}
+
+	/** Read global, project, and effective Pi settings exposed to embedded clients. */
+	async getSettings(): Promise<RpcHostSettingsState> {
+		const response = await this.send({ type: "get_settings" });
+		return this.getData(response);
+	}
+
+	/** Update supported global Pi settings. */
+	async updateSettings(patch: RpcHostSettings): Promise<RpcHostSettingsState> {
+		const response = await this.send({ type: "update_settings", patch });
+		return this.getData(response);
+	}
+
+	/** Read the effective trust decision for the current project. */
+	async getProjectTrust(): Promise<RpcProjectTrustState> {
+		const response = await this.send({ type: "get_project_trust" });
+		return this.getData(response);
+	}
+
+	/** Save or clear a trust decision and reload project resources. */
+	async setProjectTrust(decision: boolean | null, target?: "current" | "parent"): Promise<RpcProjectTrustState> {
+		const response = await this.send({ type: "set_project_trust", decision, target });
 		return this.getData(response);
 	}
 
@@ -410,6 +450,22 @@ export class RpcClient {
 		return this.getData(response);
 	}
 
+	/** Export the current active branch as a portable JSONL session file. */
+	async exportJsonl(outputPath?: string): Promise<{ path: string }> {
+		const response = await this.send({ type: "export_jsonl", outputPath });
+		return this.getData(response);
+	}
+
+	/** Import a JSONL session file and make it the active session. */
+	async importSession(inputPath: string, cwdOverride?: string): Promise<{ cancelled: boolean }> {
+		const response = await this.send({
+			type: "import_session",
+			inputPath,
+			...(cwdOverride === undefined ? {} : { cwdOverride }),
+		});
+		return this.getData(response);
+	}
+
 	/**
 	 * Switch to a different session file.
 	 * @returns Object with `cancelled: true` if an extension cancelled the switch
@@ -465,6 +521,15 @@ export class RpcClient {
 		return this.getData<{ tree: SessionTreeNode[]; leafId: string | null }>(response);
 	}
 
+	/** Move the active branch to a session tree entry. */
+	async navigateTree(
+		targetId: string,
+		options?: { summarize?: boolean; customInstructions?: string; replaceInstructions?: boolean; label?: string },
+	): Promise<{ editorText?: string; cancelled: boolean; aborted?: boolean }> {
+		const response = await this.send({ type: "navigate_tree", targetId, ...options });
+		return this.getData(response);
+	}
+
 	/**
 	 * Get text of last assistant message.
 	 */
@@ -514,6 +579,47 @@ export class RpcClient {
 	async getResources(): Promise<RpcResourceState> {
 		const response = await this.send({ type: "get_resources" });
 		return this.getData<RpcResourceState>(response);
+	}
+
+	/** Reload extensions, skills, prompts, themes, and context resources. */
+	async reloadResources(): Promise<void> {
+		await this.send({ type: "reload_resources" });
+	}
+
+	/** Get configured packages and all manageable Pi resources. */
+	async getPackageState(): Promise<RpcPackageState> {
+		const response = await this.send({ type: "get_package_state" });
+		return this.getData<RpcPackageState>(response);
+	}
+
+	/** Install and persist a Pi package in user or project scope. */
+	async installPackage(source: string, scope: RpcPackageScope): Promise<RpcPackageState> {
+		const response = await this.send({ type: "install_package", source, scope }, 600_000);
+		return this.getData<RpcPackageState>(response);
+	}
+
+	/** Remove a configured Pi package from user or project scope. */
+	async removePackage(source: string, scope: RpcPackageScope): Promise<RpcPackageState> {
+		const response = await this.send({ type: "remove_package", source, scope }, 300_000);
+		return this.getData<RpcPackageState>(response);
+	}
+
+	/** Update one configured Pi package without crossing its requested scope. */
+	async updatePackage(source: string, scope: RpcPackageScope): Promise<RpcPackageState> {
+		const response = await this.send({ type: "update_package", source, scope }, 600_000);
+		return this.getData<RpcPackageState>(response);
+	}
+
+	/** Enable or disable one resource through Pi's package filtering settings. */
+	async setResourceEnabled(options: {
+		resourceType: RpcManagedResourceType;
+		path: string;
+		source: string;
+		scope: RpcPackageScope;
+		enabled: boolean;
+	}): Promise<RpcPackageState> {
+		const response = await this.send({ type: "set_resource_enabled", ...options });
+		return this.getData<RpcPackageState>(response);
 	}
 
 	/**

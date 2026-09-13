@@ -2,6 +2,7 @@ import type {
   AgentEvent,
   AgentMessage,
   CompactionState,
+  ExtensionWidget,
   InteractionRequest,
   RetryState,
   ToolOutputBlock,
@@ -32,8 +33,10 @@ export type AgentRuntimeState = {
   queue: { steering: string[]; followUp: string[] };
   compaction: CompactionState;
   retry: RetryState;
+  extensionNotices: Array<{ id: string; severity: "info" | "warning" | "error"; message: string }>;
+  extensionStatuses: Record<string, string>;
+  extensionWidgets: Record<string, ExtensionWidget>;
   interactionRequests: InteractionRequest[];
-  terminalOutputById: Record<string, string>;
   error: string | null;
   activityRevision: number;
   activeSessionId: string | null;
@@ -50,8 +53,10 @@ export function createInitialAgentRuntimeState(): AgentRuntimeState {
     queue: { steering: [], followUp: [] },
     compaction: { phase: "idle" },
     retry: { phase: "idle" },
+    extensionNotices: [],
+    extensionStatuses: {},
+    extensionWidgets: {},
     interactionRequests: [],
-    terminalOutputById: {},
     error: null,
     activityRevision: 0,
     activeSessionId: null,
@@ -230,15 +235,6 @@ function reduceCurrentSessionEvent(state: AgentRuntimeState, event: AgentEvent):
         activityRevision: revision,
       };
     }
-    case "terminal.output":
-      return {
-        ...state,
-        terminalOutputById: {
-          ...state.terminalOutputById,
-          [event.terminalId]: (state.terminalOutputById[event.terminalId] ?? "") + event.delta,
-        },
-        activityRevision: revision,
-      };
     case "queue.changed":
       return {
         ...state,
@@ -249,6 +245,30 @@ function reduceCurrentSessionEvent(state: AgentRuntimeState, event: AgentEvent):
       return { ...state, compaction: event.state, activityRevision: revision };
     case "retry.changed":
       return { ...state, retry: event.state, activityRevision: revision };
+    case "extension.notice":
+      return {
+        ...state,
+        extensionNotices: [...state.extensionNotices, {
+          id: event.meta.eventId,
+          severity: event.severity,
+          message: event.message,
+        }].slice(-4),
+        activityRevision: revision,
+      };
+    case "extension.status": {
+      const extensionStatuses = { ...state.extensionStatuses };
+      if (event.text) extensionStatuses[event.key] = event.text;
+      else delete extensionStatuses[event.key];
+      return { ...state, extensionStatuses, activityRevision: revision };
+    }
+    case "extension.widget": {
+      const extensionWidgets = { ...state.extensionWidgets };
+      if (event.widget) extensionWidgets[event.widget.key] = event.widget;
+      else delete extensionWidgets[event.key];
+      return { ...state, extensionWidgets, activityRevision: revision };
+    }
+    case "composer.draft":
+      return { ...state, activityRevision: revision };
     case "interaction.requested":
       return {
         ...state,

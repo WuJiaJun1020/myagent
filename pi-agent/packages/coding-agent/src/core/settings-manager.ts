@@ -851,6 +851,22 @@ export class SettingsManager {
 		this.save();
 	}
 
+	setCompactionTokenSettings(reserveTokens: number, keepRecentTokens: number): void {
+		for (const [name, value] of Object.entries({ reserveTokens, keepRecentTokens })) {
+			if (!Number.isSafeInteger(value) || value < 0) {
+				throw new Error(
+					`Invalid compaction.${name} setting: ${String(value)}. Expected a non-negative safe integer.`,
+				);
+			}
+		}
+		this.globalSettings.compaction ??= {};
+		this.globalSettings.compaction.reserveTokens = reserveTokens;
+		this.globalSettings.compaction.keepRecentTokens = keepRecentTokens;
+		this.markModified("compaction", "reserveTokens");
+		this.markModified("compaction", "keepRecentTokens");
+		this.save();
+	}
+
 	private getCompactionTokenSetting(
 		field: keyof CompactionModelOverride,
 		model?: Pick<Model<string>, "provider" | "id">,
@@ -921,6 +937,16 @@ export class SettingsManager {
 		}
 		this.globalSettings.retry.enabled = enabled;
 		this.markModified("retry", "enabled");
+		this.save();
+	}
+
+	setRetryMaxRetries(maxRetries: number): void {
+		if (!Number.isSafeInteger(maxRetries) || maxRetries < 0 || maxRetries > 20) {
+			throw new Error(`Invalid retry.maxRetries setting: ${String(maxRetries)}. Expected an integer from 0 to 20.`);
+		}
+		this.globalSettings.retry ??= {};
+		this.globalSettings.retry.maxRetries = maxRetries;
+		this.markModified("retry", "maxRetries");
 		this.save();
 	}
 
@@ -1319,6 +1345,12 @@ export class SettingsManager {
 	getDefaultTools(): string[] | undefined {
 		const tools = this.settings.defaultTools;
 		return tools ? [...tools] : undefined;
+	}
+
+	setDefaultTools(tools: string[] | undefined): void {
+		this.globalSettings.defaultTools = tools ? [...tools] : undefined;
+		this.markModified("defaultTools");
+		this.save();
 	}
 
 	setEnabledModels(patterns: string[] | undefined): void {

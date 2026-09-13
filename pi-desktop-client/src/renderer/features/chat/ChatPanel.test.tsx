@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentMessage } from "../../../shared/contracts/agent-events";
 import type { ToolCallState } from "../../lib/event-reducer";
-import { buildTaskRows } from "./ChatPanel";
+import { buildTaskRows, captureChatScroll, shouldShowEmptyChatState } from "./ChatPanel";
 
 function message(id: string, role: "user" | "assistant", timestamp: number, content: AgentMessage["content"]): AgentMessage {
   return { id, role, timestamp, content, streaming: false };
@@ -75,5 +75,34 @@ describe("buildTaskRows", () => {
     });
 
     expect(rows[1]).toMatchObject({ type: "task-activity", settled: false, endedAt: undefined });
+  });
+});
+
+describe("empty chat presentation", () => {
+  it("only shows the welcome state for a settled, genuinely empty session", () => {
+    expect(shouldShowEmptyChatState(0, null, 0)).toBe(true);
+    expect(shouldShowEmptyChatState(0, "session", 0)).toBe(false);
+    expect(shouldShowEmptyChatState(0, "initializing", 0)).toBe(false);
+    expect(shouldShowEmptyChatState(0, null, 3)).toBe(false);
+    expect(shouldShowEmptyChatState(1, null, 0)).toBe(false);
+  });
+});
+
+describe("chat scroll position", () => {
+  it("captures a stable row anchor instead of only an absolute offset", () => {
+    const rows = [
+      { type: "message", id: "first" },
+      { type: "message", id: "second" },
+    ] satisfies ReturnType<typeof buildTaskRows>;
+
+    expect(captureChatScroll(245, 1_000, 400, rows, [
+      { index: 0, start: 0, size: 180 },
+      { index: 1, start: 180, size: 220 },
+    ])).toEqual({
+      scrollTop: 245,
+      pinned: false,
+      anchorId: "second",
+      anchorOffset: 35,
+    });
   });
 });

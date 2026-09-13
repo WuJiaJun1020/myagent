@@ -13,6 +13,66 @@ import type { CompactionResult } from "../../core/compaction/index.ts";
 import type { SessionEntry, SessionTreeNode } from "../../core/session-manager.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
 
+export interface RpcHostSettings {
+	defaultProvider?: string;
+	defaultModel?: string;
+	defaultThinkingLevel?: ThinkingLevel;
+	modelThinkingLevels?: Record<string, ThinkingLevel>;
+	enabledModels?: string[];
+	shellPath?: string;
+	defaultProjectTrust?: "ask" | "always" | "never";
+	compaction?: {
+		enabled?: boolean;
+		reserveTokens?: number;
+		keepRecentTokens?: number;
+	};
+	retry?: {
+		enabled?: boolean;
+		maxRetries?: number;
+	};
+	defaultTools?: string[];
+}
+
+export interface RpcHostSettingsState {
+	global: RpcHostSettings;
+	project: RpcHostSettings;
+	effective: RpcHostSettings;
+	projectTrusted: boolean;
+}
+
+export interface RpcProjectTrustState {
+	cwd: string;
+	requiresTrust: boolean;
+	effectiveTrusted: boolean;
+	savedDecision: boolean | null;
+	savedPath?: string;
+	defaultPolicy: "ask" | "always" | "never";
+}
+
+export type RpcPackageScope = "user" | "project";
+export type RpcManagedResourceType = "extensions" | "skills" | "prompts" | "themes";
+
+export interface RpcPackageSummary {
+	source: string;
+	scope: RpcPackageScope;
+	filtered: boolean;
+	installed: boolean;
+	installedPath?: string;
+}
+
+export interface RpcManagedResource {
+	type: RpcManagedResourceType;
+	path: string;
+	enabled: boolean;
+	sourceInfo: SourceInfo;
+}
+
+export interface RpcPackageState {
+	packages: RpcPackageSummary[];
+	resources: RpcManagedResource[];
+	projectTrusted: boolean;
+}
+
 // ============================================================================
 // RPC Commands (stdin)
 // ============================================================================
@@ -24,10 +84,40 @@ export type RpcCommand =
 	| { id?: string; type: "follow_up"; message: string; images?: ImageContent[] }
 	| { id?: string; type: "abort" }
 	| { id?: string; type: "clear_queue" }
+	| {
+			id?: string;
+			type: "update_queue_item";
+			source: "steer" | "follow_up";
+			index: number;
+			action: "steer" | "follow_up" | "delete";
+	  }
 	| { id?: string; type: "new_session"; parentSession?: string; sessionDir?: string }
 
 	// State
 	| { id?: string; type: "get_state" }
+	| { id?: string; type: "get_settings" }
+	| { id?: string; type: "update_settings"; patch: RpcHostSettings }
+	| { id?: string; type: "get_project_trust" }
+	| {
+			id?: string;
+			type: "set_project_trust";
+			decision: boolean | null;
+			target?: "current" | "parent";
+	  }
+	| { id?: string; type: "reload_resources" }
+	| { id?: string; type: "get_package_state" }
+	| { id?: string; type: "install_package"; source: string; scope: RpcPackageScope }
+	| { id?: string; type: "remove_package"; source: string; scope: RpcPackageScope }
+	| { id?: string; type: "update_package"; source: string; scope: RpcPackageScope }
+	| {
+			id?: string;
+			type: "set_resource_enabled";
+			resourceType: RpcManagedResourceType;
+			path: string;
+			source: string;
+			scope: RpcPackageScope;
+			enabled: boolean;
+	  }
 
 	// Model
 	| { id?: string; type: "set_model"; provider: string; modelId: string }
@@ -62,12 +152,23 @@ export type RpcCommand =
 	// Session
 	| { id?: string; type: "get_session_stats" }
 	| { id?: string; type: "export_html"; outputPath?: string }
+	| { id?: string; type: "export_jsonl"; outputPath?: string }
+	| { id?: string; type: "import_session"; inputPath: string; cwdOverride?: string }
 	| { id?: string; type: "switch_session"; sessionPath: string; cwdOverride?: string }
 	| { id?: string; type: "fork"; entryId: string }
 	| { id?: string; type: "clone" }
 	| { id?: string; type: "get_fork_messages" }
 	| { id?: string; type: "get_entries"; since?: string }
 	| { id?: string; type: "get_tree" }
+	| {
+			id?: string;
+			type: "navigate_tree";
+			targetId: string;
+			summarize?: boolean;
+			customInstructions?: string;
+			replaceInstructions?: boolean;
+			label?: string;
+	  }
 	| { id?: string; type: "get_last_assistant_text" }
 	| { id?: string; type: "set_session_name"; name: string }
 	| { id?: string; type: "rename_session"; sessionId: string; name: string; sessionPath?: string }
@@ -93,6 +194,8 @@ export interface RpcSlashCommand {
 	name: string;
 	/** Human-readable description */
 	description?: string;
+	/** Optional usage hint supplied by a prompt template */
+	argumentHint?: string;
 	/** What kind of command this is */
 	source: "extension" | "prompt" | "skill";
 	/** Source metadata for the owning resource */
@@ -120,10 +223,27 @@ export interface RpcContextResource {
 	truncated: boolean;
 }
 
+export interface RpcNamedResource {
+	name: string;
+	description?: string;
+	argumentHint?: string;
+	path: string;
+	sourceInfo: SourceInfo;
+}
+
+export interface RpcResourceDiagnostic {
+	type: "warning" | "error" | "collision";
+	message: string;
+	path?: string;
+}
+
 export interface RpcResourceState {
 	tools: RpcRuntimeTool[];
 	extensions: RpcRuntimeExtension[];
 	extensionErrors: Array<{ path: string; error: string }>;
+	skills: RpcNamedResource[];
+	prompts: RpcNamedResource[];
+	diagnostics: RpcResourceDiagnostic[];
 	contextResources: RpcContextResource[];
 	capabilities: {
 		nativeMcp: false;
@@ -221,6 +341,8 @@ export interface RpcSessionState {
 	approvalPolicy: RpcApprovalPolicy;
 	contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
 	autoCompactionEnabled: boolean;
+	autoRetryEnabled: boolean;
+	isRetrying: boolean;
 	messageCount: number;
 	pendingMessageCount: number;
 }
@@ -243,10 +365,27 @@ export type RpcResponse =
 			success: true;
 			data: { steering: string[]; followUp: string[] };
 	  }
+	| {
+			id?: string;
+			type: "response";
+			command: "update_queue_item";
+			success: true;
+			data: { steering: string[]; followUp: string[] };
+	  }
 	| { id?: string; type: "response"; command: "new_session"; success: true; data: { cancelled: boolean } }
 
 	// State
 	| { id?: string; type: "response"; command: "get_state"; success: true; data: RpcSessionState }
+	| { id?: string; type: "response"; command: "get_settings"; success: true; data: RpcHostSettingsState }
+	| { id?: string; type: "response"; command: "update_settings"; success: true; data: RpcHostSettingsState }
+	| { id?: string; type: "response"; command: "get_project_trust"; success: true; data: RpcProjectTrustState }
+	| { id?: string; type: "response"; command: "set_project_trust"; success: true; data: RpcProjectTrustState }
+	| { id?: string; type: "response"; command: "reload_resources"; success: true }
+	| { id?: string; type: "response"; command: "get_package_state"; success: true; data: RpcPackageState }
+	| { id?: string; type: "response"; command: "install_package"; success: true; data: RpcPackageState }
+	| { id?: string; type: "response"; command: "remove_package"; success: true; data: RpcPackageState }
+	| { id?: string; type: "response"; command: "update_package"; success: true; data: RpcPackageState }
+	| { id?: string; type: "response"; command: "set_resource_enabled"; success: true; data: RpcPackageState }
 
 	// Model
 	| {
@@ -311,6 +450,8 @@ export type RpcResponse =
 	// Session
 	| { id?: string; type: "response"; command: "get_session_stats"; success: true; data: SessionStats }
 	| { id?: string; type: "response"; command: "export_html"; success: true; data: { path: string } }
+	| { id?: string; type: "response"; command: "export_jsonl"; success: true; data: { path: string } }
+	| { id?: string; type: "response"; command: "import_session"; success: true; data: { cancelled: boolean } }
 	| { id?: string; type: "response"; command: "switch_session"; success: true; data: { cancelled: boolean } }
 	| { id?: string; type: "response"; command: "fork"; success: true; data: { text: string; cancelled: boolean } }
 	| { id?: string; type: "response"; command: "clone"; success: true; data: { cancelled: boolean } }
@@ -334,6 +475,13 @@ export type RpcResponse =
 			command: "get_tree";
 			success: true;
 			data: { tree: SessionTreeNode[]; leafId: string | null };
+	  }
+	| {
+			id?: string;
+			type: "response";
+			command: "navigate_tree";
+			success: true;
+			data: { editorText?: string; cancelled: boolean; aborted?: boolean };
 	  }
 	| {
 			id?: string;

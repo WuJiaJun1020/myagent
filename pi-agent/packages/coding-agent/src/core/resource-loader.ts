@@ -49,6 +49,8 @@ export interface ResourceLoader {
 	getAppendSystemPromptSources(): Array<{ path: string }>;
 	extendResources(paths: ResourceExtensionPaths): void;
 	reload(options?: ResourceLoaderReloadOptions): Promise<void>;
+	/** Recreate per-session extension objects without rescanning all project resources. */
+	refreshExtensionsForSession?(): Promise<void>;
 }
 
 function resolvePromptInput(input: string | undefined, description: string): string | undefined {
@@ -242,6 +244,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private systemPromptSourcePath?: string;
 	private appendSystemPrompt: string[];
 	private appendSystemPromptSourcePaths: string[];
+	private lastExtensionPaths: string[];
 	private lastSkillPaths: string[];
 	private extensionSkillSourceInfos: Map<string, SourceInfo>;
 	private extensionPromptSourceInfos: Map<string, SourceInfo>;
@@ -291,6 +294,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.agentsFiles = [];
 		this.appendSystemPrompt = [];
 		this.appendSystemPromptSourcePaths = [];
+		this.lastExtensionPaths = [];
 		this.lastSkillPaths = [];
 		this.extensionSkillSourceInfos = new Map();
 		this.extensionPromptSourceInfos = new Map();
@@ -452,6 +456,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		const extensionPaths = this.noExtensions
 			? cliEnabledExtensions
 			: this.mergePaths(cliEnabledExtensions, enabledExtensions);
+		this.lastExtensionPaths = extensionPaths;
 
 		const extensionsResult = await this.loadFinalExtensionSet(extensionPaths, preTrustExtensions);
 		for (const p of this.additionalExtensionPaths) {
@@ -544,6 +549,24 @@ export class DefaultResourceLoader implements ResourceLoader {
 			.filter((source) => existsSync(source))
 			.map((source) => resolvePath(source));
 		this.loaded = true;
+	}
+
+	async refreshExtensionsForSession(): Promise<void> {
+		if (!this.loaded) {
+			await this.reload();
+			return;
+		}
+
+		const extensionsResult = await this.loadFinalExtensionSet(this.lastExtensionPaths, undefined);
+		for (const path of this.additionalExtensionPaths) {
+			if (!isLocalPath(path)) continue;
+			const resolved = this.resolveResourcePath(path);
+			if (!existsSync(resolved)) {
+				extensionsResult.errors.push({ path: resolved, error: `Extension path does not exist: ${resolved}` });
+			}
+		}
+		this.extensionsResult = this.extensionsOverride ? this.extensionsOverride(extensionsResult) : extensionsResult;
+		this.applyExtensionSourceInfo(this.extensionsResult.extensions, this.resourceMetadataByPath);
 	}
 
 	private async loadCurrentExtensionSet(options: { includeInlineFactories: boolean }): Promise<LoadExtensionsResult> {

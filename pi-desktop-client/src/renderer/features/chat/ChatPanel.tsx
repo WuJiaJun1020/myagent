@@ -1,13 +1,14 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion } from "framer-motion";
 import { Bot, Braces, FileDiff, Lightbulb, MessageCircle, ShieldCheck, TerminalSquare } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { AgentMessage } from "../../../shared/contracts/agent-events";
 import type { SnapshotTimelineEntry } from "../../../shared/contracts/agent-session";
 import type { ToolCallState } from "../../lib/event-reducer";
 import { useAgentStore } from "../../stores/agent-store";
 import { useSettingsStore } from "../../stores/settings-store";
 import { useSessionStore } from "../../stores/session-store";
+import { useUiStore, type SessionChatScroll } from "../../stores/ui-store";
 import { TaskActivityGroup, type TaskActivityItem } from "../agent/TaskActivityGroup";
 import { ToolCallCard } from "../tools/ToolCallCard";
 import { MessageItem } from "./MessageItem";
@@ -31,6 +32,45 @@ type BuildTaskRowsOptions = {
   busy: boolean;
   runTiming: { startedAt: number; settledAt?: number } | null;
 };
+
+const TIMELINE_TOP_OFFSET = 30;
+
+type VirtualRowPosition = {
+  index: number;
+  start: number;
+  size: number;
+};
+
+type TrackedSessionChatScroll = SessionChatScroll & { sessionId: string | null };
+
+function storedChatScroll(scroll: TrackedSessionChatScroll): SessionChatScroll {
+  return {
+    scrollTop: scroll.scrollTop,
+    pinned: scroll.pinned,
+    ...(scroll.anchorId ? { anchorId: scroll.anchorId, anchorOffset: scroll.anchorOffset } : {}),
+  };
+}
+
+export function captureChatScroll(
+  scrollTop: number,
+  scrollHeight: number,
+  clientHeight: number,
+  rows: TaskTimelineRow[],
+  virtualRows: VirtualRowPosition[],
+): SessionChatScroll {
+  const pinned = scrollHeight - scrollTop - clientHeight < 120;
+  const anchor = virtualRows.find((item) => item.start + TIMELINE_TOP_OFFSET + item.size > scrollTop)
+    ?? virtualRows[0];
+  const anchorId = anchor ? rows[anchor.index]?.id : undefined;
+  return {
+    scrollTop,
+    pinned,
+    ...(anchorId ? {
+      anchorId,
+      anchorOffset: scrollTop - anchor.start - TIMELINE_TOP_OFFSET,
+    } : {}),
+  };
+}
 
 function hasText(message: AgentMessage): boolean {
   return message.content.some((block) => block.type === "text" && block.text.trim().length > 0);
@@ -131,20 +171,63 @@ export function buildTaskRows({
   return rows;
 }
 
+export function shouldShowEmptyChatState(
+  rowCount: number,
+  sessionMutation: string | null,
+  sessionMessageCount: number,
+): boolean {
+  return rowCount === 0 && sessionMutation === null && sessionMessageCount === 0;
+}
+
 export function ChatPanel() {
   const timelineOrder = useAgentStore((state) => state.timelineOrder);
   const messagesById = useAgentStore((state) => state.messagesById);
   const toolCallsById = useAgentStore((state) => state.toolCallsById);
   const activityRevision = useAgentStore((state) => state.activityRevision);
+  const activeSessionId = useAgentStore((state) => state.activeSessionId);
   const busy = useAgentStore((state) => state.busy);
   const runTiming = useAgentStore((state) => state.runTiming);
   const animationEnabled = useSettingsStore((state) => state.animationEnabled);
   const chatMode = useSessionStore((state) => state.session?.mode === "chat");
+  const sessionMessageCount = useSessionStore((state) => state.session?.messageCount ?? 0);
+  const sessionMutation = useSessionStore((state) => state.mutation);
+  const pendingSessionId = useSessionStore((state) => state.pendingSessionId);
+  const chatFollowRequest = useUiStore((state) => state.chatFollowRequest);
+  const setSessionChatScroll = useUiStore((state) => state.setSessionChatScroll);
   const viewportRef = useRef<HTMLDivElement>(null);
   const stayPinnedRef = useRef(true);
+  const presentedSessionRef = useRef<string | null>(null);
+  const restoringSessionRef = useRef<string | null>(null);
+  const scrollSaveFrameRef = useRef(0);
+  const currentScrollRef = useRef<TrackedSessionChatScroll>({
+    sessionId: null,
+    scrollTop: 0,
+    pinned: true,
+  });
+  const livePresentation = useMemo(() => ({
+    sessionId: activeSessionId,
+    timeline: timelineOrder,
+    messagesById,
+    toolCallsById,
+    busy,
+    runTiming,
+  }), [activeSessionId, timelineOrder, messagesById, toolCallsById, busy, runTiming]);
+  const settledPresentationRef = useRef(livePresentation);
+  const switchingSession = pendingSessionId !== null;
+  // Cached session metadata and partial runtime events can both arrive before
+  // switchSession's authoritative snapshot. Keep the previous frame for the
+  // entire RPC instead of treating an early session id change as readiness.
+  if (!switchingSession) settledPresentationRef.current = livePresentation;
+  const presentation = switchingSession ? settledPresentationRef.current : livePresentation;
   const rows = useMemo(
-    () => buildTaskRows({ timeline: timelineOrder, messagesById, toolCallsById, busy, runTiming }),
-    [timelineOrder, messagesById, toolCallsById, busy, runTiming],
+    () => buildTaskRows({
+      timeline: presentation.timeline,
+      messagesById: presentation.messagesById,
+      toolCallsById: presentation.toolCallsById,
+      busy: presentation.busy,
+      runTiming: presentation.runTiming,
+    }),
+    [presentation.timeline, presentation.messagesById, presentation.toolCallsById, presentation.busy, presentation.runTiming],
   );
   const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     count: rows.length,
@@ -153,6 +236,78 @@ export function ChatPanel() {
     getItemKey: (index) => rows[index]?.id ?? index,
     overscan: 6,
   });
+  const showEmptyState = shouldShowEmptyChatState(rows.length, sessionMutation, sessionMessageCount);
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const sessionId = presentation.sessionId;
+    if (!viewport || !sessionId) return;
+
+    presentedSessionRef.current = sessionId;
+    const saved = useUiStore.getState().sessionChatScroll[sessionId];
+    const pinned = saved?.pinned ?? true;
+    stayPinnedRef.current = pinned;
+    restoringSessionRef.current = sessionId;
+    currentScrollRef.current = {
+      sessionId,
+      scrollTop: saved?.scrollTop ?? 0,
+      pinned,
+      anchorId: saved?.anchorId,
+      anchorOffset: saved?.anchorOffset,
+    };
+
+    const anchorIndex = saved?.anchorId
+      ? rows.findIndex((row) => row.id === saved.anchorId)
+      : -1;
+    if (!pinned && anchorIndex >= 0) rowVirtualizer.scrollToIndex(anchorIndex, { align: "start" });
+
+    let frame = 0;
+    let attempts = 0;
+    let stableFrames = 0;
+    let previousTarget = Number.NaN;
+    const restore = () => {
+      if (presentedSessionRef.current !== sessionId) return;
+      const maximumScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+      let target = saved?.scrollTop ?? 0;
+      if (pinned) {
+        target = maximumScrollTop;
+      } else if (anchorIndex >= 0) {
+        const offset = rowVirtualizer.getOffsetForIndex(anchorIndex, "start")?.[0];
+        if (offset !== undefined) target = offset + TIMELINE_TOP_OFFSET + (saved?.anchorOffset ?? 0);
+      }
+      target = Math.max(0, Math.min(target, maximumScrollTop));
+      viewport.scrollTo({ top: target, behavior: "auto" });
+      currentScrollRef.current = {
+        sessionId,
+        scrollTop: target,
+        pinned,
+        anchorId: saved?.anchorId,
+        anchorOffset: saved?.anchorOffset,
+      };
+
+      stableFrames = Number.isFinite(previousTarget) && Math.abs(previousTarget - target) < 0.5
+        ? stableFrames + 1
+        : 0;
+      previousTarget = target;
+      attempts += 1;
+      if (attempts < 8 && stableFrames < 2) {
+        frame = window.requestAnimationFrame(restore);
+      } else if (restoringSessionRef.current === sessionId) {
+        restoringSessionRef.current = null;
+      }
+    };
+    frame = window.requestAnimationFrame(restore);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (restoringSessionRef.current === sessionId) restoringSessionRef.current = null;
+    };
+  }, [presentation.sessionId]);
+
+  useEffect(() => () => {
+    window.cancelAnimationFrame(scrollSaveFrameRef.current);
+    const current = currentScrollRef.current;
+    if (current.sessionId) setSessionChatScroll(current.sessionId, storedChatScroll(current));
+  }, [setSessionChatScroll]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -169,19 +324,53 @@ export function ChatPanel() {
     };
   }, [activityRevision]);
 
+  useEffect(() => {
+    if (chatFollowRequest === 0) return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    stayPinnedRef.current = true;
+    let scrollFrame = 0;
+    const frame = window.requestAnimationFrame(() => {
+      scrollFrame = window.requestAnimationFrame(() => {
+        if (stayPinnedRef.current) viewport.scrollTo({ top: viewport.scrollHeight, behavior: "auto" });
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(scrollFrame);
+    };
+  }, [chatFollowRequest]);
+
   return (
     <section
       className="activity-stream"
       ref={viewportRef}
       onScroll={(event) => {
         const viewport = event.currentTarget;
-        stayPinnedRef.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 120;
+        const sessionId = presentation.sessionId;
+        if (!sessionId || restoringSessionRef.current === sessionId) return;
+        const scroll = captureChatScroll(
+          viewport.scrollTop,
+          viewport.scrollHeight,
+          viewport.clientHeight,
+          rows,
+          rowVirtualizer.getVirtualItems(),
+        );
+        stayPinnedRef.current = scroll.pinned;
+        currentScrollRef.current = { sessionId, ...scroll };
+        if (scrollSaveFrameRef.current !== 0) return;
+        scrollSaveFrameRef.current = window.requestAnimationFrame(() => {
+          scrollSaveFrameRef.current = 0;
+          const current = currentScrollRef.current;
+          if (current.sessionId !== sessionId) return;
+          setSessionChatScroll(sessionId, storedChatScroll(current));
+        });
       }}
     >
-      {rows.length === 0 ? (
+      {rows.length === 0 ? showEmptyState ? (
         <motion.div
           className="empty-state"
-          initial={animationEnabled ? { opacity: 0, y: 8 } : false}
+          initial={false}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: animationEnabled ? 0.24 : 0 }}
         >
@@ -205,28 +394,28 @@ export function ChatPanel() {
             )}
           </div>
         </motion.div>
-      ) : (
+      ) : null : (
         <div className="timeline-content virtualized" style={{ height: rowVirtualizer.getTotalSize() + 74 }}>
           {rowVirtualizer.getVirtualItems().map((virtualItem) => {
             const row = rows[virtualItem.index];
             if (!row) return null;
             let content = null;
             if (row.type === "message") {
-              const message = messagesById[row.id];
+              const message = presentation.messagesById[row.id];
               content = message ? <MessageItem message={message} hideThinking={row.hideThinking} /> : null;
             } else if (row.type === "task-activity") {
               content = (
                 <TaskActivityGroup
                   items={row.items}
-                  messagesById={messagesById}
-                  toolCallsById={toolCallsById}
+                  messagesById={presentation.messagesById}
+                  toolCallsById={presentation.toolCallsById}
                   startedAt={row.startedAt}
                   endedAt={row.endedAt}
                   settled={row.settled}
                 />
               );
             } else {
-              const tool = toolCallsById[row.id];
+              const tool = presentation.toolCallsById[row.id];
               content = tool ? <ToolCallCard tool={tool} /> : null;
             }
             return (
