@@ -65,6 +65,21 @@ describe("RpcClient getResources", () => {
 			enabled: false,
 		});
 	});
+
+	it("invokes extension shortcuts with a typed command", async () => {
+		const client = new RpcClient();
+		const privateClient = client as unknown as RpcClientPrivate;
+		const send = vi.fn(async () => ({
+			type: "response",
+			command: "invoke_extension_shortcut",
+			success: true,
+		}));
+		privateClient.send = send;
+
+		await client.invokeExtensionShortcut("ctrl+alt+p");
+
+		expect(send).toHaveBeenCalledWith({ type: "invoke_extension_shortcut", shortcut: "ctrl+alt+p" });
+	});
 });
 
 describe("RpcClient provider authentication", () => {

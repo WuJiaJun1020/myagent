@@ -31,6 +31,7 @@ describe("adaptPiResources", () => {
         sourceInfo: { path: "D:\\Extensions\\pi-mcp-github.ts", source: "npm:pi-mcp-github", scope: "user", origin: "package" },
         toolNames: ["github_search"],
         commandNames: [],
+        shortcuts: [{ shortcut: "ctrl+shift+g", description: "Search GitHub" }],
       }],
       extensionErrors: [],
       contextResources: [],
@@ -45,6 +46,7 @@ describe("adaptPiResources", () => {
       status: "loaded",
       toolNames: ["github_search"],
     })]);
+    expect(snapshot.extensions[0]?.shortcuts).toEqual([{ shortcut: "ctrl+shift+g", description: "Search GitHub" }]);
   });
 
   it("maps loaded context files to distinct read-only memory resources", () => {

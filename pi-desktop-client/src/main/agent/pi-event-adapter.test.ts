@@ -81,6 +81,25 @@ describe("PiEventAdapter", () => {
     });
   });
 
+  it("emits one authoritative turn diff before the run settles", () => {
+    const adapter = new PiEventAdapter();
+    const changes = ["created.txt", "deleted.txt"].map((path, index) => ({
+      path,
+      changeType: index === 0 ? "created" as const : "deleted" as const,
+      unifiedDiff: "",
+      timestamp: index,
+    }));
+    adapter.adapt({ type: "agent_start" });
+
+    const events = adapter.adapt({ type: "agent_settled" }, changes);
+
+    expect(events.map((event) => event.type)).toEqual(["turn.diff.updated", "run.settled"]);
+    expect(events[0]).toMatchObject({
+      type: "turn.diff.updated",
+      changes: [{ path: "created.txt" }, { path: "deleted.txt" }],
+    });
+  });
+
   it("maps queue, retry, compaction, and interactive extension events", () => {
     const adapter = new PiEventAdapter();
     expect(adapter.adapt({ type: "queue_update", steering: ["调整"], followUp: ["继续"] })[0]).toMatchObject({
@@ -99,6 +118,15 @@ describe("PiEventAdapter", () => {
     expect(adapter.adapt({ type: "extension_ui_request", id: "ui-1", method: "confirm", title: "确认", message: "继续吗？" })[0]).toMatchObject({
       type: "interaction.requested",
       request: { id: "ui-1", method: "confirm", title: "确认", message: "继续吗？" },
+    });
+    expect(adapter.adapt({ type: "extension_ui_request", id: "title-1", method: "setTitle", title: "审查中" })[0]).toMatchObject({
+      type: "extension.title",
+      title: "审查中",
+    });
+    expect(adapter.adapt({ type: "extension_ui_close", id: "ui-1", reason: "timeout" })[0]).toMatchObject({
+      type: "interaction.dismissed",
+      requestId: "ui-1",
+      reason: "timeout",
     });
   });
 

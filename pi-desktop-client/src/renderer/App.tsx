@@ -1,9 +1,11 @@
 import { useEffect, useRef } from "react";
 import { WorkspaceApplication } from "./app/WorkspaceApplication";
 import { useAgentEvents } from "./hooks/use-agent-events";
+import { useExtensionShortcuts } from "./hooks/use-extension-shortcuts";
 
 export function App() {
   useAgentEvents();
+  useExtensionShortcuts();
   const rendererReadySent = useRef(false);
 
   useEffect(() => {

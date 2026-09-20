@@ -4,7 +4,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExtensionUiResponse, RpcCommand } from "../shared/rpc";
 import type { TerminalCreateRequest } from "../shared/contracts/terminal";
-import type { FileChange, WorkspaceFileSaveRequest } from "../shared/contracts/workspace";
+import type { FileChange, WorkspaceFileSaveRequest, WorkspaceGitDiffScope } from "../shared/contracts/workspace";
 import type { PiHostSettingsState, PiSettingsPatch, ProjectTrustState } from "../shared/contracts/pi-settings";
 import type { SessionTreeNavigationOptions } from "../shared/contracts/agent-session";
 import type { RuntimeResourceMutation } from "../shared/contracts/runtime-resources";
@@ -19,6 +19,7 @@ import { PiProcess } from "./pi-process";
 import { sendToRenderer } from "./send-to-renderer";
 import { FileChangeTracker, WorkspaceFileService } from "./workspace/workspace-files";
 import { WorkspaceGitService } from "./workspace/workspace-git";
+import { TurnFileChangeStore } from "./workspace/turn-file-change-store";
 import { TerminalService } from "./terminal/terminal-service";
 
 let mainWindow: BrowserWindow | null = null;
@@ -26,6 +27,7 @@ let pi: PiProcess;
 let workspaceFiles: WorkspaceFileService;
 let workspaceGit: WorkspaceGitService;
 let fileChangeTracker: FileChangeTracker;
+let turnFileChangeStore: TurnFileChangeStore;
 let sessionService: PiSessionService;
 let resourceService: PiResourceService;
 const packageCatalogService = new PiPackageCatalogService();
@@ -181,6 +183,11 @@ function registerIpc(): void {
   });
   ipcMain.handle("app:window-close", () => mainWindow?.close());
   ipcMain.handle("app:window-get-maximized", () => mainWindow?.isMaximized() ?? false);
+  ipcMain.handle("app:set-window-title", (_event, value: unknown) => {
+    if (value !== undefined && typeof value !== "string") throw new Error("窗口标题无效");
+    const title = typeof value === "string" ? value.trim().slice(0, 200) : "";
+    mainWindow?.setTitle(title || "Pi Desktop");
+  });
   ipcMain.handle("pi:get-status", () => pi.getStatus());
   ipcMain.handle("pi:get-runtime-snapshot", () => sessionService.getSnapshot(true));
   ipcMain.handle("pi:get-session-configuration", () => sessionService.getSessionConfiguration());
@@ -223,11 +230,18 @@ function registerIpc(): void {
       const session = await sessionService.getSessionState();
       if (!session.model?.supportsImages) throw new Error("当前模型不支持图片输入，请切换支持视觉的模型");
     }
-    await pi.send({
-      type: streamingBehavior === "steer" ? "steer" : streamingBehavior === "followUp" ? "follow_up" : "prompt",
-      message: message.trim(),
-      ...(images.length > 0 ? { images } : {}),
-    });
+    const startsNewRun = streamingBehavior === undefined;
+    if (startsNewRun) await fileChangeTracker.beginRun();
+    try {
+      await pi.send({
+        type: streamingBehavior === "steer" ? "steer" : streamingBehavior === "followUp" ? "follow_up" : "prompt",
+        message: message.trim(),
+        ...(images.length > 0 ? { images } : {}),
+      });
+    } catch (error) {
+      if (startsNewRun) fileChangeTracker.clear();
+      throw error;
+    }
     imageAttachments.release(imageIds);
   });
 
@@ -281,9 +295,15 @@ function registerIpc(): void {
     return sessionService.importSession(result.filePaths[0]);
   });
   ipcMain.handle("pi:rename-session", (_event, sessionId: unknown, name: unknown) => sessionService.renameSession(sessionId, name));
-  ipcMain.handle("pi:delete-session", (_event, sessionId: unknown) => {
+  ipcMain.handle("pi:delete-session", async (_event, sessionId: unknown) => {
     fileChangeTracker.clear();
-    return sessionService.deleteSession(sessionId);
+    const snapshot = await sessionService.deleteSession(sessionId);
+    try {
+      await turnFileChangeStore.remove(sessionId);
+    } catch (error) {
+      sendToRenderer(mainWindow, "pi:diagnostic", `清理会话文件变更记录失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    return snapshot;
   });
   ipcMain.handle("pi:set-session-mode", (_event, mode: unknown) => sessionService.setSessionMode(mode));
   ipcMain.handle("pi:set-approval-policy", (_event, policy: unknown) => sessionService.setApprovalPolicy(policy));
@@ -351,10 +371,16 @@ function registerIpc(): void {
   ipcMain.handle("workspace:read-file", (_event, path: unknown) => workspaceFiles.readFile(path));
   ipcMain.handle("workspace:save-file", (_event, request: unknown) => workspaceFiles.saveFile(request as WorkspaceFileSaveRequest));
   ipcMain.handle("workspace:revert-agent-change", (_event, change: unknown) => workspaceFiles.revertAgentChange(change as FileChange));
+  ipcMain.handle("workspace:save-turn-file-changes", (_event, sessionId: unknown, turnIndex: unknown, changes: unknown) =>
+    turnFileChangeStore.save(sessionId, turnIndex, changes));
   ipcMain.handle("workspace:get-git-status", () => workspaceGit.getStatus());
-  ipcMain.handle("workspace:get-git-diff", (_event, path: unknown, staged: unknown) => {
-    if (typeof staged !== "boolean") throw new Error("Git Diff 参数无效");
-    return workspaceGit.getDiff(path, staged);
+  ipcMain.handle("workspace:get-git-diff", (_event, path: unknown, scope: unknown, contextLines: unknown) => {
+    if (scope !== "uncommitted" && scope !== "unstaged" && scope !== "staged") throw new Error("Git Diff 参数无效");
+    const normalizedContextLines = contextLines === undefined ? 3 : contextLines;
+    if (!Number.isInteger(normalizedContextLines) || (normalizedContextLines as number) < 0 || (normalizedContextLines as number) > 10_000) {
+      throw new Error("Git Diff 上下文行数无效");
+    }
+    return workspaceGit.getDiff(path, scope as WorkspaceGitDiffScope, normalizedContextLines as number);
   });
   ipcMain.handle("terminal:get-profiles", () => terminalService.getProfiles());
   ipcMain.handle("terminal:create", (event, request: unknown) => (
@@ -431,7 +457,21 @@ app.whenReady().then(async () => {
   workspaceFiles = new WorkspaceFileService(() => pi.getStatus().cwd);
   workspaceGit = new WorkspaceGitService(() => pi.getStatus().cwd, workspaceFiles);
   fileChangeTracker = new FileChangeTracker(workspaceFiles);
-  sessionService = new PiSessionService(pi, eventAdapter, (path) => shell.trashItem(path));
+  turnFileChangeStore = new TurnFileChangeStore(join(app.getPath("userData"), "turn-file-changes"));
+  sessionService = new PiSessionService(
+    pi,
+    eventAdapter,
+    (path) => shell.trashItem(path),
+    undefined,
+    async (sessionId) => {
+      try {
+        return await turnFileChangeStore.load(sessionId);
+      } catch (error) {
+        sendToRenderer(mainWindow, "pi:diagnostic", `读取会话文件变更记录失败：${error instanceof Error ? error.message : String(error)}`);
+        return [];
+      }
+    },
+  );
   resourceService = new PiResourceService(pi);
   providerService = new PiProviderService(pi);
   imageAttachments = new ImageAttachmentStore();
@@ -440,14 +480,14 @@ app.whenReady().then(async () => {
     const providerAuthEvent = adaptProviderAuthEvent(event);
     if (providerAuthEvent) sendToRenderer(mainWindow, "pi:provider-auth-event", providerAuthEvent);
     agentEventQueue = agentEventQueue.then(async () => {
-      let fileChange;
+      let fileChanges;
       try {
         await fileChangeTracker.captureStart(event);
-        fileChange = await fileChangeTracker.captureEnd(event);
+        fileChanges = await fileChangeTracker.captureEnd(event);
       } catch (error) {
         sendToRenderer(mainWindow, "pi:diagnostic", `文件变更跟踪失败：${error instanceof Error ? error.message : String(error)}`);
       }
-      for (const agentEvent of eventAdapter.adapt(event, fileChange)) {
+      for (const agentEvent of eventAdapter.adapt(event, fileChanges)) {
         sendToRenderer(mainWindow, "agent:event", agentEvent);
       }
     }).catch((error: unknown) => {

@@ -76,6 +76,110 @@ describe("buildTaskRows", () => {
 
     expect(rows[1]).toMatchObject({ type: "task-activity", settled: false, endedAt: undefined });
   });
+
+  it("places a settled file review after the final assistant answer", () => {
+    const messagesById = {
+      user: message("user", "user", 1_000, [{ type: "text", contentIndex: 0, text: "修改文件" }]),
+      final: message("final", "assistant", 3_000, [{ type: "text", contentIndex: 0, text: "修改完成。" }]),
+    };
+    const change = {
+      path: "src/app.ts",
+      changeType: "modified" as const,
+      beforeContent: "old\n",
+      afterContent: "new\n",
+      unifiedDiff: "@@ -1 +1 @@\n-old\n+new",
+      toolCallId: "edit-1",
+      timestamp: 2_500,
+    };
+    const toolCallsById: Record<string, ToolCallState> = {
+      "edit-1": {
+        id: "edit-1",
+        name: "edit",
+        args: {},
+        output: [],
+        status: "done",
+        startedAt: 2_000,
+        completedAt: 2_600,
+        fileChange: change,
+      },
+    };
+
+    const rows = buildTaskRows({
+      timeline: [
+        { type: "message", id: "user" },
+        { type: "tool", id: "edit-1" },
+        { type: "message", id: "final" },
+      ],
+      messagesById,
+      toolCallsById,
+      busy: false,
+      runTiming: null,
+    });
+
+    expect(rows.map((row) => row.type)).toEqual(["message", "task-activity", "message", "file-review"]);
+    expect(rows[3]).toEqual({ type: "file-review", id: "file-review:user", changes: [change] });
+  });
+
+  it("does not expose a file review before the active task settles", () => {
+    const messagesById = {
+      user: message("user", "user", 1_000, [{ type: "text", contentIndex: 0, text: "修改文件" }]),
+    };
+    const toolCallsById: Record<string, ToolCallState> = {
+      edit: {
+        id: "edit",
+        name: "edit",
+        args: {},
+        output: [],
+        status: "done",
+        startedAt: 2_000,
+        completedAt: 2_500,
+        fileChange: {
+          path: "src/app.ts",
+          changeType: "modified",
+          beforeContent: "old\n",
+          afterContent: "new\n",
+          unifiedDiff: "@@ -1 +1 @@\n-old\n+new",
+          toolCallId: "edit",
+          timestamp: 2_500,
+        },
+      },
+    };
+
+    const rows = buildTaskRows({
+      timeline: [{ type: "message", id: "user" }, { type: "tool", id: "edit" }],
+      messagesById,
+      toolCallsById,
+      busy: true,
+      runTiming: { startedAt: 900 },
+    });
+
+    expect(rows.some((row) => row.type === "file-review")).toBe(false);
+  });
+
+  it("shows a turn-level review even when no known tool reported the mutation", () => {
+    const messagesById = {
+      user: message("user", "user", 1_000, [{ type: "text", contentIndex: 0, text: "生成文件" }]),
+      final: message("final", "assistant", 3_000, [{ type: "text", contentIndex: 0, text: "完成。" }]),
+    };
+    const change = {
+      path: "src/generated.ts",
+      changeType: "created" as const,
+      afterContent: "export {};\n",
+      unifiedDiff: "@@ -0,0 +1 @@\n+export {};",
+      timestamp: 2_500,
+    };
+
+    const rows = buildTaskRows({
+      timeline: [{ type: "message", id: "user" }, { type: "message", id: "final" }],
+      messagesById,
+      toolCallsById: {},
+      turnFileChangesByIndex: { 0: [change] },
+      busy: false,
+      runTiming: null,
+    });
+
+    expect(rows.at(-1)).toEqual({ type: "file-review", id: "file-review:user", changes: [change] });
+  });
 });
 
 describe("empty chat presentation", () => {

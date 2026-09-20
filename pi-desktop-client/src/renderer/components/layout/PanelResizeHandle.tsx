@@ -6,6 +6,7 @@ type PanelResizeHandleProps = {
   min: number;
   max: number;
   direction: "right" | "left";
+  oppositeMin?: number;
   onChange: (value: number) => void;
 };
 
@@ -13,16 +14,24 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-export function PanelResizeHandle({ label, value, min, max, direction, onChange }: PanelResizeHandleProps) {
+export function PanelResizeHandle({ label, value, min, max, direction, oppositeMin, onChange }: PanelResizeHandleProps) {
+  function availableMax(element: HTMLDivElement): number {
+    if (oppositeMin === undefined) return max;
+    const containerWidth = element.parentElement?.getBoundingClientRect().width;
+    if (!containerWidth) return max;
+    return Math.max(min, Math.min(max, containerWidth - oppositeMin - element.getBoundingClientRect().width));
+  }
+
   function beginResize(event: PointerEvent<HTMLDivElement>): void {
     event.preventDefault();
     const startX = event.clientX;
-    const startValue = value;
+    const resizeMax = availableMax(event.currentTarget);
+    const startValue = clamp(value, min, resizeMax);
     document.body.classList.add("is-resizing-panel");
 
     const move = (moveEvent: globalThis.PointerEvent): void => {
       const distance = direction === "right" ? moveEvent.clientX - startX : startX - moveEvent.clientX;
-      onChange(clamp(startValue + distance, min, max));
+      onChange(clamp(startValue + distance, min, resizeMax));
     };
     const stop = (): void => {
       document.body.classList.remove("is-resizing-panel");
@@ -39,7 +48,7 @@ export function PanelResizeHandle({ label, value, min, max, direction, onChange 
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
     const movement = event.key === "ArrowRight" ? 12 : -12;
-    onChange(clamp(value + (direction === "right" ? movement : -movement), min, max));
+    onChange(clamp(value + (direction === "right" ? movement : -movement), min, availableMax(event.currentTarget)));
   }
 
   return (

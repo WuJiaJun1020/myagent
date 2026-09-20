@@ -16,6 +16,7 @@ import { attachJsonlLineReader, serializeJsonLine } from "./jsonl.ts";
 import type {
 	RpcApprovalPolicy,
 	RpcCommand,
+	RpcExtensionUIClose,
 	RpcExtensionUIRequest,
 	RpcHostSettings,
 	RpcHostSettingsState,
@@ -65,7 +66,12 @@ export interface ModelInfo {
 	reasoning: boolean;
 }
 
-export type RpcEvent = JsonAgentSessionEvent | RpcExtensionUIRequest | RpcProviderAuthEvent | RpcProviderAuthRequest;
+export type RpcEvent =
+	| JsonAgentSessionEvent
+	| RpcExtensionUIRequest
+	| RpcExtensionUIClose
+	| RpcProviderAuthEvent
+	| RpcProviderAuthRequest;
 export type RpcEventListener = (event: RpcEvent) => void;
 
 // ============================================================================
@@ -581,6 +587,11 @@ export class RpcClient {
 		return this.getData<RpcResourceState>(response);
 	}
 
+	/** Invoke one shortcut registered by the active extension set. */
+	async invokeExtensionShortcut(shortcut: string): Promise<void> {
+		await this.send({ type: "invoke_extension_shortcut", shortcut });
+	}
+
 	/** Reload extensions, skills, prompts, themes, and context resources. */
 	async reloadResources(): Promise<void> {
 		await this.send({ type: "reload_resources" });
@@ -669,6 +680,7 @@ export class RpcClient {
 			const unsubscribe = this.onEvent((event) => {
 				if (
 					event.type === "extension_ui_request" ||
+					event.type === "extension_ui_close" ||
 					event.type === "provider_auth_event" ||
 					event.type === "provider_auth_request"
 				) {

@@ -43,6 +43,7 @@ export default defineConfig({
             || modulePath.includes("/node_modules/@tanstack/react-virtual/")
           ) return "vendor-state";
           if (modulePath.includes("/node_modules/@xterm/")) return "vendor-terminal";
+          if (modulePath.includes("/node_modules/prismjs/")) return "vendor-highlight";
         },
       },
     },

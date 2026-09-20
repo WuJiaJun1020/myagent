@@ -100,6 +100,7 @@ export type AgentEvent =
       result: ToolResult;
       isError: boolean;
     }
+  | { type: "turn.diff.updated"; meta: AgentEventMeta; changes: FileChange[] }
   | { type: "file.changed"; meta: AgentEventMeta; change: FileChange }
   | { type: "queue.changed"; meta: AgentEventMeta; steering: string[]; followUp: string[] }
   | { type: "compaction.changed"; meta: AgentEventMeta; state: CompactionState }
@@ -107,6 +108,8 @@ export type AgentEvent =
   | { type: "extension.notice"; meta: AgentEventMeta; severity: "info" | "warning" | "error"; message: string }
   | { type: "extension.status"; meta: AgentEventMeta; key: string; text?: string }
   | { type: "extension.widget"; meta: AgentEventMeta; key: string; widget?: ExtensionWidget }
+  | { type: "extension.title"; meta: AgentEventMeta; title: string }
   | { type: "composer.draft"; meta: AgentEventMeta; text: string }
   | { type: "interaction.requested"; meta: AgentEventMeta; request: InteractionRequest }
+  | { type: "interaction.dismissed"; meta: AgentEventMeta; requestId: string; reason: "timeout" | "cancelled" }
   | { type: "error.raised"; meta: AgentEventMeta; message: string };

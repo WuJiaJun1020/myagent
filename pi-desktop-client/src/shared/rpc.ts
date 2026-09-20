@@ -26,6 +26,7 @@ import type {
   WorkspaceFileSaveRequest,
   WorkspaceFileReference,
   WorkspaceGitDiff,
+  WorkspaceGitDiffScope,
   WorkspaceGitStatus,
   WorkspaceTextFile,
 } from "./contracts/workspace";
@@ -116,14 +117,16 @@ export interface PiDesktopApi {
   cancelProviderLogin(flowId: string): Promise<void>;
   respondToProviderAuth(response: ProviderAuthResponse): Promise<void>;
   openExternal(url: string): Promise<void>;
+  setWindowTitle(title?: string): Promise<void>;
   send(command: RpcCommand): Promise<RpcMessage>;
   listWorkspaceDirectory(path: string): Promise<WorkspaceDirectoryListing>;
   searchWorkspaceFiles(query: string): Promise<WorkspaceFileReference[]>;
   readWorkspaceFile(path: string): Promise<WorkspaceTextFile>;
   saveWorkspaceFile(request: WorkspaceFileSaveRequest): Promise<WorkspaceTextFile>;
   revertAgentFileChange(change: FileChange): Promise<void>;
+  saveAgentTurnFileChanges(sessionId: string, turnIndex: number, changes: FileChange[]): Promise<void>;
   getWorkspaceGitStatus(): Promise<WorkspaceGitStatus>;
-  getWorkspaceGitDiff(path: string, staged: boolean): Promise<WorkspaceGitDiff>;
+  getWorkspaceGitDiff(path: string, scope: WorkspaceGitDiffScope, contextLines?: number): Promise<WorkspaceGitDiff>;
   getTerminalProfiles(): Promise<TerminalProfile[]>;
   createTerminal(request: TerminalCreateRequest): Promise<TerminalSession>;
   writeTerminal(id: string, data: string): void;

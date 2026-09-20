@@ -11,10 +11,37 @@ export function ExtensionDialog() {
   const setError = useAgentStore((state) => state.setError);
   const animationEnabled = useSettingsStore((state) => state.animationEnabled);
   const [value, setValue] = useState("");
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
 
   useEffect(() => {
     setValue(request?.method === "editor" ? request.prefill ?? "" : "");
   }, [request]);
+
+  useEffect(() => {
+    const timeout = request && "timeout" in request ? request.timeout : undefined;
+    if (!request || !timeout || timeout <= 0) {
+      setRemainingSeconds(null);
+      return undefined;
+    }
+    const requestId = request.id;
+    const deadline = Date.now() + timeout;
+    let expired = false;
+    const update = () => {
+      const remaining = deadline - Date.now();
+      if (remaining > 0) {
+        setRemainingSeconds(Math.max(1, Math.ceil(remaining / 1000)));
+        return;
+      }
+      if (expired) return;
+      expired = true;
+      setRemainingSeconds(0);
+      dismissInteraction(requestId);
+      void agentGateway.respondToInteraction(request, { cancelled: true }).catch(() => undefined);
+    };
+    update();
+    const interval = window.setInterval(update, Math.min(1000, Math.max(100, timeout)));
+    return () => window.clearInterval(interval);
+  }, [dismissInteraction, request]);
 
   if (!request) return null;
   const isToolApproval = request.method === "confirm" && request.title === "批准工具调用";
@@ -51,6 +78,9 @@ export function ExtensionDialog() {
           <button type="button" title="取消" onClick={() => void answer({ cancelled: true })}><X size={16} /></button>
         </header>
         {request.method === "confirm" && <p className="modal-message">{request.message}</p>}
+        {remainingSeconds !== null && (
+          <p className="extension-dialog-timeout" aria-live="polite">请在 {remainingSeconds} 秒内完成操作</p>
+        )}
         {request.method === "select" && (
           <div className="option-list">
             {request.options.map((option) => (

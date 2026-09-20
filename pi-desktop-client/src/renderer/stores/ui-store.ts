@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { ImageAttachment } from "../../shared/contracts/agent-session";
 
-export type SidebarView = "activity" | "files" | "mcp" | "memory";
+export type SidebarView = "activity" | "files" | "review" | "mcp" | "memory";
 export type ResourceCenterTab = "online" | "packages" | "skills" | "extensions" | "prompts" | "tools";
 export type DetailSelection =
   | { type: "tool"; id: string }
@@ -54,7 +54,7 @@ type UiStore = {
 const NAVIGATION_STORAGE_KEY = "pi-desktop-current-navigation";
 
 function isSidebarView(value: unknown): value is SidebarView {
-  return value === "activity" || value === "files" || value === "mcp" || value === "memory";
+  return value === "activity" || value === "files" || value === "review" || value === "mcp" || value === "memory";
 }
 
 function isResourceCenterTab(value: unknown): value is ResourceCenterTab {
@@ -111,7 +111,7 @@ export const useUiStore = create<UiStore>((set) => ({
   toggleTerminalPanel: () => set((state) => ({ terminalPanelOpen: !state.terminalPanelOpen })),
   setSidebarView: (sidebarView) => set((state) => {
     saveNavigation(sidebarView, state.resourceCenterTab);
-    return { sidebarView };
+    return sidebarView === "review" ? { sidebarView, detailPanelOpen: true } : { sidebarView };
   }),
   setResourceCenterTab: (resourceCenterTab) => set((state) => {
     saveNavigation(state.sidebarView, resourceCenterTab);

@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import type {
   AgentRuntimeSnapshot,
+  AgentHistorySnapshot,
   AgentSessionConfiguration,
   AgentSessionState,
   ApprovalPolicy,
@@ -14,6 +15,7 @@ import type {
   SessionTreeNavigation,
   SessionTreeNavigationOptions,
   SessionTreeNode,
+  SnapshotTurnFileChanges,
   SlashCommand,
   ThinkingLevel,
 } from "../../shared/contracts/agent-session";
@@ -29,6 +31,11 @@ type DesktopSessionIndexEntry = PiSessionIndexEntry & {
   requiresWorkMode: boolean;
 };
 type SnapshotCapabilities = Pick<AgentRuntimeSnapshot, "models" | "thinkingLevels" | "commands">;
+type HistoryCacheEntry = {
+  cursor?: string;
+  leafId: string | null;
+  history: AgentHistorySnapshot;
+};
 const RPC_TIMEOUT = 30_000;
 const MAX_SESSION_NAME_LENGTH = 120;
 
@@ -47,6 +54,24 @@ function readString(value: unknown): string | undefined {
 
 function readNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function parseEntryCursor(value: UnknownRecord, fallback?: string): { cursor?: string; leafId: string | null; changed: boolean } {
+  const entries = Array.isArray(value.entries) ? value.entries : [];
+  let cursor = fallback;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    if (!isRecord(entries[index])) continue;
+    const id = readString(entries[index].id);
+    if (id) {
+      cursor = id;
+      break;
+    }
+  }
+  return {
+    ...(cursor ? { cursor } : {}),
+    leafId: readString(value.leafId) ?? null,
+    changed: entries.length > 0,
+  };
 }
 
 function parseSessionMode(value: unknown): SessionMode {
@@ -250,12 +275,14 @@ export class PiSessionService {
   private readonly sessionIndex = new Map<string, DesktopSessionIndexEntry>();
   private recentSessions: SessionListItem[] = [];
   private snapshotCapabilities: SnapshotCapabilities | undefined;
+  private readonly historyCache = new Map<string, HistoryCacheEntry>();
 
   constructor(
     private readonly pi: PiProcess,
     private readonly eventAdapter: PiEventAdapter,
     private readonly trashItem: (path: string) => Promise<void>,
     private readonly chatSessionDirectory: (cwd: string) => string = getDesktopChatSessionDir,
+    private readonly loadTurnFileChanges: (sessionId: string) => Promise<SnapshotTurnFileChanges[]> = async () => [],
   ) {}
 
   async getSnapshot(
@@ -282,25 +309,59 @@ export class PiSessionService {
         thinkingLevels: parseThinkingLevels(responseData(thinkingResponse)),
         commands: parseCommands(responseData(commandsResponse)),
       }));
-    const [messagesResponse, sessions, capabilities] = await Promise.all([
-      this.pi.send({ type: "get_messages" }, RPC_TIMEOUT),
+    const [history, sessions, capabilities, storedTurnFileChanges] = await Promise.all([
+      this.getHistory(session.id),
       cachedSessions ? Promise.resolve(cachedSessions) : this.listSessions(session, sessionFile),
       capabilitiesPromise,
+      this.loadTurnFileChanges(session.id),
     ]);
-    const messageData = responseData(messagesResponse);
     const normalizedCapabilities = {
       ...capabilities,
       thinkingLevels: normalizeThinkingLevels(capabilities.thinkingLevels, session.thinkingLevel),
     };
     this.snapshotCapabilities = normalizedCapabilities;
+    const userTurnCount = history.messages.filter((message) => message.role === "user").length;
+    const turnFileChanges = storedTurnFileChanges.filter((entry) => entry.turnIndex < userTurnCount);
 
     return {
       sequence: this.eventAdapter.getSequence(),
       session,
       sessions,
       ...normalizedCapabilities,
-      history: adaptRpcHistory(session.id, messageData.messages),
+      history: {
+        ...history,
+        ...(turnFileChanges.length > 0 ? { turnFileChanges } : {}),
+      },
     };
+  }
+
+  private async getHistory(sessionId: string): Promise<AgentHistorySnapshot> {
+    const cached = this.historyCache.get(sessionId);
+    let entryState: ReturnType<typeof parseEntryCursor>;
+    try {
+      const entriesResponse = await this.pi.send({
+        type: "get_entries",
+        ...(cached?.cursor ? { since: cached.cursor } : {}),
+      }, RPC_TIMEOUT);
+      entryState = parseEntryCursor(responseData(entriesResponse), cached?.cursor);
+    } catch {
+      // Older or third-party Pi RPC hosts may not expose get_entries. Keep the
+      // full-message path as a compatibility fallback instead of blocking the UI.
+      const messagesResponse = await this.pi.send({ type: "get_messages" }, RPC_TIMEOUT);
+      const history = adaptRpcHistory(sessionId, responseData(messagesResponse).messages);
+      this.historyCache.delete(sessionId);
+      return history;
+    }
+    if (cached && !entryState.changed && entryState.leafId === cached.leafId) return cached.history;
+
+    const messagesResponse = await this.pi.send({ type: "get_messages" }, RPC_TIMEOUT);
+    const history = adaptRpcHistory(sessionId, responseData(messagesResponse).messages);
+    this.historyCache.set(sessionId, {
+      ...(entryState.cursor ? { cursor: entryState.cursor } : {}),
+      leafId: entryState.leafId,
+      history,
+    });
+    return history;
   }
 
   async getSessionState(): Promise<AgentSessionState> {
@@ -471,6 +532,7 @@ export class PiSessionService {
       if (target.mode === "chat") await this.pi.send({ type: "set_session_mode", mode: "chat" }, RPC_TIMEOUT);
     }
     await this.trashItem(target.path);
+    this.historyCache.delete(id);
     return this.getSnapshot(id === current.id);
   }
 

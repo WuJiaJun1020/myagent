@@ -4,6 +4,7 @@ import type {
   WorkspaceFileSaveRequest,
   WorkspaceFileReference,
   WorkspaceGitDiff,
+  WorkspaceGitDiffScope,
   WorkspaceGitStatus,
   WorkspaceTextFile,
 } from "../../shared/contracts/workspace";
@@ -14,8 +15,9 @@ export interface WorkspaceGateway {
   readFile(path: string): Promise<WorkspaceTextFile>;
   saveFile(request: WorkspaceFileSaveRequest): Promise<WorkspaceTextFile>;
   revertAgentChange(change: FileChange): Promise<void>;
+  saveTurnFileChanges(sessionId: string, turnIndex: number, changes: FileChange[]): Promise<void>;
   getGitStatus(): Promise<WorkspaceGitStatus>;
-  getGitDiff(path: string, staged: boolean): Promise<WorkspaceGitDiff>;
+  getGitDiff(path: string, scope: WorkspaceGitDiffScope, contextLines?: number): Promise<WorkspaceGitDiff>;
 }
 
 class DesktopWorkspaceGateway implements WorkspaceGateway {
@@ -39,12 +41,16 @@ class DesktopWorkspaceGateway implements WorkspaceGateway {
     return window.piDesktop.revertAgentFileChange(change);
   }
 
+  saveTurnFileChanges(sessionId: string, turnIndex: number, changes: FileChange[]): Promise<void> {
+    return window.piDesktop.saveAgentTurnFileChanges(sessionId, turnIndex, changes);
+  }
+
   getGitStatus(): Promise<WorkspaceGitStatus> {
     return window.piDesktop.getWorkspaceGitStatus();
   }
 
-  getGitDiff(path: string, staged: boolean): Promise<WorkspaceGitDiff> {
-    return window.piDesktop.getWorkspaceGitDiff(path, staged);
+  getGitDiff(path: string, scope: WorkspaceGitDiffScope, contextLines?: number): Promise<WorkspaceGitDiff> {
+    return window.piDesktop.getWorkspaceGitDiff(path, scope, contextLines);
   }
 
 }

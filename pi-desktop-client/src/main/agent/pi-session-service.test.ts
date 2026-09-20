@@ -2,7 +2,7 @@ import { appendFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { SessionMode, ThinkingLevel } from "../../shared/contracts/agent-session";
+import type { SessionMode, SnapshotTurnFileChanges, ThinkingLevel } from "../../shared/contracts/agent-session";
 import type { RpcCommand, RpcMessage } from "../../shared/rpc";
 import { PiEventAdapter } from "./pi-event-adapter";
 import { PiSessionService } from "./pi-session-service";
@@ -21,8 +21,10 @@ class FakePi {
   currentApprovalPolicy: "ask" | "auto" = "auto";
   readonly thinkingLevelBySession = new Map<string, ThinkingLevel>();
   readonly thinkingLevelsBySession = new Map<string, ThinkingLevel[]>();
+  readonly entriesBySession = new Map<string, Array<{ id: string; parentId: string | null }>>();
   readonly commands: RpcCommand[] = [];
   readonly restarts: Array<{ cwd: string; sessionDir?: string }> = [];
+  messages: unknown[] = [];
   private sessionDirectory: string;
 
   constructor(
@@ -67,7 +69,20 @@ class FakePi {
         pendingMessageCount: 0,
       } };
     }
-    if (command.type === "get_messages") return { type: "response", command: command.type, success: true, data: { messages: [] } };
+    if (command.type === "get_messages") return { type: "response", command: command.type, success: true, data: { messages: this.messages } };
+    if (command.type === "get_entries") {
+      const entries = this.entriesBySession.get(this.currentId) ?? [{ id: `${this.currentId}-entry`, parentId: null }];
+      this.entriesBySession.set(this.currentId, entries);
+      const since = typeof command.since === "string" ? command.since : undefined;
+      const index = since ? entries.findIndex((entry) => entry.id === since) : -1;
+      if (since && index < 0) throw new Error(`Entry not found: ${since}`);
+      return {
+        type: "response",
+        command: command.type,
+        success: true,
+        data: { entries: since ? entries.slice(index + 1) : entries, leafId: entries.at(-1)?.id ?? null },
+      };
+    }
     if (command.type === "get_available_models") return { type: "response", command: command.type, success: true, data: { models: [] } };
     if (command.type === "get_available_thinking_levels") return {
       type: "response",
@@ -114,7 +129,7 @@ class FakePi {
   }
 }
 
-async function setup() {
+async function setup(loadTurnFileChanges: (sessionId: string) => Promise<SnapshotTurnFileChanges[]> = async () => []) {
   const root = await mkdtemp(join(tmpdir(), "pi-desktop-session-service-"));
   temporaryDirectories.push(root);
   const cwd = join(root, "workspace");
@@ -148,7 +163,7 @@ async function setup() {
   const service = new PiSessionService(fakePi as unknown as PiProcess, new PiEventAdapter(), async (path) => {
     trashed.push(path);
     await rm(path);
-  }, () => chatSessions);
+  }, () => chatSessions, loadTurnFileChanges);
   return { service, trashed, sessions, chatSessions, fakePi, cwd, otherWorkspace };
 }
 
@@ -165,6 +180,57 @@ describe("PiSessionService mutations", () => {
 
     const updated = await service.setApprovalPolicy("ask");
     expect(updated.session.approvalPolicy).toBe("ask");
+  });
+
+  it("merges persisted turn file changes into a restored session snapshot", async () => {
+    const changes = [{
+      path: "src/app.ts",
+      changeType: "modified" as const,
+      beforeContent: "before\n",
+      afterContent: "after\n",
+      unifiedDiff: "@@ -1 +1 @@\n-before\n+after",
+      timestamp: 2,
+    }];
+    const { service, fakePi } = await setup(async (sessionId) => (
+      sessionId === "current" ? [{ turnIndex: 0, changes }, { turnIndex: 4, changes }] : []
+    ));
+    fakePi.messages = [{ role: "user", content: "修改文件", timestamp: 1 }];
+
+    const snapshot = await service.getSnapshot();
+
+    expect(snapshot.history.turnFileChanges).toEqual([{ turnIndex: 0, changes }]);
+  });
+
+  it("reuses cached history when get_entries reports no session changes", async () => {
+    const { service, fakePi } = await setup();
+    fakePi.messages = [{ role: "user", content: "first", timestamp: 1 }];
+
+    const first = await service.getSnapshot();
+    const second = await service.getSnapshot();
+
+    expect(first.history.messages[0]?.content[0]).toMatchObject({ type: "text", text: "first" });
+    expect(second.history).toEqual(first.history);
+    expect(fakePi.commands.filter((command) => command.type === "get_messages")).toHaveLength(1);
+    expect(fakePi.commands.filter((command) => command.type === "get_entries").at(-1)).toMatchObject({
+      type: "get_entries",
+      since: "current-entry",
+    });
+  });
+
+  it("refreshes cached history after get_entries reports appended entries", async () => {
+    const { service, fakePi } = await setup();
+    fakePi.messages = [{ role: "user", content: "first", timestamp: 1 }];
+    await service.getSnapshot();
+    fakePi.entriesBySession.get("current")?.push({ id: "current-entry-2", parentId: "current-entry" });
+    fakePi.messages = [
+      { role: "user", content: "first", timestamp: 1 },
+      { role: "assistant", content: "second", timestamp: 2 },
+    ];
+
+    const refreshed = await service.getSnapshot();
+
+    expect(refreshed.history.messages).toHaveLength(2);
+    expect(fakePi.commands.filter((command) => command.type === "get_messages")).toHaveLength(2);
   });
 
   it("renames an inactive session through Pi and refreshes the index", async () => {

@@ -43,7 +43,8 @@ export type FileChange = {
   beforeContent?: string;
   afterContent?: string;
   unifiedDiff: string;
-  toolCallId: string;
+  /** Present only for legacy tool-attributed changes. Turn snapshots are tool agnostic. */
+  toolCallId?: string;
   timestamp: number;
   truncated?: boolean;
 };
@@ -53,6 +54,13 @@ export type WorkspaceGitFile = {
   indexStatus: string;
   workTreeStatus: string;
   renamedFrom?: string;
+  additions: number;
+  deletions: number;
+  stagedAdditions?: number;
+  stagedDeletions?: number;
+  unstagedAdditions?: number;
+  unstagedDeletions?: number;
+  binary: boolean;
 };
 
 export type WorkspaceGitStatus = {
@@ -60,13 +68,18 @@ export type WorkspaceGitStatus = {
   branch?: string;
   ahead?: number;
   behind?: number;
+  additions?: number;
+  deletions?: number;
   files: WorkspaceGitFile[];
   error?: string;
 };
 
+export type WorkspaceGitDiffScope = "uncommitted" | "unstaged" | "staged";
+
 export type WorkspaceGitDiff = {
   path: string;
   staged: boolean;
+  scope?: WorkspaceGitDiffScope;
   diff: string;
   truncated: boolean;
 };

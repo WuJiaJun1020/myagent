@@ -39,6 +39,9 @@ export const useAgentStore = create<AgentStore>((set) => ({
     busy: snapshot.session.isStreaming,
     messagesById: Object.fromEntries(snapshot.history.messages.map((message) => [message.id, message])),
     toolCallsById: Object.fromEntries(snapshot.history.toolCalls.map((tool) => [tool.id, tool])),
+    turnFileChangesByIndex: Object.fromEntries(
+      (snapshot.history.turnFileChanges ?? []).map((entry) => [entry.turnIndex, entry.changes]),
+    ),
     timelineOrder: snapshot.history.timeline,
     compaction: snapshot.session.isCompacting ? { phase: "running" } : { phase: "idle" },
     activeSessionId: snapshot.session.id,

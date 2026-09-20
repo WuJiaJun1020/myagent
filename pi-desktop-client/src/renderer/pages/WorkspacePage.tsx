@@ -15,6 +15,7 @@ import { ResourceCenterPanel } from "../features/resources/ResourceCenterPanel";
 import { MemoryPanel } from "../features/resources/MemoryPanel";
 import { SessionOverviewDialog } from "../features/sessions/SessionOverviewDialog";
 import { WorkspaceEditor } from "../features/files/WorkspaceEditor";
+import { GitReview } from "../features/files/GitReview";
 import { useUiStore } from "../stores/ui-store";
 
 const LazyTerminalPanel = lazy(async () => {
@@ -36,9 +37,11 @@ function TerminalPanelSlot() {
 
 export function WorkspacePage() {
   const sidebarView = useUiStore((state) => state.sidebarView);
+  const setSidebarView = useUiStore((state) => state.setSidebarView);
   const settingsOpen = useUiStore((state) => state.settingsOpen);
   const resourceView = sidebarView === "mcp" || sidebarView === "memory";
   const fileWorkspaceView = sidebarView === "files";
+  const gitReviewView = sidebarView === "review";
 
   return (
     <div className="app-frame">
@@ -62,7 +65,8 @@ export function WorkspacePage() {
             <ExtensionWidgets placement="belowEditor" />
           </>
         )}
-        detail={<DetailPanel />}
+        detail={gitReviewView ? <GitReview onClose={() => setSidebarView("activity")} /> : <DetailPanel />}
+        detailVariant={gitReviewView ? "review" : "default"}
       />
       <SettingsPage />
       <ProviderSettingsDialog />

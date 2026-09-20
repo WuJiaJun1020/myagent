@@ -44,6 +44,7 @@ import { attachJsonlLineReader, serializeJsonLine } from "./jsonl.ts";
 import type {
 	RpcApprovalPolicy,
 	RpcCommand,
+	RpcExtensionUIClose,
 	RpcExtensionUIRequest,
 	RpcExtensionUIResponse,
 	RpcHostSettings,
@@ -68,6 +69,7 @@ import type {
 export type {
 	RpcApprovalPolicy,
 	RpcCommand,
+	RpcExtensionUIClose,
 	RpcExtensionUIRequest,
 	RpcExtensionUIResponse,
 	RpcHostSettings,
@@ -570,17 +572,17 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				pendingExtensionRequests.delete(id);
 			};
 
-			const onAbort = () => {
+			const close = (reason: RpcExtensionUIClose["reason"]) => {
 				cleanup();
+				output({ type: "extension_ui_close", id, reason } satisfies RpcExtensionUIClose);
 				resolve(defaultValue);
 			};
+
+			const onAbort = () => close("cancelled");
 			opts?.signal?.addEventListener("abort", onAbort, { once: true });
 
 			if (opts?.timeout) {
-				timeoutId = setTimeout(() => {
-					cleanup();
-					resolve(defaultValue);
-				}, opts.timeout);
+				timeoutId = setTimeout(() => close("timeout"), opts.timeout);
 			}
 
 			pendingExtensionRequests.set(id, {
@@ -1614,6 +1616,10 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 						sourceInfo: extension.sourceInfo,
 						toolNames: [...extension.tools.keys()].slice(0, maxTools),
 						commandNames: [...extension.commands.keys()].slice(0, 500),
+						shortcuts: [...extension.shortcuts.values()].slice(0, 500).map((shortcut) => ({
+							shortcut: shortcut.shortcut,
+							...(shortcut.description ? { description: shortcut.description } : {}),
+						})),
 					})),
 					extensionErrors: extensionsResult.errors.slice(0, 100).map((item) => ({
 						path: item.path,
@@ -1643,6 +1649,14 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 					capabilities: { nativeMcp: false, semanticMemory: false },
 				};
 				return success(id, "get_resources", resources);
+			}
+
+			case "invoke_extension_shortcut": {
+				if (typeof command.shortcut !== "string" || !command.shortcut.trim() || command.shortcut.length > 200) {
+					return error(id, "invoke_extension_shortcut", "shortcut must be a valid non-empty string");
+				}
+				await session.extensionRunner.invokeShortcut(command.shortcut.trim());
+				return success(id, "invoke_extension_shortcut");
 			}
 
 			// =================================================================

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createUnifiedDiff, FileChangeTracker, WorkspaceFileService } from "./workspace-files";
@@ -103,36 +103,69 @@ describe("WorkspaceFileService", () => {
 });
 
 describe("FileChangeTracker", () => {
-  it("creates a file change linked to the originating write tool", async () => {
+  it("captures a file changed by an arbitrary future tool at run settlement", async () => {
     const workspace = await createWorkspace();
     await writeFile(join(workspace, "note.txt"), "before\n", "utf8");
     const files = new WorkspaceFileService(() => workspace);
     const tracker = new FileChangeTracker(files);
 
+    await tracker.beginRun();
+    await writeFile(join(workspace, "note.txt"), "after\n", "utf8");
+    await tracker.captureStart({ type: "agent_start" });
     await tracker.captureStart({
       type: "tool_execution_start",
-      toolCallId: "write-1",
-      toolName: "write",
-      args: { path: "note.txt", content: "after\n" },
+      toolCallId: "future-1",
+      toolName: "third-party-file-mutator",
+      args: {},
     });
-    await writeFile(join(workspace, "note.txt"), "after\n", "utf8");
-    const change = await tracker.captureEnd({
+    await expect(tracker.captureEnd({
       type: "tool_execution_end",
-      toolCallId: "write-1",
-      toolName: "write",
+      toolCallId: "future-1",
+      toolName: "third-party-file-mutator",
       result: { content: [{ type: "text", text: "ok" }] },
       isError: false,
-    });
+    })).resolves.toEqual([]);
+    const [change] = await tracker.captureEnd({ type: "agent_settled" });
 
     expect(change).toMatchObject({
       path: "note.txt",
       changeType: "modified",
       beforeContent: "before\n",
       afterContent: "after\n",
-      toolCallId: "write-1",
     });
-    expect(change?.unifiedDiff).toContain("-before");
-    expect(change?.unifiedDiff).toContain("+after");
+    expect(change.toolCallId).toBeUndefined();
+    expect(change.unifiedDiff).toContain("-before");
+    expect(change.unifiedDiff).toContain("+after");
+  });
+
+  it("captures every file created, modified, or deleted during one Agent run", async () => {
+    const workspace = await createWorkspace();
+    await writeFile(join(workspace, "modified.txt"), "before\n", "utf8");
+    await writeFile(join(workspace, "deleted.txt"), "remove me\n", "utf8");
+    const files = new WorkspaceFileService(() => workspace);
+    const tracker = new FileChangeTracker(files);
+
+    await tracker.captureStart({ type: "agent_start" });
+    await writeFile(join(workspace, "modified.txt"), "after\n", "utf8");
+    await writeFile(join(workspace, "created.txt"), "", "utf8");
+    await unlink(join(workspace, "deleted.txt"));
+
+    const changes = await tracker.captureEnd({ type: "agent_settled" });
+
+    expect(changes.map((change) => [change.path, change.changeType])).toEqual([
+      ["created.txt", "created"],
+      ["deleted.txt", "deleted"],
+      ["modified.txt", "modified"],
+    ]);
+    expect(changes.every((change) => change.toolCallId === undefined)).toBe(true);
+  });
+
+  it("emits no changes when a run leaves the workspace untouched", async () => {
+    const workspace = await createWorkspace();
+    const tracker = new FileChangeTracker(new WorkspaceFileService(() => workspace));
+
+    await tracker.captureStart({ type: "agent_start" });
+    await expect(tracker.captureEnd({ type: "agent_settled" })).resolves.toEqual([]);
   });
 });
 
@@ -142,5 +175,17 @@ describe("createUnifiedDiff", () => {
     expect(diff).toContain("--- a/src/a.ts");
     expect(diff).toContain("-two");
     expect(diff).toContain("+changed");
+  });
+
+  it("regenerates a diff with progressively wider context", () => {
+    const before = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`).join("\n");
+    const after = before.replace("line 6", "line six");
+    const compact = createUnifiedDiff("src/a.ts", before, after, 1);
+    const expanded = createUnifiedDiff("src/a.ts", before, after, 5);
+
+    expect(compact).not.toContain(" line 1");
+    expect(compact).toContain(" line 5");
+    expect(expanded).toContain(" line 1");
+    expect(expanded).toContain(" line 11");
   });
 });

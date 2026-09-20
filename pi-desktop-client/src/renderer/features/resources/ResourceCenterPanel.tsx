@@ -251,7 +251,10 @@ export function ResourceCenterPanel() {
                           <div className="managed-resource-contributions">
                             {detail.toolNames.map((name) => <span key={`tool:${name}`}>Tool · {name}</span>)}
                             {detail.commandNames.map((name) => <span key={`command:${name}`}>/{name}</span>)}
-                            {detail.toolNames.length === 0 && detail.commandNames.length === 0 && <span>扩展已加载，未注册 Tool 或命令</span>}
+                            {detail.shortcuts.map((shortcut) => (
+                              <span key={`shortcut:${shortcut.shortcut}`} title={shortcut.description}>快捷键 · {shortcut.shortcut}</span>
+                            ))}
+                            {detail.toolNames.length === 0 && detail.commandNames.length === 0 && detail.shortcuts.length === 0 && <span>扩展已加载，未注册 Tool、命令或快捷键</span>}
                           </div>
                         );
                       })()}

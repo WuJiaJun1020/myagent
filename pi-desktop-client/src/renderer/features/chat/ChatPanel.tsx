@@ -4,12 +4,14 @@ import { Bot, Braces, FileDiff, Lightbulb, MessageCircle, ShieldCheck, TerminalS
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { AgentMessage } from "../../../shared/contracts/agent-events";
 import type { SnapshotTimelineEntry } from "../../../shared/contracts/agent-session";
+import type { FileChange } from "../../../shared/contracts/workspace";
 import type { ToolCallState } from "../../lib/event-reducer";
 import { useAgentStore } from "../../stores/agent-store";
 import { useSettingsStore } from "../../stores/settings-store";
 import { useSessionStore } from "../../stores/session-store";
 import { useUiStore, type SessionChatScroll } from "../../stores/ui-store";
 import { TaskActivityGroup, type TaskActivityItem } from "../agent/TaskActivityGroup";
+import { AgentChangeReview } from "../files/AgentChangeReview";
 import { ToolCallCard } from "../tools/ToolCallCard";
 import { MessageItem } from "./MessageItem";
 
@@ -23,12 +25,14 @@ export type TaskTimelineRow =
       endedAt?: number;
       settled: boolean;
     }
+  | { type: "file-review"; id: string; changes: FileChange[] }
   | { type: "tool"; id: string };
 
 type BuildTaskRowsOptions = {
   timeline: SnapshotTimelineEntry[];
   messagesById: Record<string, AgentMessage>;
   toolCallsById: Record<string, ToolCallState>;
+  turnFileChangesByIndex?: Record<number, FileChange[]>;
   busy: boolean;
   runTiming: { startedAt: number; settledAt?: number } | null;
 };
@@ -90,10 +94,12 @@ export function buildTaskRows({
   timeline,
   messagesById,
   toolCallsById,
+  turnFileChangesByIndex = {},
   busy,
   runTiming,
 }: BuildTaskRowsOptions): TaskTimelineRow[] {
   const rows: TaskTimelineRow[] = [];
+  let userTurnIndex = -1;
 
   for (let index = 0; index < timeline.length;) {
     const entry = timeline[index];
@@ -104,6 +110,7 @@ export function buildTaskRows({
       continue;
     }
 
+    userTurnIndex += 1;
     rows.push({ type: "message", id: entry.id });
     const segmentStart = index + 1;
     let segmentEnd = segmentStart;
@@ -115,6 +122,12 @@ export function buildTaskRows({
     }
 
     const segment = timeline.slice(segmentStart, segmentEnd);
+    const legacyFileChanges = segment.flatMap((candidate) => {
+      if (candidate.type !== "tool") return [];
+      const tool = toolCallsById[candidate.id];
+      return tool?.fileChanges ?? (tool?.fileChange ? [tool.fileChange] : []);
+    });
+    const fileChanges = turnFileChangesByIndex[userTurnIndex] ?? legacyFileChanges;
     let finalAssistantId: string | undefined;
     for (let cursor = segment.length - 1; cursor >= 0; cursor -= 1) {
       const candidate = segment[cursor];
@@ -165,6 +178,9 @@ export function buildTaskRows({
       settled,
     });
     if (finalAssistantId) rows.push({ type: "message", id: finalAssistantId, hideThinking: true });
+    if (settled && fileChanges.length > 0) {
+      rows.push({ type: "file-review", id: `file-review:${entry.id}`, changes: fileChanges });
+    }
     index = segmentEnd;
   }
 
@@ -183,6 +199,7 @@ export function ChatPanel() {
   const timelineOrder = useAgentStore((state) => state.timelineOrder);
   const messagesById = useAgentStore((state) => state.messagesById);
   const toolCallsById = useAgentStore((state) => state.toolCallsById);
+  const turnFileChangesByIndex = useAgentStore((state) => state.turnFileChangesByIndex);
   const activityRevision = useAgentStore((state) => state.activityRevision);
   const activeSessionId = useAgentStore((state) => state.activeSessionId);
   const busy = useAgentStore((state) => state.busy);
@@ -209,9 +226,10 @@ export function ChatPanel() {
     timeline: timelineOrder,
     messagesById,
     toolCallsById,
+    turnFileChangesByIndex,
     busy,
     runTiming,
-  }), [activeSessionId, timelineOrder, messagesById, toolCallsById, busy, runTiming]);
+  }), [activeSessionId, timelineOrder, messagesById, toolCallsById, turnFileChangesByIndex, busy, runTiming]);
   const settledPresentationRef = useRef(livePresentation);
   const switchingSession = pendingSessionId !== null;
   // Cached session metadata and partial runtime events can both arrive before
@@ -224,15 +242,16 @@ export function ChatPanel() {
       timeline: presentation.timeline,
       messagesById: presentation.messagesById,
       toolCallsById: presentation.toolCallsById,
+      turnFileChangesByIndex: presentation.turnFileChangesByIndex,
       busy: presentation.busy,
       runTiming: presentation.runTiming,
     }),
-    [presentation.timeline, presentation.messagesById, presentation.toolCallsById, presentation.busy, presentation.runTiming],
+    [presentation.timeline, presentation.messagesById, presentation.toolCallsById, presentation.turnFileChangesByIndex, presentation.busy, presentation.runTiming],
   );
   const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     count: rows.length,
     getScrollElement: () => viewportRef.current,
-    estimateSize: (index) => rows[index]?.type === "message" ? 170 : rows[index]?.type === "task-activity" ? 54 : 76,
+    estimateSize: (index) => rows[index]?.type === "message" ? 170 : rows[index]?.type === "task-activity" ? 54 : rows[index]?.type === "file-review" ? 78 : 76,
     getItemKey: (index) => rows[index]?.id ?? index,
     overscan: 6,
   });
@@ -414,6 +433,8 @@ export function ChatPanel() {
                   settled={row.settled}
                 />
               );
+            } else if (row.type === "file-review") {
+              content = <AgentChangeReview changes={row.changes} />;
             } else {
               const tool = presentation.toolCallsById[row.id];
               content = tool ? <ToolCallCard tool={tool} /> : null;

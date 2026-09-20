@@ -3,7 +3,7 @@ import type { AgentRuntimeSnapshot, DesktopModel, SessionListItem, ThinkingLevel
 import { agentGateway } from "../services/agent-gateway";
 import { useAgentStore } from "./agent-store";
 import { useResourceStore } from "./resource-store";
-import { useSessionStore } from "./session-store";
+import { mergeCachedFileChanges, useSessionStore } from "./session-store";
 import { useSettingsStore } from "./settings-store";
 
 const originalResourceInitialize = useResourceStore.getState().initialize;
@@ -99,6 +99,26 @@ describe("session switch presentation", () => {
     const cwd = "D:\\workspace";
     const first = snapshot("instant-a", "cached A");
     const second = snapshot("instant-b", "cached B");
+    const fileChange = {
+      path: "src/app.ts",
+      changeType: "modified" as const,
+      beforeContent: "old\n",
+      afterContent: "new\n",
+      unifiedDiff: "@@ -1 +1 @@\n-old\n+new",
+      toolCallId: "edit-1",
+      timestamp: 2,
+    };
+    const tool = {
+      id: "edit-1",
+      name: "edit",
+      args: { path: "src/app.ts" },
+      output: [],
+      status: "done" as const,
+      startedAt: 1,
+      completedAt: 2,
+    };
+    first.history.toolCalls = [tool];
+    first.history.timeline.push({ type: "tool", id: tool.id });
     let finishSwitch!: (value: AgentRuntimeSnapshot) => void;
     const delayedSwitch = new Promise<AgentRuntimeSnapshot>((resolve) => {
       finishSwitch = resolve;
@@ -115,6 +135,12 @@ describe("session switch presentation", () => {
     useAgentStore.getState().setProcessStatus({ state: "running", cwd });
 
     await useSessionStore.getState().initialize(cwd);
+    useAgentStore.setState((state) => ({
+      toolCallsById: {
+        ...state.toolCallsById,
+        [tool.id]: { ...tool, fileChange },
+      },
+    }));
     await useSessionStore.getState().switchSession("instant-b");
 
     const pending = useSessionStore.getState().switchSession("instant-a");
@@ -134,7 +160,64 @@ describe("session switch presentation", () => {
       pendingSessionId: null,
       mutation: null,
     });
+    expect(useAgentStore.getState().toolCallsById[tool.id]?.fileChange).toEqual(fileChange);
     expect(initializeResources).not.toHaveBeenCalled();
+  });
+
+  it("keeps client-captured file changes after the authoritative session snapshot arrives", () => {
+    const server = snapshot("instant-a", "server history");
+    const cached = snapshot("instant-a", "cached history");
+    const fileChange = {
+      path: "src/app.ts",
+      changeType: "modified" as const,
+      beforeContent: "old\n",
+      afterContent: "new\n",
+      unifiedDiff: "@@ -1 +1 @@\n-old\n+new",
+      toolCallId: "edit-1",
+      timestamp: 2,
+    };
+    const tool = {
+      id: "edit-1",
+      name: "edit",
+      args: { path: "src/app.ts" },
+      output: [],
+      status: "done" as const,
+      startedAt: 1,
+      completedAt: 2,
+    };
+    server.history.toolCalls = [tool];
+    server.history.timeline.push({ type: "tool", id: tool.id });
+    cached.history.toolCalls = [{ ...tool, fileChange }];
+
+    expect(mergeCachedFileChanges(server, cached).history.toolCalls[0]?.fileChange).toEqual(fileChange);
+  });
+
+  it("keeps client-captured turn diffs after switching away and back", () => {
+    const server = snapshot("instant-a", "server history");
+    const cached = snapshot("instant-a", "cached history");
+    const userMessage = {
+      id: "instant-a:user",
+      role: "user" as const,
+      content: [{ type: "text" as const, contentIndex: 0, text: "修改文件" }],
+      timestamp: 0,
+      streaming: false,
+    };
+    server.history.messages.unshift(userMessage);
+    server.history.timeline.unshift({ type: "message", id: userMessage.id });
+    cached.history.messages.unshift(userMessage);
+    cached.history.timeline.unshift({ type: "message", id: userMessage.id });
+    const changes = [{
+      path: "src/generated.ts",
+      changeType: "created" as const,
+      afterContent: "export {};\n",
+      unifiedDiff: "+export {};",
+      timestamp: 2,
+    }];
+    cached.history.turnFileChanges = [{ turnIndex: 0, changes }];
+
+    expect(mergeCachedFileChanges(server, cached).history.turnFileChanges).toEqual([
+      { turnIndex: 0, changes },
+    ]);
   });
 
   it("applies the preferred model and thinking level to a new session", async () => {

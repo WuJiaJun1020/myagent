@@ -230,6 +230,14 @@ function parseExtensions(value: unknown, cwd: string): RuntimeExtensionSummary[]
     const path = readString(item.path);
     const source = sourceInfo(item.sourceInfo, cwd);
     if (!path || !source) return [];
+    const shortcuts = Array.isArray(item.shortcuts)
+      ? item.shortcuts.flatMap((shortcut) => {
+          if (!isRecord(shortcut)) return [];
+          const key = readString(shortcut.shortcut)?.trim();
+          const description = readString(shortcut.description)?.trim();
+          return key ? [{ shortcut: key, ...(description ? { description } : {}) }] : [];
+        })
+      : [];
     return [{
       id: `${source.scope}:${path}`,
       name: basename(path, extname(path)) || source.label,
@@ -237,6 +245,7 @@ function parseExtensions(value: unknown, cwd: string): RuntimeExtensionSummary[]
       source,
       toolNames: readStringArray(item.toolNames),
       commandNames: readStringArray(item.commandNames),
+      shortcuts,
     }];
   });
 }

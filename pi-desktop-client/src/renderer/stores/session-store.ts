@@ -67,6 +67,37 @@ function rememberSnapshot(snapshot: AgentRuntimeSnapshot, cwd: string): void {
   if (typeof oldest === "string") sessionSnapshotCache.delete(oldest);
 }
 
+export function mergeCachedFileChanges(
+  snapshot: AgentRuntimeSnapshot,
+  cachedSnapshot: AgentRuntimeSnapshot | undefined,
+): AgentRuntimeSnapshot {
+  if (!cachedSnapshot) return snapshot;
+  const changesByToolId = new Map(cachedSnapshot.history.toolCalls.flatMap((tool) => {
+    const fileChanges = tool.fileChanges ?? (tool.fileChange ? [tool.fileChange] : []);
+    return fileChanges.length > 0 ? [[tool.id, fileChanges] as const] : [];
+  }));
+  const userTurnCount = snapshot.history.messages.filter((message) => message.role === "user").length;
+  const turnFileChanges = [
+    ...(cachedSnapshot.history.turnFileChanges ?? []),
+    ...(snapshot.history.turnFileChanges ?? []),
+  ].reduce((entries, entry) => {
+    if (entry.turnIndex >= 0 && entry.turnIndex < userTurnCount) entries.set(entry.turnIndex, entry);
+    return entries;
+  }, new Map<number, NonNullable<AgentRuntimeSnapshot["history"]["turnFileChanges"]>[number]>());
+  if (changesByToolId.size === 0 && turnFileChanges.size === 0) return snapshot;
+  return {
+    ...snapshot,
+    history: {
+      ...snapshot.history,
+      turnFileChanges: [...turnFileChanges.values()].sort((left, right) => left.turnIndex - right.turnIndex),
+      toolCalls: snapshot.history.toolCalls.map((tool) => {
+        const fileChanges = changesByToolId.get(tool.id);
+        return fileChanges ? { ...tool, fileChange: fileChanges.at(-1), fileChanges } : tool;
+      }),
+    },
+  };
+}
+
 function captureCurrentSnapshot(state: SessionStore, cwd: string): AgentRuntimeSnapshot | undefined {
   if (!state.session) return undefined;
   const runtime = useAgentStore.getState();
@@ -78,6 +109,8 @@ function captureCurrentSnapshot(state: SessionStore, cwd: string): AgentRuntimeS
     status: tool.status,
     startedAt: tool.startedAt,
     ...(tool.completedAt === undefined ? {} : { completedAt: tool.completedAt }),
+    ...(tool.fileChange ? { fileChange: tool.fileChange } : {}),
+    ...(tool.fileChanges ? { fileChanges: tool.fileChanges } : {}),
   }]);
   const snapshot: AgentRuntimeSnapshot = {
     sequence: runtime.lastSequence,
@@ -90,6 +123,9 @@ function captureCurrentSnapshot(state: SessionStore, cwd: string): AgentRuntimeS
       messages: Object.values(runtime.messagesById),
       toolCalls,
       timeline: runtime.timelineOrder,
+      turnFileChanges: Object.entries(runtime.turnFileChangesByIndex)
+        .map(([turnIndex, changes]) => ({ turnIndex: Number(turnIndex), changes }))
+        .sort((left, right) => left.turnIndex - right.turnIndex),
     },
   };
   rememberSnapshot(snapshot, cwd);
@@ -255,8 +291,9 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       });
     }
     try {
-      const snapshot = await agentGateway.switchSession(sessionId);
+      const serverSnapshot = await agentGateway.switchSession(sessionId);
       if (generation !== operationGeneration) return;
+      const snapshot = mergeCachedFileChanges(serverSnapshot, cached?.snapshot);
       const nextCwd = useAgentStore.getState().processStatus.cwd;
       applySnapshot(snapshot, nextCwd);
       if (nextCwd !== cwd || snapshot.session.mode !== previousState.session?.mode) {

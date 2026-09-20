@@ -17,6 +17,8 @@ export function TopBar() {
   const activeFilePath = useWorkspaceStore((state) => state.activeFilePath);
   const workspaceSection = sidebarView === "files"
     ? activeFilePath ?? "项目文件"
+    : sidebarView === "review"
+      ? "代码审查"
     : sidebarView === "mcp"
       ? "资源中心"
       : sidebarView === "memory"
@@ -46,8 +48,8 @@ export function TopBar() {
         <button
           className={`topbar-icon-button ${detailPanelOpen ? "active" : ""}`}
           type="button"
-          title={detailPanelOpen ? "隐藏详情面板" : "显示详情面板"}
-          aria-label={detailPanelOpen ? "隐藏详情面板" : "显示详情面板"}
+          title={detailPanelOpen ? "隐藏工作区面板" : "显示工作区面板"}
+          aria-label={detailPanelOpen ? "隐藏工作区面板" : "显示工作区面板"}
           onClick={toggleDetailPanel}
         ><PanelRight size={15} /></button>
       </div>

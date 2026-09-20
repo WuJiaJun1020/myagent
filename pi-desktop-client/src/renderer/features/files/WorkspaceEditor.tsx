@@ -1,7 +1,6 @@
 import { FileCode2, LoaderCircle } from "lucide-react";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import { CodeEditor } from "./CodeEditor";
-import { GitReview } from "./GitReview";
 
 export function WorkspaceEditor() {
   const activeFilePath = useWorkspaceStore((state) => state.activeFilePath);
@@ -16,5 +15,5 @@ export function WorkspaceEditor() {
     return <div className="workspace-editor-state error"><FileCode2 size={17} />{fileError}</div>;
   }
   if (file) return <CodeEditor file={file} />;
-  return <GitReview />;
+  return <div className="workspace-editor-state"><FileCode2 size={18} />从左侧项目树选择文件，或打开“代码审查”查看工作区变更。</div>;
 }

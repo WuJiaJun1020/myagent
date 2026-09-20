@@ -23,6 +23,7 @@ import type { ImageAttachment, SessionMode, SlashCommand, ThinkingLevel } from "
 import type { WorkspaceFileReference } from "../../../shared/contracts/workspace";
 import { agentGateway } from "../../services/agent-gateway";
 import { workspaceGateway } from "../../services/workspace-gateway";
+import { restoreQueuedMessages } from "../../lib/queued-messages";
 import { useAgentStore } from "../../stores/agent-store";
 import { useSessionStore } from "../../stores/session-store";
 import { useUiStore } from "../../stores/ui-store";
@@ -61,6 +62,8 @@ export function Composer() {
   const [commandIndex, setCommandIndex] = useState(0);
   const [queueMutation, setQueueMutation] = useState<string | null>(null);
   const [selectingImages, setSelectingImages] = useState(false);
+  const [bashRunning, setBashRunning] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [fileReferences, setFileReferences] = useState<WorkspaceFileReference[]>([]);
   const [fileReferenceIndex, setFileReferenceIndex] = useState(0);
   const status = useAgentStore((state) => state.processStatus);
@@ -88,7 +91,12 @@ export function Composer() {
   const sessionChanging = sessionMutation === "initializing" || sessionMutation === "session";
   const sessionReady = session !== null && !sessionChanging;
   const chatMode = session?.mode === "chat";
-  const canSend = input.trim().length > 0 && status.state === "running" && sessionReady && sessionMutation === null;
+  const canSend = input.trim().length > 0
+    && status.state === "running"
+    && sessionReady
+    && sessionMutation === null
+    && !bashRunning
+    && !stopping;
   const commandQuery = input.startsWith("/") && !input.slice(1).includes(" ")
     ? input.slice(1).toLowerCase()
     : null;
@@ -182,7 +190,7 @@ export function Composer() {
         return true;
       }
       case "abort":
-        await agentGateway.abort();
+        await abortCurrentTask();
         return true;
       default:
         return false;
@@ -191,7 +199,7 @@ export function Composer() {
 
   async function send(): Promise<void> {
     const message = input.trim();
-    if (!message || status.state !== "running" || !sessionReady) return;
+    if (!message || status.state !== "running" || !sessionReady || bashRunning || stopping) return;
     setSessionComposerDraft(session.id, { text: "", attachments });
     setError(null);
     try {
@@ -202,7 +210,12 @@ export function Composer() {
         if (!command) {
           throw new Error(excludeFromContext ? "用法：!!<命令>" : "用法：!<命令>");
         }
-        await agentGateway.runBash(command, excludeFromContext);
+        setBashRunning(true);
+        try {
+          await agentGateway.runBash(command, excludeFromContext);
+        } finally {
+          setBashRunning(false);
+        }
         return;
       }
       if (message.startsWith("/")) {
@@ -220,11 +233,44 @@ export function Composer() {
     }
   }
 
-  async function abort(): Promise<void> {
+  async function abortCurrentTask(): Promise<void> {
+    if (!session || stopping) return;
+    const sessionId = session.id;
+    setStopping(true);
+    const failures: string[] = [];
     try {
-      await agentGateway.abort();
+      try {
+        const queued = await agentGateway.clearQueue();
+        if (queued.steering.length > 0 || queued.followUp.length > 0) {
+          const draft = useUiStore.getState().sessionComposerDrafts[sessionId];
+          setSessionComposerDraft(sessionId, {
+            text: restoreQueuedMessages(queued, draft?.text ?? ""),
+            attachments: draft?.attachments ?? [],
+          });
+        }
+      } catch (reason) {
+        failures.push(`恢复排队消息失败：${reason instanceof Error ? reason.message : String(reason)}`);
+      }
+      try {
+        await agentGateway.abort();
+      } catch (reason) {
+        failures.push(`停止当前任务失败：${reason instanceof Error ? reason.message : String(reason)}`);
+      }
+      setError(failures.length > 0 ? failures.join("；") : null);
+    } finally {
+      setStopping(false);
+    }
+  }
+
+  async function abortBash(): Promise<void> {
+    if (stopping) return;
+    setStopping(true);
+    try {
+      await agentGateway.abortBash();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setStopping(false);
     }
   }
 
@@ -475,7 +521,7 @@ export function Composer() {
               event.preventDefault();
               void addImageFiles(images);
             }}
-            placeholder={!sessionReady ? "正在同步 Pi 会话…" : busy ? "追加后续要求，Pi 会在当前任务后处理…" : chatMode ? "和 Pi 聊点什么，输入 / 查看指令…" : "描述任务；输入 / 查看指令、@ 引用文件，或用 ! 执行命令…"}
+            placeholder={!sessionReady ? "正在同步 Pi 会话…" : bashRunning ? "Shell 命令正在执行，可点击停止按钮中止…" : busy ? "追加后续要求，Pi 会在当前任务后处理…" : chatMode ? "和 Pi 聊点什么，输入 / 查看指令…" : "描述任务；输入 / 查看指令、@ 引用文件，或用 ! 执行命令…"}
             disabled={!sessionReady}
             rows={3}
             aria-label="发送给 Pi 的任务"
@@ -516,8 +562,8 @@ export function Composer() {
               <button className="composer-voice-button" type="button" disabled title="语音输入暂未开放" aria-label="语音输入暂未开放">
                 <Mic size={16} />
               </button>
-              {busy ? (
-                <button className="stop-button" type="button" title="中止当前任务" onClick={() => void abort()}>
+              {busy || bashRunning ? (
+                <button className="stop-button" type="button" disabled={stopping} title={bashRunning ? "中止 Shell 命令" : "中止当前任务并恢复排队消息"} onClick={() => void (bashRunning ? abortBash() : abortCurrentTask())}>
                   <Square size={14} fill="currentColor" />
                 </button>
               ) : (

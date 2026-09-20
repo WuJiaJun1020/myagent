@@ -68,13 +68,17 @@ export interface AgentGateway {
   sendPrompt(message: string, imageIds?: string[], streamingBehavior?: "steer" | "followUp"): Promise<void>;
   compact(customInstructions?: string): Promise<void>;
   abort(): Promise<void>;
+  clearQueue(): Promise<QueuedMessages>;
   updateQueueItem(
     source: "steer" | "followUp",
     index: number,
     action: "steer" | "followUp" | "delete",
   ): Promise<void>;
   runBash(command: string, excludeFromContext?: boolean, cwd?: string, id?: string): Promise<TerminalCommandResult>;
+  abortBash(): Promise<void>;
   abortRetry(): Promise<void>;
+  invokeExtensionShortcut(shortcut: string): Promise<void>;
+  setWindowTitle(title?: string): Promise<void>;
   respondToInteraction(request: InteractionRequest, response: Omit<ExtensionUiResponse, "type" | "id">): Promise<void>;
   subscribe(listener: (event: AgentEvent) => void): () => void;
   subscribeStatus(listener: (status: ProcessStatus) => void): () => void;
@@ -85,6 +89,11 @@ export type TerminalCommandResult = {
   exitCode?: number;
   cancelled: boolean;
   truncated: boolean;
+};
+
+export type QueuedMessages = {
+  steering: string[];
+  followUp: string[];
 };
 
 class DesktopAgentGateway implements AgentGateway {
@@ -268,6 +277,19 @@ class DesktopAgentGateway implements AgentGateway {
     await window.piDesktop.send({ type: "abort" });
   }
 
+  async clearQueue(): Promise<QueuedMessages> {
+    const response = await window.piDesktop.send({ type: "clear_queue" });
+    const data = response.data;
+    if (!data || typeof data !== "object") return { steering: [], followUp: [] };
+    const steering = Array.isArray((data as { steering?: unknown }).steering)
+      ? (data as { steering: unknown[] }).steering.filter((item): item is string => typeof item === "string")
+      : [];
+    const followUp = Array.isArray((data as { followUp?: unknown }).followUp)
+      ? (data as { followUp: unknown[] }).followUp.filter((item): item is string => typeof item === "string")
+      : [];
+    return { steering, followUp };
+  }
+
   async updateQueueItem(
     source: "steer" | "followUp",
     index: number,
@@ -298,8 +320,21 @@ class DesktopAgentGateway implements AgentGateway {
     };
   }
 
+  async abortBash(): Promise<void> {
+    await window.piDesktop.send({ type: "abort_bash" });
+  }
+
   async abortRetry(): Promise<void> {
     await window.piDesktop.send({ type: "abort_retry" });
+  }
+
+  async invokeExtensionShortcut(shortcut: string): Promise<void> {
+    await window.piDesktop.send({ type: "invoke_extension_shortcut", shortcut });
+  }
+
+  setWindowTitle(title?: string): Promise<void> {
+    if (typeof window === "undefined") return Promise.resolve();
+    return window.piDesktop.setWindowTitle(title);
   }
 
   respondToInteraction(

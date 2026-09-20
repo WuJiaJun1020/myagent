@@ -59,6 +59,10 @@ export type RuntimeExtensionSummary = {
   source: RuntimeToolSource;
   toolNames: string[];
   commandNames: string[];
+  shortcuts: Array<{
+    shortcut: string;
+    description?: string;
+  }>;
 };
 
 export type RuntimePackageScope = "user" | "project";

@@ -180,6 +180,7 @@ export type RpcCommand =
 
 	// Runtime resources (tools, extensions, and loaded context files)
 	| { id?: string; type: "get_resources" }
+	| { id?: string; type: "invoke_extension_shortcut"; shortcut: string }
 
 	// Commands (available for invocation via prompt)
 	| { id?: string; type: "get_commands" };
@@ -214,6 +215,7 @@ export interface RpcRuntimeExtension {
 	sourceInfo: SourceInfo;
 	toolNames: string[];
 	commandNames: string[];
+	shortcuts: Array<{ shortcut: string; description?: string }>;
 }
 
 export interface RpcContextResource {
@@ -506,6 +508,7 @@ export type RpcResponse =
 
 	// Runtime resources
 	| { id?: string; type: "response"; command: "get_resources"; success: true; data: RpcResourceState }
+	| { id?: string; type: "response"; command: "invoke_extension_shortcut"; success: true }
 
 	// Commands
 	| {
@@ -560,6 +563,13 @@ export type RpcExtensionUIRequest =
 	  }
 	| { type: "extension_ui_request"; id: string; method: "setTitle"; title: string }
 	| { type: "extension_ui_request"; id: string; method: "set_editor_text"; text: string };
+
+/** Emitted when a pending extension dialog is no longer actionable. */
+export type RpcExtensionUIClose = {
+	type: "extension_ui_close";
+	id: string;
+	reason: "timeout" | "cancelled";
+};
 
 // ============================================================================
 // Extension UI Commands (stdin)

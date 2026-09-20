@@ -272,7 +272,7 @@ Example for a model that only supports off, high, and max reasoning:
 
 ```json
 {
-  "id": "deepseek-v4-pro",
+  "id": "example-reasoning-model",
   "reasoning": true,
   "thinkingLevelMap": {
     "minimal": null,

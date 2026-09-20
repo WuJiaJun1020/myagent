@@ -586,6 +586,30 @@ export class ExtensionRunner {
 		return extensionShortcuts;
 	}
 
+	/**
+	 * Get extension shortcuts without applying TUI keybinding conflicts.
+	 *
+	 * Non-TUI hosts (for example RPC desktop clients) own their keybinding
+	 * namespace and resolve host-specific conflicts themselves.
+	 */
+	getRegisteredShortcuts(): Map<KeyId, ExtensionShortcut> {
+		const shortcuts = new Map<KeyId, ExtensionShortcut>();
+		for (const extension of this.extensions) {
+			for (const [key, shortcut] of extension.shortcuts) {
+				shortcuts.set(key.toLowerCase() as KeyId, shortcut);
+			}
+		}
+		return shortcuts;
+	}
+
+	/** Invoke a shortcut registered by the currently active extension runner. */
+	async invokeShortcut(key: string): Promise<void> {
+		this.assertActive();
+		const shortcut = this.getRegisteredShortcuts().get(key.toLowerCase() as KeyId);
+		if (!shortcut) throw new Error(`Extension shortcut not found: ${key}`);
+		await shortcut.handler(this.createContext());
+	}
+
 	getShortcutDiagnostics(): ResourceDiagnostic[] {
 		return this.shortcutDiagnostics;
 	}

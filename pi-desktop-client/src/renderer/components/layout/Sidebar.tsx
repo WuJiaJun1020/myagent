@@ -5,9 +5,9 @@ import {
   Database,
   Files,
   FolderOpen,
+  GitPullRequest,
   MessageCircle,
   MessageSquareText,
-  Search,
   Settings,
 } from "lucide-react";
 import { agentGateway } from "../../services/agent-gateway";
@@ -17,10 +17,6 @@ import { useSessionStore } from "../../stores/session-store";
 import { FileTree } from "../../features/files/FileTree";
 import { SessionHistory } from "../../features/sessions/SessionHistory";
 import { ResourceSidebarSummary } from "../../features/resources/ResourceSidebarSummary";
-
-const futureItems = [
-  { label: "全局搜索", icon: Search, phase: "后续" },
-];
 
 function getWorkspaceName(cwd: string): string {
   return cwd.split(/[\\/]/).filter(Boolean).at(-1) ?? "未选择工作区";
@@ -108,6 +104,10 @@ export function Sidebar() {
           <Files size={16} />
           <span>项目文件</span>
         </button>
+        <button className={`nav-item ${sidebarView === "review" ? "active" : ""}`} type="button" onClick={() => setSidebarView("review")}>
+          <GitPullRequest size={16} />
+          <span>代码审查</span>
+        </button>
         <button className={`nav-item ${sidebarView === "mcp" ? "active" : ""}`} type="button" onClick={() => setSidebarView("mcp")}>
           <Blocks size={16} />
           <span>资源中心</span>
@@ -116,13 +116,6 @@ export function Sidebar() {
           <Database size={16} />
           <span>Memory</span>
         </button>
-        {futureItems.map(({ label, icon: Icon, phase }) => (
-          <button className="nav-item future" type="button" key={label} disabled title={`${phase} 接入`}>
-            <Icon size={16} />
-            <span>{label}</span>
-            <small>{phase}</small>
-          </button>
-        ))}
       </nav>
 
       <section className="sidebar-projects" aria-label="项目">
@@ -133,7 +126,9 @@ export function Sidebar() {
         </button>
       </section>
 
-      {sidebarView === "files" ? <FileTree /> : sidebarView === "activity" ? <SessionHistory /> : <ResourceSidebarSummary view={sidebarView} />}
+      {sidebarView === "files" ? <FileTree /> : sidebarView === "activity" || sidebarView === "review"
+        ? <SessionHistory />
+        : <ResourceSidebarSummary view={sidebarView} />}
 
       <div className="sidebar-footer">
         <div className={`connection ${status.state}`}>

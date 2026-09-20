@@ -1,6 +1,7 @@
 import { lstat, open, readdir, realpath, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { RpcMessage } from "../../shared/rpc";
+import { createUnifiedDiff } from "../../shared/unified-diff";
 import type {
   FileChange,
   WorkspaceDirectoryListing,
@@ -14,19 +15,27 @@ const MAX_DIRECTORY_ENTRIES = 500;
 const MAX_FILE_BYTES = 1_000_000;
 const MAX_CHANGE_BYTES = 500_000;
 const MAX_DIFF_LENGTH = 200_000;
+const MAX_WORKSPACE_SNAPSHOT_FILES = 20_000;
+const MAX_WORKSPACE_SNAPSHOT_BYTES = 32 * 1024 * 1024;
 const MAX_SEARCH_RESULTS = 60;
 const MAX_SEARCH_ENTRIES = 20_000;
 const SEARCH_IGNORED_DIRECTORIES = new Set([".git", "node_modules", "dist", "release", ".cache"]);
+const SNAPSHOT_IGNORED_DIRECTORIES = new Set([
+  ...SEARCH_IGNORED_DIRECTORIES,
+  "build",
+  "coverage",
+  ".next",
+  "out",
+  "target",
+  "__pycache__",
+]);
 
 type FileSnapshot = {
   exists: boolean;
   content?: string;
   truncated?: boolean;
-};
-
-type PendingMutation = {
-  path: string;
-  before: FileSnapshot;
+  size?: number;
+  modifiedAt?: number;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -84,46 +93,16 @@ function limitDiff(diff: string): { diff: string; truncated: boolean } {
   };
 }
 
-function splitLines(content: string): string[] {
-  const lines = content.replaceAll("\r\n", "\n").split("\n");
-  if (lines.at(-1) === "") lines.pop();
-  return lines;
+function snapshotsEqual(before: FileSnapshot | undefined, after: FileSnapshot | undefined): boolean {
+  if (!before || !after) return before === after;
+  if (before.truncated || after.truncated) {
+    return before.size === after.size && before.modifiedAt === after.modifiedAt;
+  }
+  if (before.content !== undefined && after.content !== undefined) return before.content === after.content;
+  return before.size === after.size && before.modifiedAt === after.modifiedAt;
 }
 
-export function createUnifiedDiff(path: string, before: string, after: string): string {
-  if (before === after) return "";
-  const oldLines = splitLines(before);
-  const newLines = splitLines(after);
-  let prefix = 0;
-  while (prefix < oldLines.length && prefix < newLines.length && oldLines[prefix] === newLines[prefix]) prefix += 1;
-
-  let suffix = 0;
-  while (
-    suffix < oldLines.length - prefix
-    && suffix < newLines.length - prefix
-    && oldLines[oldLines.length - 1 - suffix] === newLines[newLines.length - 1 - suffix]
-  ) suffix += 1;
-
-  const contextBefore = Math.min(3, prefix);
-  const contextAfter = Math.min(3, suffix);
-  const oldStart = prefix - contextBefore;
-  const newStart = prefix - contextBefore;
-  const oldChangedEnd = oldLines.length - suffix;
-  const newChangedEnd = newLines.length - suffix;
-  const oldCount = oldChangedEnd - oldStart + contextAfter;
-  const newCount = newChangedEnd - newStart + contextAfter;
-  const output = [
-    `--- a/${path}`,
-    `+++ b/${path}`,
-    `@@ -${oldStart + 1},${oldCount} +${newStart + 1},${newCount} @@`,
-  ];
-
-  for (let index = oldStart; index < prefix; index += 1) output.push(` ${oldLines[index]}`);
-  for (let index = prefix; index < oldChangedEnd; index += 1) output.push(`-${oldLines[index]}`);
-  for (let index = prefix; index < newChangedEnd; index += 1) output.push(`+${newLines[index]}`);
-  for (let index = 0; index < contextAfter; index += 1) output.push(` ${oldLines[oldChangedEnd + index]}`);
-  return output.join("\n");
-}
+export { createUnifiedDiff } from "../../shared/unified-diff";
 
 export class WorkspaceFileService {
   constructor(private readonly getWorkspaceRoot: () => string) {}
@@ -280,11 +259,77 @@ export class WorkspaceFileService {
       const fileStat = await stat(absolutePath);
       if (!fileStat.isFile()) return { exists: false };
       const result = await readLimitedFile(absolutePath, MAX_CHANGE_BYTES);
-      return { exists: true, content: result.content, truncated: result.truncated };
+      return {
+        exists: true,
+        content: result.content,
+        truncated: result.truncated,
+        size: fileStat.size,
+        modifiedAt: fileStat.mtimeMs,
+      };
     } catch (error) {
       if (isRecord(error) && error.code === "ENOENT") return { exists: false };
       throw error;
     }
+  }
+
+  async snapshotWorkspace(): Promise<Map<string, FileSnapshot>> {
+    const root = await this.resolveExistingPath("");
+    const paths: string[] = [];
+    const directories = [{ absolute: root, relative: "" }];
+
+    while (directories.length > 0 && paths.length < MAX_WORKSPACE_SNAPSHOT_FILES) {
+      const current = directories.shift()!;
+      let entries;
+      try {
+        entries = await readdir(current.absolute, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        if (entry.isSymbolicLink()) continue;
+        const relativePath = joinRelative(current.relative, entry.name);
+        const absolutePath = join(current.absolute, entry.name);
+        if (entry.isDirectory()) {
+          if (!SNAPSHOT_IGNORED_DIRECTORIES.has(entry.name)) {
+            directories.push({ absolute: absolutePath, relative: relativePath });
+          }
+        } else if (entry.isFile()) {
+          paths.push(relativePath);
+          if (paths.length >= MAX_WORKSPACE_SNAPSHOT_FILES) break;
+        }
+      }
+    }
+
+    const snapshots = new Map<string, FileSnapshot>();
+    let capturedBytes = 0;
+    for (const path of paths.sort()) {
+      const absolutePath = resolve(root, path);
+      assertContained(root, absolutePath);
+      try {
+        const fileStat = await stat(absolutePath);
+        const remainingBytes = MAX_WORKSPACE_SNAPSHOT_BYTES - capturedBytes;
+        if (remainingBytes <= 0) {
+          snapshots.set(path, { exists: true, truncated: true, size: fileStat.size, modifiedAt: fileStat.mtimeMs });
+          continue;
+        }
+        try {
+          const result = await readLimitedFile(absolutePath, Math.min(MAX_CHANGE_BYTES, remainingBytes));
+          capturedBytes += Buffer.byteLength(result.content, "utf8");
+          snapshots.set(path, {
+            exists: true,
+            content: result.content,
+            truncated: result.truncated || fileStat.size > remainingBytes,
+            size: fileStat.size,
+            modifiedAt: fileStat.mtimeMs,
+          });
+        } catch {
+          snapshots.set(path, { exists: true, truncated: true, size: fileStat.size, modifiedAt: fileStat.mtimeMs });
+        }
+      } catch {
+        // A command can remove a file while the workspace snapshot is being captured.
+      }
+    }
+    return snapshots;
   }
 
   private async resolveExistingPath(requestPath: string): Promise<string> {
@@ -310,56 +355,57 @@ export class WorkspaceFileService {
   }
 }
 
-function mutationPath(event: RpcMessage): string | undefined {
-  const toolName = typeof event.toolName === "string" ? event.toolName.toLowerCase() : "";
-  const simpleName = toolName.split(/[:/_.-]/).at(-1);
-  if (simpleName !== "edit" && simpleName !== "write") return undefined;
-  if (!isRecord(event.args) || typeof event.args.path !== "string") return undefined;
-  return event.args.path;
-}
-
-function resultPatch(event: RpcMessage): string | undefined {
-  if (!isRecord(event.result) || !isRecord(event.result.details)) return undefined;
-  return typeof event.result.details.patch === "string" ? event.result.details.patch : undefined;
+function createWorkspaceChanges(
+  before: Map<string, FileSnapshot>,
+  after: Map<string, FileSnapshot>,
+): FileChange[] {
+  const paths = [...new Set([...before.keys(), ...after.keys()])].sort();
+  const timestamp = Date.now();
+  return paths.flatMap((path, index): FileChange[] => {
+    const previous = before.get(path);
+    const current = after.get(path);
+    if (snapshotsEqual(previous, current)) return [];
+    const beforeExists = Boolean(previous?.exists);
+    const afterExists = Boolean(current?.exists);
+    const truncated = Boolean(previous?.truncated || current?.truncated);
+    const beforeContent = truncated ? undefined : previous?.content;
+    const afterContent = truncated ? undefined : current?.content;
+    const generatedDiff = truncated ? "" : createUnifiedDiff(path, beforeContent ?? "", afterContent ?? "");
+    const limited = limitDiff(generatedDiff);
+    return [{
+      path,
+      changeType: !beforeExists ? "created" : !afterExists ? "deleted" : "modified",
+      beforeContent,
+      afterContent,
+      unifiedDiff: limited.diff,
+      timestamp: timestamp + index,
+      truncated: truncated || limited.truncated,
+    }];
+  });
 }
 
 export class FileChangeTracker {
-  private readonly pending = new Map<string, PendingMutation>();
+  private workspaceBaseline: Map<string, FileSnapshot> | undefined;
 
   constructor(private readonly files: WorkspaceFileService) {}
 
-  async captureStart(event: RpcMessage): Promise<void> {
-    if (event.type !== "tool_execution_start" || typeof event.toolCallId !== "string") return;
-    const inputPath = mutationPath(event);
-    if (!inputPath) return;
-    const path = await this.files.toWorkspaceRelative(inputPath);
-    this.pending.set(event.toolCallId, { path, before: await this.files.snapshot(path) });
+  async beginRun(): Promise<void> {
+    if (!this.workspaceBaseline) this.workspaceBaseline = await this.files.snapshotWorkspace();
   }
 
-  async captureEnd(event: RpcMessage): Promise<FileChange | undefined> {
-    if (event.type !== "tool_execution_end" || typeof event.toolCallId !== "string") return undefined;
-    const pending = this.pending.get(event.toolCallId);
-    if (!pending) return undefined;
-    this.pending.delete(event.toolCallId);
+  async captureStart(event: RpcMessage): Promise<void> {
+    if (event.type === "agent_start") await this.beginRun();
+  }
 
-    const after = await this.files.snapshot(pending.path);
-    if (pending.before.exists === after.exists && pending.before.content === after.content) return undefined;
-    const changeType = !pending.before.exists ? "created" : !after.exists ? "deleted" : "modified";
-    const generatedDiff = createUnifiedDiff(pending.path, pending.before.content ?? "", after.content ?? "");
-    const limited = limitDiff(resultPatch(event) || generatedDiff);
-    return {
-      path: pending.path,
-      changeType,
-      beforeContent: pending.before.content,
-      afterContent: after.content,
-      unifiedDiff: limited.diff,
-      toolCallId: event.toolCallId,
-      timestamp: Date.now(),
-      truncated: limited.truncated || pending.before.truncated || after.truncated,
-    };
+  async captureEnd(event: RpcMessage): Promise<FileChange[]> {
+    if (event.type !== "agent_settled" || !this.workspaceBaseline) return [];
+    const before = this.workspaceBaseline;
+    this.workspaceBaseline = undefined;
+    const after = await this.files.snapshotWorkspace();
+    return createWorkspaceChanges(before, after);
   }
 
   clear(): void {
-    this.pending.clear();
+    this.workspaceBaseline = undefined;
   }
 }

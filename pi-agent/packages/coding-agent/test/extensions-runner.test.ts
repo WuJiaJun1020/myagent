@@ -363,6 +363,26 @@ describe("ExtensionRunner", () => {
 
 			warnSpy.mockRestore();
 		});
+
+		it("exposes and invokes extension shortcuts for non-TUI hosts", async () => {
+			const extCode = `
+				export default function(pi) {
+					pi.registerShortcut("ctrl+alt+p", {
+						description: "Run desktop action",
+						handler: async () => {},
+					});
+				}
+			`;
+			fs.writeFileSync(path.join(extensionsDir, "desktop-shortcut.ts"), extCode);
+
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const shortcut = runner.getRegisteredShortcuts().get("ctrl+alt+p");
+
+			expect(shortcut?.description).toBe("Run desktop action");
+			await expect(runner.invokeShortcut("CTRL+ALT+P")).resolves.toBeUndefined();
+			await expect(runner.invokeShortcut("ctrl+alt+missing")).rejects.toThrow("Extension shortcut not found");
+		});
 	});
 
 	describe("tool collection", () => {

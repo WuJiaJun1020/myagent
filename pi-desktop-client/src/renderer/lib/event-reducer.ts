@@ -22,6 +22,7 @@ export type ToolCallState = {
   startedAt: number;
   completedAt?: number;
   fileChange?: FileChange;
+  fileChanges?: FileChange[];
 };
 
 export type AgentRuntimeState = {
@@ -29,6 +30,7 @@ export type AgentRuntimeState = {
   runTiming: { startedAt: number; settledAt?: number } | null;
   messagesById: Record<string, AgentMessage>;
   toolCallsById: Record<string, ToolCallState>;
+  turnFileChangesByIndex: Record<number, FileChange[]>;
   timelineOrder: TimelineEntry[];
   queue: { steering: string[]; followUp: string[] };
   compaction: CompactionState;
@@ -49,6 +51,7 @@ export function createInitialAgentRuntimeState(): AgentRuntimeState {
     runTiming: null,
     messagesById: {},
     toolCallsById: {},
+    turnFileChangesByIndex: {},
     timelineOrder: [],
     queue: { steering: [], followUp: [] },
     compaction: { phase: "idle" },
@@ -62,6 +65,14 @@ export function createInitialAgentRuntimeState(): AgentRuntimeState {
     activeSessionId: null,
     lastSequence: 0,
   };
+}
+
+export function latestUserTurnIndex(
+  state: Pick<AgentRuntimeState, "timelineOrder" | "messagesById">,
+): number {
+  return state.timelineOrder.reduce((count, entry) => (
+    entry.type === "message" && state.messagesById[entry.id]?.role === "user" ? count + 1 : count
+  ), 0) - 1;
 }
 
 function appendTimelineEntry(
@@ -223,14 +234,29 @@ function reduceCurrentSessionEvent(state: AgentRuntimeState, event: AgentEvent):
         activityRevision: revision,
       };
     }
+    case "turn.diff.updated": {
+      const turnIndex = latestUserTurnIndex(state);
+      if (turnIndex < 0) return { ...state, activityRevision: revision };
+      return {
+        ...state,
+        turnFileChangesByIndex: {
+          ...state.turnFileChangesByIndex,
+          [turnIndex]: event.changes,
+        },
+        activityRevision: revision,
+      };
+    }
     case "file.changed": {
-      const current = state.toolCallsById[event.change.toolCallId];
+      const toolCallId = event.change.toolCallId;
+      if (!toolCallId) return { ...state, activityRevision: revision };
+      const current = state.toolCallsById[toolCallId];
       if (!current) return { ...state, activityRevision: revision };
+      const fileChanges = [...(current.fileChanges ?? (current.fileChange ? [current.fileChange] : [])), event.change];
       return {
         ...state,
         toolCallsById: {
           ...state.toolCallsById,
-          [event.change.toolCallId]: { ...current, fileChange: event.change },
+          [toolCallId]: { ...current, fileChange: event.change, fileChanges },
         },
         activityRevision: revision,
       };
@@ -267,6 +293,8 @@ function reduceCurrentSessionEvent(state: AgentRuntimeState, event: AgentEvent):
       else delete extensionWidgets[event.key];
       return { ...state, extensionWidgets, activityRevision: revision };
     }
+    case "extension.title":
+      return { ...state, activityRevision: revision };
     case "composer.draft":
       return { ...state, activityRevision: revision };
     case "interaction.requested":
@@ -275,6 +303,12 @@ function reduceCurrentSessionEvent(state: AgentRuntimeState, event: AgentEvent):
         interactionRequests: state.interactionRequests.some((request) => request.id === event.request.id)
           ? state.interactionRequests
           : [...state.interactionRequests, event.request],
+        activityRevision: revision,
+      };
+    case "interaction.dismissed":
+      return {
+        ...state,
+        interactionRequests: state.interactionRequests.filter((request) => request.id !== event.requestId),
         activityRevision: revision,
       };
     case "error.raised":

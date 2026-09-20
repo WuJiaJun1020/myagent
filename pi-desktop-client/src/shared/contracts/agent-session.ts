@@ -1,4 +1,5 @@
 import type { AgentMessage, ToolOutputBlock } from "./agent-events";
+import type { FileChange } from "./workspace";
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type SessionMode = "work" | "chat";
@@ -131,16 +132,27 @@ export type SnapshotToolCall = {
   status: "done" | "error";
   startedAt: number;
   completedAt?: number;
+  /** Client-side metadata. Pi history does not persist this, so session caches merge it back by tool id. */
+  fileChange?: FileChange;
+  fileChanges?: FileChange[];
 };
 
 export type SnapshotTimelineEntry =
   | { type: "message"; id: string }
   | { type: "tool"; id: string };
 
+export type SnapshotTurnFileChanges = {
+  /** Zero-based index among the user messages in this session. */
+  turnIndex: number;
+  changes: FileChange[];
+};
+
 export type AgentHistorySnapshot = {
   messages: AgentMessage[];
   toolCalls: SnapshotToolCall[];
   timeline: SnapshotTimelineEntry[];
+  /** Client-side turn snapshots; Pi history currently does not persist this metadata. */
+  turnFileChanges?: SnapshotTurnFileChanges[];
 };
 
 export type AgentRuntimeSnapshot = {

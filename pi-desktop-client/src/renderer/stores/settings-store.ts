@@ -28,6 +28,8 @@ type SettingsStore = {
   lastSessionByWorkspace: Record<string, string>;
   sidebarWidth: number;
   detailPanelWidth: number;
+  reviewPanelWidth: number;
+  reviewTreeWidth: number;
   setTheme: (theme: ThemePreference) => void;
   setResolvedTheme: (theme: ResolvedTheme) => void;
   setAnimationEnabled: (enabled: boolean) => void;
@@ -43,6 +45,8 @@ type SettingsStore = {
   rememberSession: (cwd: string, sessionId: string) => void;
   setSidebarWidth: (width: number) => void;
   setDetailPanelWidth: (width: number) => void;
+  setReviewPanelWidth: (width: number) => void;
+  setReviewTreeWidth: (width: number) => void;
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -73,6 +77,8 @@ export const useSettingsStore = create<SettingsStore>()(persist(
     lastSessionByWorkspace: {},
     sidebarWidth: 236,
     detailPanelWidth: 310,
+    reviewPanelWidth: 720,
+    reviewTreeWidth: 280,
     setTheme: (theme) => set({ theme }),
     setResolvedTheme: (resolvedTheme) => set({ resolvedTheme }),
     setAnimationEnabled: (animationEnabled) => set({ animationEnabled }),
@@ -97,6 +103,8 @@ export const useSettingsStore = create<SettingsStore>()(persist(
     })),
     setSidebarWidth: (sidebarWidth) => set({ sidebarWidth: clamp(sidebarWidth, 196, 360) }),
     setDetailPanelWidth: (detailPanelWidth) => set({ detailPanelWidth: clamp(detailPanelWidth, 260, 520) }),
+    setReviewPanelWidth: (reviewPanelWidth) => set({ reviewPanelWidth: clamp(reviewPanelWidth, 480, 1_100) }),
+    setReviewTreeWidth: (reviewTreeWidth) => set({ reviewTreeWidth: clamp(reviewTreeWidth, 180, 480) }),
   }),
   {
     name: "pi-desktop-settings",
@@ -115,6 +123,8 @@ export const useSettingsStore = create<SettingsStore>()(persist(
       lastSessionByWorkspace: state.lastSessionByWorkspace,
       sidebarWidth: state.sidebarWidth,
       detailPanelWidth: state.detailPanelWidth,
+      reviewPanelWidth: state.reviewPanelWidth,
+      reviewTreeWidth: state.reviewTreeWidth,
     }),
   },
 ));

@@ -79,4 +79,13 @@ describe("session composer drafts", () => {
       resourceCenterTab: "packages",
     });
   });
+
+  it("opens the detail region when entering code review", () => {
+    useUiStore.setState({ detailPanelOpen: false });
+
+    useUiStore.getState().setSidebarView("review");
+
+    expect(useUiStore.getState()).toMatchObject({ sidebarView: "review", detailPanelOpen: true });
+  });
+
 });

@@ -1,4 +1,15 @@
-import { CheckCircle2, Clock3, FileCode2, LoaderCircle, PackageOpen, PanelRightClose } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  FileCode2,
+  Files,
+  GitPullRequest,
+  LoaderCircle,
+  PackageOpen,
+  TerminalSquare,
+} from "lucide-react";
 import { TooltipIconButton } from "../../components/ui/tooltip-icon-button";
 import { useAgentStore } from "../../stores/agent-store";
 import { useUiStore } from "../../stores/ui-store";
@@ -16,26 +27,47 @@ function formatDuration(startedAt: number, completedAt?: number): string {
 
 export function DetailPanel() {
   const detailSelection = useUiStore((state) => state.detailSelection);
-  const toggleDetailPanel = useUiStore((state) => state.toggleDetailPanel);
+  const clearDetailSelection = useUiStore((state) => state.clearDetailSelection);
+  const setSidebarView = useUiStore((state) => state.setSidebarView);
+  const sidebarView = useUiStore((state) => state.sidebarView);
+  const terminalPanelOpen = useUiStore((state) => state.terminalPanelOpen);
+  const toggleTerminalPanel = useUiStore((state) => state.toggleTerminalPanel);
   const selectedToolCallId = detailSelection?.type === "tool" ? detailSelection.id : null;
   const selectedFilePath = detailSelection?.type === "file" ? detailSelection.path : null;
   const tool = useAgentStore((state) => selectedToolCallId ? state.toolCallsById[selectedToolCallId] : undefined);
   const file = useWorkspaceStore((state) => selectedFilePath ? state.filesByPath[selectedFilePath] : undefined);
   const loadingFilePath = useWorkspaceStore((state) => state.loadingFilePath);
   const fileError = useWorkspaceStore((state) => state.fileError);
-  const toolCount = useAgentStore((state) => Object.keys(state.toolCallsById).length);
-  const messageCount = useAgentStore((state) => Object.keys(state.messagesById).length);
-  const busy = useAgentStore((state) => state.busy);
   const presentation = tool ? resolveToolRenderer(tool).present(tool) : undefined;
   const toolSource = useResourceStore((state) => tool ? state.tools.find((item) => item.name === tool.name)?.source : undefined);
+  const childViewOpen = Boolean(selectedFilePath || tool);
+
+  function showHome(): void {
+    clearDetailSelection();
+  }
+
+  function openWorkspaceView(view: "files" | "review"): void {
+    clearDetailSelection();
+    setSidebarView(view);
+  }
+
+  const title = selectedFilePath
+    ? "文件预览"
+    : tool
+      ? "工具详情"
+      : "工作区面板";
 
   return (
     <aside className="detail-panel">
       <header className="detail-header">
-        <div><span className="eyebrow">INSPECTOR</span><strong>{selectedFilePath ? "文件预览" : tool ? "工具详情" : "运行概览"}</strong></div>
-        <TooltipIconButton className="topbar-icon-button" label="关闭详情面板" onClick={toggleDetailPanel}>
-          <PanelRightClose size={16} />
-        </TooltipIconButton>
+        <div className="detail-header-title">
+          {childViewOpen && (
+            <TooltipIconButton className="detail-back-button" label="返回工作区面板" onClick={showHome}>
+              <ArrowLeft size={15} />
+            </TooltipIconButton>
+          )}
+          <div><span className="eyebrow">WORKSPACE</span><strong>{title}</strong></div>
+        </div>
       </header>
 
       {selectedFilePath ? (
@@ -62,17 +94,28 @@ export function DetailPanel() {
           {tool.fileChange && <FileChangeReviewActions change={tool.fileChange} />}
         </div>
       ) : (
-        <div className="detail-content overview">
-          <div className={`overview-pulse ${busy ? "active" : ""}`}><span /><strong>{busy ? "Agent 正在执行" : "等待新任务"}</strong><small>实时事件将出现在中央活动流</small></div>
-          <div className="overview-grid">
-            <div><span>消息</span><strong>{messageCount}</strong></div>
-            <div><span>工具调用</span><strong>{toolCount}</strong></div>
+        <div className="detail-content detail-home">
+          <div className="detail-home-intro">
+            <strong>工作区工具</strong>
+            <p>在右侧快速打开常用面板，具体内容会按当前任务动态切换。</p>
           </div>
-          <div className="planned-panel">
-            <span className="eyebrow">WORKSPACE</span>
-            <strong>文件与代码详情已接入</strong>
-            <p>从左侧打开项目文件，或点击时间线中的工具卡片查看代码 Diff 与 Terminal 输出。</p>
-          </div>
+          <nav className="detail-launcher-list" aria-label="工作区工具">
+            <button className={sidebarView === "review" ? "active" : ""} type="button" onClick={() => openWorkspaceView("review")}>
+              <span><GitPullRequest size={17} /></span>
+              <div><strong>代码审查</strong><small>检查工作区文件与代码 Diff</small></div>
+              <ChevronRight size={15} />
+            </button>
+            <button className={terminalPanelOpen ? "active" : ""} type="button" onClick={toggleTerminalPanel}>
+              <span><TerminalSquare size={17} /></span>
+              <div><strong>终端</strong><small>{terminalPanelOpen ? "终端面板已打开" : "打开集成终端"}</small></div>
+              <ChevronRight size={15} />
+            </button>
+            <button className={sidebarView === "files" ? "active" : ""} type="button" onClick={() => openWorkspaceView("files")}>
+              <span><Files size={17} /></span>
+              <div><strong>项目文件</strong><small>浏览、预览和编辑工作区文件</small></div>
+              <ChevronRight size={15} />
+            </button>
+          </nav>
         </div>
       )}
     </aside>

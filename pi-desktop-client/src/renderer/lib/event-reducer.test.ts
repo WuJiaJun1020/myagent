@@ -104,11 +104,56 @@ describe("reduceAgentEvent", () => {
         timestamp: 2,
       },
     });
+    state = reduceAgentEvent(state, {
+      type: "file.changed",
+      meta: meta(3),
+      change: {
+        path: "src/second.ts",
+        changeType: "created",
+        unifiedDiff: "+new",
+        toolCallId: "edit-1",
+        timestamp: 3,
+      },
+    });
 
     expect(state.toolCallsById["edit-1"].fileChange).toMatchObject({
-      path: "src/app.ts",
+      path: "src/second.ts",
       toolCallId: "edit-1",
     });
+    expect(state.toolCallsById["edit-1"].fileChanges?.map((change) => change.path)).toEqual([
+      "src/app.ts",
+      "src/second.ts",
+    ]);
+  });
+
+  it("stores an authoritative workspace diff on the current user turn", () => {
+    let state = createInitialAgentRuntimeState();
+    state = reduceAgentEvent(state, {
+      type: "message.completed",
+      meta: meta(1),
+      message: {
+        id: "user-1",
+        role: "user",
+        content: [{ type: "text", contentIndex: 0, text: "修改文件" }],
+        timestamp: 1,
+        streaming: false,
+      },
+    });
+    const changes = [{
+      path: "src/generated.ts",
+      changeType: "created" as const,
+      beforeContent: undefined,
+      afterContent: "export {};\n",
+      unifiedDiff: "+export {};",
+      timestamp: 2,
+    }];
+    state = reduceAgentEvent(state, {
+      type: "turn.diff.updated",
+      meta: meta(2),
+      changes,
+    });
+
+    expect(state.turnFileChangesByIndex[0]).toEqual(changes);
   });
 
   it("ignores duplicate sequences and isolates a new session", () => {
@@ -132,5 +177,22 @@ describe("reduceAgentEvent", () => {
     expect(state.messagesById).toEqual({});
     expect(state.activeSessionId).toBe("new-session");
     expect(state.busy).toBe(true);
+  });
+
+  it("removes extension interactions when Pi closes a timed out request", () => {
+    let state = createInitialAgentRuntimeState();
+    state = reduceAgentEvent(state, {
+      type: "interaction.requested",
+      meta: meta(1),
+      request: { id: "request-1", method: "confirm", title: "Continue?", message: "Confirm" },
+    });
+    state = reduceAgentEvent(state, {
+      type: "interaction.dismissed",
+      meta: meta(2),
+      requestId: "request-1",
+      reason: "timeout",
+    });
+
+    expect(state.interactionRequests).toEqual([]);
   });
 });

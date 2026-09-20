@@ -1,6 +1,6 @@
 {
   "name": "pi-desktop-client",
-  "version": "0.3.11",
+  "version": "0.4.0",
   "private": true,
   "description": "A desktop Agent workspace powered by Pi RPC mode",
   "main": "dist/main/index.cjs",
@@ -30,6 +30,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^13.2.0",
     "node-pty": "^1.1.0",
+    "prismjs": "^1.30.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.6.0",
@@ -42,6 +43,7 @@
     "@fontsource/maple-mono": "^5.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.3.0",
+    "@types/prismjs": "^1.26.6",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.0",

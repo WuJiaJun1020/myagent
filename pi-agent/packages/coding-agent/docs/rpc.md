@@ -813,6 +813,22 @@ The current session name is available via `get_state` in the `sessionName` field
 
 ### Commands
 
+#### invoke_extension_shortcut
+
+Invoke a shortcut registered by an extension. Embedded clients can discover
+shortcut metadata from `get_resources` and resolve conflicts with their own
+window or editor shortcuts before forwarding it.
+
+```json
+{"type": "invoke_extension_shortcut", "shortcut": "ctrl+alt+p"}
+```
+
+Response:
+
+```json
+{"type": "response", "command": "invoke_extension_shortcut", "success": true}
+```
+
 #### get_commands
 
 Get available commands (extension commands, prompt templates, and skills). These can be invoked via the `prompt` command by prefixing with `/`.
@@ -1190,7 +1206,7 @@ There are two categories of extension UI methods:
 - **Dialog methods** (`select`, `confirm`, `input`, `editor`): emit an `extension_ui_request` on stdout and block until the client sends back an `extension_ui_response` on stdin with the matching `id`.
 - **Fire-and-forget methods** (`notify`, `setStatus`, `setWidget`, `setTitle`, `set_editor_text`): emit an `extension_ui_request` on stdout but do not expect a response. The client can display the information or ignore it.
 
-If a dialog method includes a `timeout` field, the agent-side will auto-resolve with a default value when the timeout expires. The client does not need to track timeouts.
+If a dialog method includes a `timeout` field, the agent-side auto-resolves with a default value when the timeout expires and emits `extension_ui_close` so clients can dismiss the matching dialog. Clients may display a countdown, but Pi remains the source of truth for the timeout.
 
 Some `ExtensionUIContext` methods are not supported or degraded in RPC mode because they require direct TUI access:
 - `custom()` returns `undefined`
@@ -1371,6 +1387,16 @@ Dismiss any dialog method. The extension receives `undefined` (for select/input/
 
 ```json
 {"type": "extension_ui_response", "id": "uuid-3", "cancelled": true}
+```
+
+### Extension UI Close Events (stdout)
+
+When a pending dialog times out or its abort signal is cancelled, Pi emits a
+close event for the same request id. Clients should dismiss that dialog without
+sending another response.
+
+```json
+{"type": "extension_ui_close", "id": "uuid-3", "reason": "timeout"}
 ```
 
 ## Error Handling

@@ -167,21 +167,29 @@ export class PiEventAdapter {
     if (this.sessionId !== sessionId) this.beginSession(sessionId);
   }
 
-  adapt(event: RpcMessage, fileChange?: FileChange): AgentEvent[] {
+  adapt(event: RpcMessage, fileChanges: FileChange[] = []): AgentEvent[] {
     switch (event.type) {
       case "agent_start": {
         this.runId = randomUUID();
         return [{ type: "run.started", meta: this.createMeta() }];
       }
       case "agent_settled": {
-        const adapted: AgentEvent = {
+        const events: AgentEvent[] = [];
+        if (fileChanges.length > 0) {
+          events.push({
+            type: "turn.diff.updated",
+            meta: this.createMeta(),
+            changes: fileChanges,
+          });
+        }
+        events.push({
           type: "run.settled",
           meta: this.createMeta(),
           outcome: "completed",
-        };
+        });
         this.runId = undefined;
         this.activeAssistantMessageId = undefined;
-        return [adapted];
+        return events;
       }
       case "message_start":
         return this.adaptMessageStart(event.message);
@@ -213,17 +221,13 @@ export class PiEventAdapter {
       case "tool_execution_end": {
         const toolCallId = readString(event.toolCallId);
         if (!toolCallId) return [];
-        const events: AgentEvent[] = [{
+        return [{
           type: "tool.completed",
           meta: this.createMeta(),
           toolCallId,
           result: { output: toOutputBlocks(event.result) },
           isError: readBoolean(event.isError) ?? false,
         }];
-        if (fileChange) {
-          events.push({ type: "file.changed", meta: this.createMeta(), change: fileChange });
-        }
-        return events;
       }
       case "queue_update":
         return [{
@@ -301,12 +305,23 @@ export class PiEventAdapter {
             widget: lines.length > 0 ? { key, lines, placement } : undefined,
           }];
         }
+        if (method === "setTitle") {
+          const title = readString(event.title);
+          return title === undefined ? [] : [{ type: "extension.title", meta: this.createMeta(), title }];
+        }
         if (method === "set_editor_text") {
           const text = readString(event.text);
           return text === undefined ? [] : [{ type: "composer.draft", meta: this.createMeta(), text }];
         }
         const request = toInteractionRequest(event);
         return request ? [{ type: "interaction.requested", meta: this.createMeta(), request }] : [];
+      }
+      case "extension_ui_close": {
+        const requestId = readString(event.id);
+        const reason = event.reason === "timeout" ? "timeout" : event.reason === "cancelled" ? "cancelled" : undefined;
+        return requestId && reason
+          ? [{ type: "interaction.dismissed", meta: this.createMeta(), requestId, reason }]
+          : [];
       }
       default:
         return [];
