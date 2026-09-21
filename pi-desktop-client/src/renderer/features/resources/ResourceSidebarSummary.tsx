@@ -2,9 +2,9 @@ import { AlertTriangle, Blocks, BrainCircuit, LoaderCircle, RefreshCw } from "lu
 import { TooltipIconButton } from "../../components/ui/tooltip-icon-button";
 import { useAgentStore } from "../../stores/agent-store";
 import { useResourceStore } from "../../stores/resource-store";
-import type { SidebarView } from "../../stores/ui-store";
+import type { AgentView } from "../../modules/module-navigation";
 
-export function ResourceSidebarSummary({ view }: { view: Extract<SidebarView, "mcp" | "memory"> }) {
+export function ResourceSidebarSummary({ view }: { view: Extract<AgentView, "mcp" | "memory"> }) {
   const status = useAgentStore((state) => state.processStatus);
   const tools = useResourceStore((state) => state.tools);
   const packages = useResourceStore((state) => state.packages);
@@ -19,7 +19,7 @@ export function ResourceSidebarSummary({ view }: { view: Extract<SidebarView, "m
   return (
     <section className="resource-sidebar-summary">
       <header>
-        <span className="section-label">{isMcp ? "Pi Resources" : "Memory Sources"}</span>
+        <span className="section-label">{isMcp ? "Pi Resources" : "Pi 上下文"}</span>
         <TooltipIconButton
           className="resource-refresh-button"
           label="刷新资源状态"

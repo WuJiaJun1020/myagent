@@ -37,6 +37,26 @@ import type {
   TerminalProfile,
   TerminalSession,
 } from "./contracts/terminal";
+import type {
+  InterviewCreateRequest,
+  InterviewPreparationProgress,
+  InterviewPrepareRequest,
+  InterviewRecord,
+  InterviewSession,
+  InterviewSnapshot,
+  JobCollectionProgress,
+  JobCollectionRequest,
+  JobCollectionResult,
+  JobLibrarySnapshot,
+} from "./contracts/interview";
+import type {
+  AlgorithmPracticeSnapshot,
+  AlgorithmProblemDetail,
+  AlgorithmResetDraftRequest,
+  AlgorithmRunRequest,
+  AlgorithmRunResult,
+  AlgorithmSaveDraftRequest,
+} from "./contracts/algorithm-practice";
 
 export type RpcCommand = {
   id?: string;
@@ -127,6 +147,20 @@ export interface PiDesktopApi {
   saveAgentTurnFileChanges(sessionId: string, turnIndex: number, changes: FileChange[]): Promise<void>;
   getWorkspaceGitStatus(): Promise<WorkspaceGitStatus>;
   getWorkspaceGitDiff(path: string, scope: WorkspaceGitDiffScope, contextLines?: number): Promise<WorkspaceGitDiff>;
+  getInterviewSnapshot(): Promise<InterviewSnapshot>;
+  getInterview(id: string): Promise<InterviewRecord | null>;
+  getInterviewSession(id: string): Promise<InterviewSession | null>;
+  createInterview(request: InterviewCreateRequest): Promise<InterviewRecord>;
+  prepareInterview(request: InterviewPrepareRequest): Promise<InterviewSession>;
+  onInterviewPreparationProgress(listener: (progress: InterviewPreparationProgress) => void): () => void;
+  getJobLibrary(): Promise<JobLibrarySnapshot>;
+  collectJobs(request: JobCollectionRequest): Promise<JobCollectionResult>;
+  onJobCollectionProgress(listener: (progress: JobCollectionProgress) => void): () => void;
+  getAlgorithmPracticeSnapshot(): Promise<AlgorithmPracticeSnapshot>;
+  getAlgorithmProblem(slug: string): Promise<AlgorithmProblemDetail>;
+  saveAlgorithmDraft(request: AlgorithmSaveDraftRequest): Promise<void>;
+  resetAlgorithmDraft(request: AlgorithmResetDraftRequest): Promise<void>;
+  runAlgorithmCode(request: AlgorithmRunRequest): Promise<AlgorithmRunResult>;
   getTerminalProfiles(): Promise<TerminalProfile[]>;
   createTerminal(request: TerminalCreateRequest): Promise<TerminalSession>;
   writeTerminal(id: string, data: string): void;

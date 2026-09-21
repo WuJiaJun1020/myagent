@@ -1,11 +1,11 @@
 {
   "name": "pi-desktop-client",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "private": true,
   "description": "A desktop Agent workspace powered by Pi RPC mode",
   "main": "dist/main/index.cjs",
   "scripts": {
-    "build:main": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --external:node-pty --outfile=dist/main/index.cjs && esbuild src/preload/index.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outfile=dist/preload/index.cjs",
+    "build:main": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --external:node-pty --external:@lancedb/lancedb --outfile=dist/main/index.cjs && esbuild src/preload/index.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outfile=dist/preload/index.cjs",
     "dev": "npm run build:main && concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env PI_CLIENT_DEV_URL=http://127.0.0.1:5173 electron .\"",
     "build": "npm run build:main && vite build",
     "start": "npm run build && electron .",
@@ -13,15 +13,19 @@
     "test": "vitest run",
     "verify:renderer": "node scripts/verify-renderer.cjs",
     "verify:pty": "electron scripts/verify-pty.cjs",
-    "dist:win": "npm run build && npm run verify:renderer && electron-builder --win portable --x64",
-    "dist:win:setup": "npm run build && npm run verify:renderer && electron-builder --win nsis --x64",
+    "prepare:python:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-python-runtime.ps1",
+    "dist:win": "npm run prepare:python:win && npm run build && npm run verify:renderer && electron-builder --win portable --x64",
+    "dist:win:setup": "npm run prepare:python:win && npm run build && npm run verify:renderer && electron-builder --win nsis --x64",
     "verify:package": "node scripts/verify-packaged-runtime.cjs --runtime-only",
     "verify:portable": "node scripts/verify-packaged-runtime.cjs"
   },
   "dependencies": {
+    "@codemirror/lang-python": "^6.2.1",
     "@earendil-works/pi-coding-agent": "file:../pi-agent/packages/coding-agent",
+    "@lancedb/lancedb": "^0.39.0",
     "@radix-ui/react-tooltip": "^1.2.16",
     "@tanstack/react-virtual": "^3.14.11",
+    "@uiw/react-codemirror": "^4.25.11",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-web-links": "^0.12.0",
@@ -72,6 +76,20 @@
     ],
     "extraResources": [
       {
+        "from": "resources/algorithm-practice",
+        "to": "algorithm-practice",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/python",
+        "to": "python",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
         "from": "node_modules/@fontsource-variable/noto-sans-sc/LICENSE",
         "to": "licenses/Noto-Sans-SC-OFL.txt"
       },
@@ -86,6 +104,14 @@
       {
         "from": "node_modules/@fontsource/maple-mono/LICENSE",
         "to": "licenses/Maple-Mono-OFL.txt"
+      },
+      {
+        "from": "node_modules/@lancedb/lancedb/license_header.txt",
+        "to": "licenses/LanceDB-Apache-2.0.txt"
+      },
+      {
+        "from": "node_modules/@lancedb/lancedb/RUST_THIRD_PARTY_LICENSES.html",
+        "to": "licenses/LanceDB-Rust-Third-Party.html"
       }
     ],
     "directories": {
@@ -93,7 +119,12 @@
     },
     "files": [
       "dist/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/@huggingface/**/*",
+      "!node_modules/@img/**/*",
+      "!node_modules/onnxruntime-node/**/*",
+      "!node_modules/onnxruntime-web/**/*",
+      "!node_modules/sharp/**/*"
     ],
     "win": {
       "target": [

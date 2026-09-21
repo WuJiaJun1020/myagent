@@ -4,6 +4,12 @@ import type { ProviderAuthUiEvent } from "../shared/contracts/provider-auth";
 import type { RuntimeResourceMutation } from "../shared/contracts/runtime-resources";
 import type { PackageCatalogQuery } from "../shared/contracts/package-catalog";
 import type { TerminalDataEvent, TerminalExitEvent } from "../shared/contracts/terminal";
+import {
+  INTERVIEW_IPC,
+  type InterviewPreparationProgress,
+  type JobCollectionProgress,
+} from "../shared/contracts/interview";
+import { ALGORITHM_PRACTICE_IPC } from "../shared/contracts/algorithm-practice";
 import type { ExtensionUiResponse, PiDesktopApi, ProcessStatus, RpcCommand, RpcMessage } from "../shared/rpc";
 
 const api: PiDesktopApi = {
@@ -70,6 +76,28 @@ const api: PiDesktopApi = {
     ipcRenderer.invoke("workspace:save-turn-file-changes", sessionId, turnIndex, changes),
   getWorkspaceGitStatus: () => ipcRenderer.invoke("workspace:get-git-status"),
   getWorkspaceGitDiff: (path, scope, contextLines) => ipcRenderer.invoke("workspace:get-git-diff", path, scope, contextLines),
+  getInterviewSnapshot: () => ipcRenderer.invoke(INTERVIEW_IPC.getSnapshot),
+  getInterview: (id) => ipcRenderer.invoke(INTERVIEW_IPC.getInterview, id),
+  getInterviewSession: (id) => ipcRenderer.invoke(INTERVIEW_IPC.getInterviewSession, id),
+  createInterview: (request) => ipcRenderer.invoke(INTERVIEW_IPC.createInterview, request),
+  prepareInterview: (request) => ipcRenderer.invoke(INTERVIEW_IPC.prepareInterview, request),
+  onInterviewPreparationProgress: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: InterviewPreparationProgress) => listener(progress);
+    ipcRenderer.on(INTERVIEW_IPC.preparationProgress, handler);
+    return () => ipcRenderer.removeListener(INTERVIEW_IPC.preparationProgress, handler);
+  },
+  getJobLibrary: () => ipcRenderer.invoke(INTERVIEW_IPC.getJobLibrary),
+  collectJobs: (request) => ipcRenderer.invoke(INTERVIEW_IPC.collectJobs, request),
+  onJobCollectionProgress: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: JobCollectionProgress) => listener(progress);
+    ipcRenderer.on(INTERVIEW_IPC.jobCollectionProgress, handler);
+    return () => ipcRenderer.removeListener(INTERVIEW_IPC.jobCollectionProgress, handler);
+  },
+  getAlgorithmPracticeSnapshot: () => ipcRenderer.invoke(ALGORITHM_PRACTICE_IPC.getSnapshot),
+  getAlgorithmProblem: (slug) => ipcRenderer.invoke(ALGORITHM_PRACTICE_IPC.getProblem, slug),
+  saveAlgorithmDraft: (request) => ipcRenderer.invoke(ALGORITHM_PRACTICE_IPC.saveDraft, request),
+  resetAlgorithmDraft: (request) => ipcRenderer.invoke(ALGORITHM_PRACTICE_IPC.resetDraft, request),
+  runAlgorithmCode: (request) => ipcRenderer.invoke(ALGORITHM_PRACTICE_IPC.run, request),
   getTerminalProfiles: () => ipcRenderer.invoke("terminal:get-profiles"),
   createTerminal: (request) => ipcRenderer.invoke("terminal:create", request),
   writeTerminal: (id, data) => ipcRenderer.send("terminal:write", id, data),

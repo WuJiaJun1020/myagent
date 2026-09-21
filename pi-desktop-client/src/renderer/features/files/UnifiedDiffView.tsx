@@ -1,8 +1,13 @@
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronsUpDown, LoaderCircle } from "lucide-react";
-import { useMemo } from "react";
+import { memo, useMemo, useRef } from "react";
 import { highlightCode, languageForPath } from "../../lib/syntax-highlighting";
 
 const MAX_DIFF_LINES = 4_000;
+const VIRTUALIZATION_THRESHOLD = 120;
+const DIFF_LINE_HEIGHT = 25;
+const DIFF_SEPARATOR_HEIGHT = 45;
+const DIFF_VIRTUAL_OVERSCAN = 12;
 
 export type UnifiedDiffLine = {
   kind: "add" | "remove" | "hunk" | "header" | "context";
@@ -92,7 +97,80 @@ type UnifiedDiffViewProps = {
   emptyLabel?: string;
   expandingContext?: boolean;
   onExpandContext?: () => void;
+  virtualize?: boolean;
 };
+
+type PresentedDiffLine = {
+  line: UnifiedDiffLine;
+  text: string;
+};
+
+type DiffContentRowProps = PresentedDiffLine & {
+  path?: string;
+  language?: string;
+  expandingContext: boolean;
+  onExpandContext?: () => void;
+};
+
+const DiffContentRow = memo(function DiffContentRow({
+  line,
+  text,
+  path,
+  language,
+  expandingContext,
+  onExpandContext,
+}: DiffContentRowProps) {
+  const highlighted = useMemo(
+    () => line.kind === "hunk" ? undefined : highlightCode(text, path),
+    [line.kind, path, text],
+  );
+
+  if (line.kind === "hunk") {
+    if (!line.collapsedLines && !onExpandContext) return null;
+    return (
+      <button
+        className="diff-context-separator"
+        type="button"
+        title={onExpandContext ? `展开更多上下文（${line.text}）` : line.text}
+        disabled={!onExpandContext || expandingContext}
+        onClick={onExpandContext}
+      >
+        {expandingContext ? <LoaderCircle className="spin" size={13} /> : <ChevronsUpDown size={13} />}
+        <span>{expandingContext
+          ? "正在展开上下文…"
+          : line.collapsedLines
+            ? onExpandContext ? `${line.collapsedLines} 行未修改，点击展开` : `${line.collapsedLines} 行未修改`
+            : "展开更多上下文"}</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className={`diff-line ${line.kind}`}>
+      <span className="diff-line-number" aria-label={lineNumberLabel(line)} title={lineNumberLabel(line)}>{displayLineNumber(line) ?? ""}</span>
+      <span className="diff-line-marker" aria-hidden="true">{line.kind === "add" ? "+" : line.kind === "remove" ? "−" : ""}</span>
+      {highlighted === undefined
+        ? <code>{text}</code>
+        : <code className={`language-${language ?? "plain"}`} dangerouslySetInnerHTML={{ __html: highlighted }} />}
+    </div>
+  );
+});
+
+export function shouldVirtualizeUnifiedDiff(lineCount: number, requested: boolean): boolean {
+  return requested && lineCount > VIRTUALIZATION_THRESHOLD;
+}
+
+function virtualCanvasWidth(lines: PresentedDiffLine[]): string {
+  let maximumColumns = 1;
+  for (const { text } of lines) {
+    let columns = 0;
+    for (const character of text) {
+      columns += character === "\t" ? 4 : character.codePointAt(0)! > 0xff ? 2 : 1;
+    }
+    if (columns > maximumColumns) maximumColumns = columns;
+  }
+  return `max(100%, calc(${maximumColumns}ch + 88px))`;
+}
 
 export function UnifiedDiffView({
   diff,
@@ -101,50 +179,71 @@ export function UnifiedDiffView({
   emptyLabel = "没有可展示的文本 Diff。",
   expandingContext = false,
   onExpandContext,
+  virtualize = false,
 }: UnifiedDiffViewProps) {
   const allLines = useMemo(() => parseUnifiedDiff(diff), [diff]);
   const language = useMemo(() => languageForPath(path), [path]);
   const reviewLines = useMemo(() => allLines.filter((line) => line.kind !== "header"), [allLines]);
   const visibleLines = useMemo(() => reviewLines.slice(0, MAX_DIFF_LINES), [reviewLines]);
-  const presentedLines = useMemo(() => visibleLines.map((line) => {
-    const text = displayLineText(line);
-    return { line, text, highlighted: line.kind === "hunk" ? undefined : highlightCode(text, path) };
-  }), [path, visibleLines]);
+  const hasContextExpansion = Boolean(onExpandContext);
+  const presentedLines = useMemo(() => visibleLines
+    .filter((line) => line.kind !== "hunk" || Boolean(line.collapsedLines) || hasContextExpansion)
+    .map((line): PresentedDiffLine => ({ line, text: displayLineText(line) })), [hasContextExpansion, visibleLines]);
+  const virtualWidth = useMemo(() => virtualCanvasWidth(presentedLines), [presentedLines]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const useVirtualRows = shouldVirtualizeUnifiedDiff(presentedLines.length, virtualize);
+  const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
+    count: useVirtualRows ? presentedLines.length : 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (index) => presentedLines[index]?.line.kind === "hunk"
+      ? DIFF_SEPARATOR_HEIGHT
+      : DIFF_LINE_HEIGHT,
+    getItemKey: (index) => `${index}:${presentedLines[index]?.line.text ?? ""}`,
+    overscan: DIFF_VIRTUAL_OVERSCAN,
+  });
 
   if (!diff) return <p className="detail-empty">{emptyLabel}</p>;
 
   return (
-    <>
+    <div className="unified-diff-view">
       {(truncated || reviewLines.length > visibleLines.length) && <div className="viewer-notice">Diff 过长，已截断显示。</div>}
-      <div className="diff-lines">
-        {presentedLines.map(({ line, text, highlighted }, index) => line.kind === "hunk" ? (
-          line.collapsedLines || onExpandContext ? (
-            <button
-              className="diff-context-separator"
-              type="button"
-              key={`${index}:${line.text}`}
-              title={onExpandContext ? `展开更多上下文（${line.text}）` : line.text}
-              disabled={!onExpandContext || expandingContext}
-              onClick={onExpandContext}
-            >
-              {expandingContext ? <LoaderCircle className="spin" size={13} /> : <ChevronsUpDown size={13} />}
-              <span>{expandingContext
-                ? "正在展开上下文…"
-                : line.collapsedLines
-                  ? onExpandContext ? `${line.collapsedLines} 行未修改，点击展开` : `${line.collapsedLines} 行未修改`
-                  : "展开更多上下文"}</span>
-            </button>
-          ) : null
-        ) : (
-          <div className={`diff-line ${line.kind}`} key={`${index}:${line.text}`}>
-            <span className="diff-line-number" aria-label={lineNumberLabel(line)} title={lineNumberLabel(line)}>{displayLineNumber(line) ?? ""}</span>
-            <span className="diff-line-marker" aria-hidden="true">{line.kind === "add" ? "+" : line.kind === "remove" ? "−" : ""}</span>
-            {highlighted === undefined
-              ? <code>{text}</code>
-              : <code className={`language-${language ?? "plain"}`} dangerouslySetInnerHTML={{ __html: highlighted }} />}
+      <div ref={scrollRef} className={`diff-lines${useVirtualRows ? " virtualized" : ""}`}>
+        {useVirtualRows ? (
+          <div
+            className="diff-lines-virtual-canvas"
+            style={{ height: rowVirtualizer.getTotalSize(), width: virtualWidth }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const presented = presentedLines[virtualRow.index];
+              if (!presented) return null;
+              return (
+                <div
+                  className={`diff-virtual-row${presented.line.kind === "hunk" ? " separator" : ""}`}
+                  key={virtualRow.key}
+                  style={{ height: virtualRow.size, transform: `translateY(${virtualRow.start}px)` }}
+                >
+                  <DiffContentRow
+                    {...presented}
+                    path={path}
+                    language={language}
+                    expandingContext={expandingContext}
+                    onExpandContext={onExpandContext}
+                  />
+                </div>
+              );
+            })}
           </div>
+        ) : presentedLines.map((presented, index) => (
+          <DiffContentRow
+            {...presented}
+            path={path}
+            language={language}
+            expandingContext={expandingContext}
+            onExpandContext={onExpandContext}
+            key={`${index}:${presented.line.text}`}
+          />
         ))}
       </div>
-    </>
+    </div>
   );
 }

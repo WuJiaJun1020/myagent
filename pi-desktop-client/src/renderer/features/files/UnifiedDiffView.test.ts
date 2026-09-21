@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { countUnifiedDiffChanges, parseUnifiedDiff, UnifiedDiffView } from "./UnifiedDiffView";
+import {
+  countUnifiedDiffChanges,
+  parseUnifiedDiff,
+  shouldVirtualizeUnifiedDiff,
+  UnifiedDiffView,
+} from "./UnifiedDiffView";
 
 const diff = [
   "diff --git a/example.ts b/example.ts",
@@ -56,5 +61,11 @@ describe("unified diff presentation", () => {
     expect(html).toContain("点击展开");
     expect(html).toContain('class="token keyword"');
     expect(html).toContain("nextValue");
+  });
+
+  it("virtualizes only large diffs when the host requests it", () => {
+    expect(shouldVirtualizeUnifiedDiff(120, true)).toBe(false);
+    expect(shouldVirtualizeUnifiedDiff(121, true)).toBe(true);
+    expect(shouldVirtualizeUnifiedDiff(4_000, false)).toBe(false);
   });
 });

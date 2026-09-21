@@ -5,8 +5,12 @@ import { useUiStore } from "../../stores/ui-store";
 
 const menuLabels = ["文件", "编辑", "视图", "帮助"];
 
+type AppChromeProps = {
+  sidebarAvailable?: boolean;
+};
+
 /** Renderer-owned title bar area for the Windows title-bar overlay. */
-export function AppChrome() {
+export function AppChrome({ sidebarAvailable = true }: AppChromeProps) {
   const sidebarOpen = useUiStore((state) => state.sidebarOpen);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const [maximized, setMaximized] = useState(false);
@@ -18,13 +22,15 @@ export function AppChrome() {
 
   return (
     <header className="app-chrome">
-      <TooltipIconButton
-        className={`app-chrome-sidebar-toggle ${sidebarOpen ? "active" : ""}`}
-        label={sidebarOpen ? "隐藏侧边栏" : "显示侧边栏"}
-        onClick={toggleSidebar}
-      >
-        <PanelLeft size={17} />
-      </TooltipIconButton>
+      {sidebarAvailable ? (
+        <TooltipIconButton
+          className={`app-chrome-sidebar-toggle ${sidebarOpen ? "active" : ""}`}
+          label={sidebarOpen ? "隐藏侧边栏" : "显示侧边栏"}
+          onClick={toggleSidebar}
+        >
+          <PanelLeft size={17} />
+        </TooltipIconButton>
+      ) : <span className="app-chrome-sidebar-placeholder" aria-hidden="true" />}
       <nav className="app-menu" aria-label="应用菜单">
         {menuLabels.map((label) => <span key={label}>{label}</span>)}
       </nav>

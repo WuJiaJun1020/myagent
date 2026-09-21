@@ -51,7 +51,7 @@ export function AgentChangeReview({ changes }: { changes: FileChange[] }) {
   const [undone, setUndone] = useState(false);
   const [confirmingRevert, setConfirmingRevert] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const setSidebarView = useUiStore((state) => state.setSidebarView);
+  const setAgentView = useUiStore((state) => state.setAgentView);
   const containsTruncatedChange = changes.some((change) => change.truncated);
   const visibleFiles = showAll ? summary.files : summary.files.slice(0, INITIAL_VISIBLE_FILES);
   const hiddenFileCount = summary.files.length - visibleFiles.length;
@@ -143,7 +143,7 @@ export function AgentChangeReview({ changes }: { changes: FileChange[] }) {
               <RotateCcw size={13} />{busy ? "撤销中" : undone ? "已撤销" : "撤销"}
             </button>
           )}
-          <button type="button" onClick={() => setSidebarView("review")}>审查</button>
+          <button type="button" onClick={() => setAgentView("review")}>审查</button>
         </div>
       </header>
       {confirmingRevert && (

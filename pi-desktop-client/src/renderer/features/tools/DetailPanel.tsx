@@ -28,8 +28,8 @@ function formatDuration(startedAt: number, completedAt?: number): string {
 export function DetailPanel() {
   const detailSelection = useUiStore((state) => state.detailSelection);
   const clearDetailSelection = useUiStore((state) => state.clearDetailSelection);
-  const setSidebarView = useUiStore((state) => state.setSidebarView);
-  const sidebarView = useUiStore((state) => state.sidebarView);
+  const setAgentView = useUiStore((state) => state.setAgentView);
+  const agentView = useUiStore((state) => state.moduleViews.agent);
   const terminalPanelOpen = useUiStore((state) => state.terminalPanelOpen);
   const toggleTerminalPanel = useUiStore((state) => state.toggleTerminalPanel);
   const selectedToolCallId = detailSelection?.type === "tool" ? detailSelection.id : null;
@@ -48,7 +48,7 @@ export function DetailPanel() {
 
   function openWorkspaceView(view: "files" | "review"): void {
     clearDetailSelection();
-    setSidebarView(view);
+    setAgentView(view);
   }
 
   const title = selectedFilePath
@@ -100,7 +100,7 @@ export function DetailPanel() {
             <p>在右侧快速打开常用面板，具体内容会按当前任务动态切换。</p>
           </div>
           <nav className="detail-launcher-list" aria-label="工作区工具">
-            <button className={sidebarView === "review" ? "active" : ""} type="button" onClick={() => openWorkspaceView("review")}>
+            <button className={agentView === "review" ? "active" : ""} type="button" onClick={() => openWorkspaceView("review")}>
               <span><GitPullRequest size={17} /></span>
               <div><strong>代码审查</strong><small>检查工作区文件与代码 Diff</small></div>
               <ChevronRight size={15} />
@@ -110,7 +110,7 @@ export function DetailPanel() {
               <div><strong>终端</strong><small>{terminalPanelOpen ? "终端面板已打开" : "打开集成终端"}</small></div>
               <ChevronRight size={15} />
             </button>
-            <button className={sidebarView === "files" ? "active" : ""} type="button" onClick={() => openWorkspaceView("files")}>
+            <button className={agentView === "files" ? "active" : ""} type="button" onClick={() => openWorkspaceView("files")}>
               <span><Files size={17} /></span>
               <div><strong>项目文件</strong><small>浏览、预览和编辑工作区文件</small></div>
               <ChevronRight size={15} />

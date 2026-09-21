@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import type { ImageAttachment } from "../../shared/contracts/agent-session";
+import { isProductModuleId, type ProductModuleId } from "../../platform/shared/product-module";
+import type { AgentView, InterviewView, ModuleViews } from "../modules/module-navigation";
 
-export type SidebarView = "activity" | "files" | "review" | "mcp" | "memory";
 export type ResourceCenterTab = "online" | "packages" | "skills" | "extensions" | "prompts" | "tools";
 export type DetailSelection =
   | { type: "tool"; id: string }
@@ -26,7 +27,8 @@ type UiStore = {
   providerSettingsOpen: boolean;
   sessionOverviewOpen: boolean;
   terminalPanelOpen: boolean;
-  sidebarView: SidebarView;
+  activeModule: ProductModuleId;
+  moduleViews: ModuleViews;
   resourceCenterTab: ResourceCenterTab;
   detailSelection: DetailSelection | null;
   composerDraft: string | null;
@@ -39,7 +41,9 @@ type UiStore = {
   setProviderSettingsOpen: (open: boolean) => void;
   setSessionOverviewOpen: (open: boolean) => void;
   toggleTerminalPanel: () => void;
-  setSidebarView: (view: SidebarView) => void;
+  setActiveModule: (moduleId: ProductModuleId) => void;
+  setAgentView: (view: AgentView) => void;
+  setInterviewView: (view: InterviewView) => void;
   setResourceCenterTab: (tab: ResourceCenterTab) => void;
   setComposerDraft: (draft: string | null) => void;
   setSessionComposerDraft: (sessionId: string, draft: SessionComposerDraft) => void;
@@ -53,8 +57,13 @@ type UiStore = {
 
 const NAVIGATION_STORAGE_KEY = "pi-desktop-current-navigation";
 
-function isSidebarView(value: unknown): value is SidebarView {
+function isAgentView(value: unknown): value is AgentView {
   return value === "activity" || value === "files" || value === "review" || value === "mcp" || value === "memory";
+}
+
+function isInterviewView(value: unknown): value is InterviewView {
+  return value === "dashboard" || value === "jobs" || value === "question-bank"
+    || value === "algorithms" || value === "session";
 }
 
 function isResourceCenterTab(value: unknown): value is ResourceCenterTab {
@@ -62,26 +71,67 @@ function isResourceCenterTab(value: unknown): value is ResourceCenterTab {
     || value === "extensions" || value === "prompts" || value === "tools";
 }
 
-function readNavigation(): { sidebarView: SidebarView; resourceCenterTab: ResourceCenterTab } {
-  const fallback = { sidebarView: "activity" as const, resourceCenterTab: "online" as const };
+export type PersistedNavigation = {
+  activeModule: ProductModuleId;
+  moduleViews: ModuleViews;
+  resourceCenterTab: ResourceCenterTab;
+};
+
+const DEFAULT_NAVIGATION: PersistedNavigation = {
+  activeModule: "agent",
+  moduleViews: { agent: "activity", interview: "dashboard" },
+  resourceCenterTab: "online",
+};
+
+export function parsePersistedNavigation(input: unknown): PersistedNavigation {
+  const fallback: PersistedNavigation = {
+    activeModule: "agent",
+    moduleViews: { agent: "activity", interview: "dashboard" },
+    resourceCenterTab: "online",
+  };
+  if (!input || typeof input !== "object" || Array.isArray(input)) return fallback;
+  const value = input as {
+    activeModule?: unknown;
+    moduleViews?: unknown;
+    sidebarView?: unknown;
+    resourceCenterTab?: unknown;
+  };
+  const storedModuleViews = value.moduleViews && typeof value.moduleViews === "object" && !Array.isArray(value.moduleViews)
+    ? value.moduleViews as { agent?: unknown; interview?: unknown }
+    : undefined;
+
+  // Migrate the previous single sidebarView value without losing the user's
+  // current location. The interview entry represented an entire module,
+  // whereas every other value represented an Agent page.
+  const legacyView = value.sidebarView;
+  const legacyModule = legacyView === "interview" ? "interview" : "agent";
+  const legacyAgentView = isAgentView(legacyView) ? legacyView : fallback.moduleViews.agent;
+  return {
+    activeModule: isProductModuleId(value.activeModule) ? value.activeModule : legacyModule,
+    moduleViews: {
+      agent: isAgentView(storedModuleViews?.agent) ? storedModuleViews.agent : legacyAgentView,
+      interview: isInterviewView(storedModuleViews?.interview) ? storedModuleViews.interview : fallback.moduleViews.interview,
+    },
+    resourceCenterTab: isResourceCenterTab(value.resourceCenterTab) ? value.resourceCenterTab : fallback.resourceCenterTab,
+  };
+}
+
+function readNavigation(): PersistedNavigation {
+  const fallback = DEFAULT_NAVIGATION;
   if (typeof sessionStorage === "undefined") return fallback;
   try {
     const raw = sessionStorage.getItem(NAVIGATION_STORAGE_KEY);
     if (!raw) return fallback;
-    const value = JSON.parse(raw) as { sidebarView?: unknown; resourceCenterTab?: unknown };
-    return {
-      sidebarView: isSidebarView(value.sidebarView) ? value.sidebarView : fallback.sidebarView,
-      resourceCenterTab: isResourceCenterTab(value.resourceCenterTab) ? value.resourceCenterTab : fallback.resourceCenterTab,
-    };
+    return parsePersistedNavigation(JSON.parse(raw));
   } catch {
     return fallback;
   }
 }
 
-function saveNavigation(sidebarView: SidebarView, resourceCenterTab: ResourceCenterTab): void {
+function saveNavigation(navigation: PersistedNavigation): void {
   if (typeof sessionStorage === "undefined") return;
   try {
-    sessionStorage.setItem(NAVIGATION_STORAGE_KEY, JSON.stringify({ sidebarView, resourceCenterTab }));
+    sessionStorage.setItem(NAVIGATION_STORAGE_KEY, JSON.stringify(navigation));
   } catch {
     // Navigation persistence is best-effort; the in-memory state still remains correct.
   }
@@ -96,7 +146,8 @@ export const useUiStore = create<UiStore>((set) => ({
   providerSettingsOpen: false,
   sessionOverviewOpen: false,
   terminalPanelOpen: false,
-  sidebarView: initialNavigation.sidebarView,
+  activeModule: initialNavigation.activeModule,
+  moduleViews: initialNavigation.moduleViews,
   resourceCenterTab: initialNavigation.resourceCenterTab,
   detailSelection: null,
   composerDraft: null,
@@ -109,12 +160,22 @@ export const useUiStore = create<UiStore>((set) => ({
   setProviderSettingsOpen: (providerSettingsOpen) => set({ providerSettingsOpen }),
   setSessionOverviewOpen: (sessionOverviewOpen) => set({ sessionOverviewOpen }),
   toggleTerminalPanel: () => set((state) => ({ terminalPanelOpen: !state.terminalPanelOpen })),
-  setSidebarView: (sidebarView) => set((state) => {
-    saveNavigation(sidebarView, state.resourceCenterTab);
-    return sidebarView === "review" ? { sidebarView, detailPanelOpen: true } : { sidebarView };
+  setActiveModule: (activeModule) => set((state) => {
+    saveNavigation({ activeModule, moduleViews: state.moduleViews, resourceCenterTab: state.resourceCenterTab });
+    return { activeModule };
+  }),
+  setAgentView: (agentView) => set((state) => {
+    const moduleViews = { ...state.moduleViews, agent: agentView };
+    saveNavigation({ activeModule: state.activeModule, moduleViews, resourceCenterTab: state.resourceCenterTab });
+    return agentView === "review" ? { moduleViews, detailPanelOpen: true } : { moduleViews };
+  }),
+  setInterviewView: (interviewView) => set((state) => {
+    const moduleViews = { ...state.moduleViews, interview: interviewView };
+    saveNavigation({ activeModule: state.activeModule, moduleViews, resourceCenterTab: state.resourceCenterTab });
+    return { moduleViews };
   }),
   setResourceCenterTab: (resourceCenterTab) => set((state) => {
-    saveNavigation(state.sidebarView, resourceCenterTab);
+    saveNavigation({ activeModule: state.activeModule, moduleViews: state.moduleViews, resourceCenterTab });
     return { resourceCenterTab };
   }),
   setComposerDraft: (composerDraft) => set({ composerDraft }),

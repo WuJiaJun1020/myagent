@@ -21,6 +21,10 @@ import { FileChangeTracker, WorkspaceFileService } from "./workspace/workspace-f
 import { WorkspaceGitService } from "./workspace/workspace-git";
 import { TurnFileChangeStore } from "./workspace/turn-file-change-store";
 import { TerminalService } from "./terminal/terminal-service";
+import { InterviewMainModule } from "./interview/interview-main-module";
+import { AlgorithmPracticeMainModule } from "./algorithm/algorithm-practice-main-module";
+import { MainModuleHost } from "../platform/main/main-module-host";
+import { createPiModelGateway } from "../platform/main/ai/pi-model-gateway";
 
 let mainWindow: BrowserWindow | null = null;
 let pi: PiProcess;
@@ -34,7 +38,10 @@ const packageCatalogService = new PiPackageCatalogService();
 let providerService: PiProviderService;
 let imageAttachments: ImageAttachmentStore;
 let terminalService: TerminalService;
+let mainModuleHost: MainModuleHost;
 let agentEventQueue = Promise.resolve();
+let shutdownStarted = false;
+let shutdownComplete = false;
 const eventAdapter = new PiEventAdapter();
 
 function rpcData<T>(response: { data?: unknown; command?: string }): T {
@@ -165,7 +172,11 @@ function createWindow(): BrowserWindow {
   window.on("closed", () => {
     if (revealTimeout) clearTimeout(revealTimeout);
     ipcMain.removeListener("app:renderer-ready", handleRendererReady);
-    if (mainWindow === window) mainWindow = null;
+    const wasMainWindow = mainWindow === window;
+    if (wasMainWindow) mainWindow = null;
+    // Collector windows are implementation details and must never keep the
+    // desktop process alive after the user closes its primary window.
+    if (wasMainWindow && process.platform !== "darwin" && !shutdownStarted) app.quit();
   });
   window.on("close", () => terminalService?.disposeOwner(window.webContents.id));
   window.on("maximize", () => sendToRenderer(window, "app:window-maximized", true));
@@ -476,6 +487,30 @@ app.whenReady().then(async () => {
   providerService = new PiProviderService(pi);
   imageAttachments = new ImageAttachmentStore();
   terminalService = new TerminalService();
+  mainModuleHost = new MainModuleHost();
+  const interviewModelGateway = await createPiModelGateway({
+    cwd: process.cwd(),
+    appRoot: app.getAppPath(),
+    // Interview shares the user's global provider/model configuration, but it
+    // must not inherit project-local settings from the Agent workspace.
+    projectTrusted: false,
+  }).catch((error: unknown) => {
+    console.error("初始化智能面试模型网关失败；其他模块仍可使用", error);
+    return undefined;
+  });
+  mainModuleHost.register(new InterviewMainModule({
+    dataDirectory: join(app.getPath("userData"), "interview"),
+    ipcMain,
+    getWindow: () => mainWindow,
+    modelGateway: interviewModelGateway,
+  }));
+  mainModuleHost.register(new AlgorithmPracticeMainModule({
+    dataDirectory: join(app.getPath("userData"), "algorithm-practice"),
+    resourceDirectory: app.isPackaged
+      ? join(process.resourcesPath, "algorithm-practice")
+      : join(app.getAppPath(), "resources", "algorithm-practice"),
+    ipcMain,
+  }));
   pi.on("event", (event) => {
     const providerAuthEvent = adaptProviderAuthEvent(event);
     if (providerAuthEvent) sendToRenderer(mainWindow, "pi:provider-auth-event", providerAuthEvent);
@@ -497,6 +532,10 @@ app.whenReady().then(async () => {
   pi.on("status", (status) => sendToRenderer(mainWindow, "pi:status", status));
   pi.on("diagnostic", (text) => sendToRenderer(mainWindow, "pi:diagnostic", text));
   registerIpc();
+  const moduleStartFailures = await mainModuleHost.start();
+  for (const failure of moduleStartFailures) {
+    console.error(`业务模块 ${failure.moduleId} 启动失败，已隔离`, failure.error);
+  }
   mainWindow = createWindow();
   await pi.start();
 
@@ -509,7 +548,30 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-app.on("before-quit", () => {
-  terminalService?.disposeAll();
-  void pi?.stop();
+app.on("before-quit", (event) => {
+  if (shutdownComplete) return;
+  event.preventDefault();
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+
+  try {
+    terminalService?.disposeAll();
+  } catch (error) {
+    console.error("释放终端服务失败", error);
+  }
+
+  void (async () => {
+    try {
+      await mainModuleHost?.dispose();
+    } catch (error) {
+      console.error("释放业务模块失败", error);
+    }
+    try {
+      await pi?.stop();
+    } catch (error) {
+      console.error("停止 Pi runtime 失败", error);
+    }
+    shutdownComplete = true;
+    app.quit();
+  })();
 });

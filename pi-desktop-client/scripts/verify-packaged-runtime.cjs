@@ -11,6 +11,8 @@ const portableResult = join(projectRoot, "release", ".portable-smoke-result.json
 const portableRequest = join(projectRoot, "release", ".portable-smoke-request");
 const unpackedAppResult = join(projectRoot, "release", ".unpacked-app-smoke-result.json");
 const appArchive = join(unpackedRoot, "resources", "app.asar");
+const embeddedPython = join(unpackedRoot, "resources", "python", "python.exe");
+const algorithmCatalog = join(unpackedRoot, "resources", "algorithm-practice", "catalog.json");
 const rpcEntry = join(
   unpackedRoot,
   "resources",
@@ -29,7 +31,7 @@ function createElectronAppEnv(extra = {}) {
   return env;
 }
 
-if (!existsSync(executable) || !existsSync(appArchive)) {
+if (!existsSync(executable) || !existsSync(appArchive) || !existsSync(embeddedPython) || !existsSync(algorithmCatalog)) {
   console.error("缺少打包产物，请先运行 npm.cmd run dist:win");
   process.exit(1);
 }

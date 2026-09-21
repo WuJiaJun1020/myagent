@@ -130,11 +130,11 @@ export function RuntimeSettings() {
         </div>
       </SettingsGroup>
 
-      <SettingsGroup title="资源与诊断" description="重新扫描项目和用户目录中的扩展、Skill、Prompt、主题与记忆文件。">
+      <SettingsGroup title="资源与诊断" description="重新扫描项目和用户目录中的扩展、Skill、Prompt、主题与上下文文件。">
         <div className="settings-facts">
           <span><small>Active Tools</small><strong>{tools.filter((tool) => tool.active).length}</strong></span>
           <span><small>MCP Extensions</small><strong>{mcpServers.length}</strong></span>
-          <span><small>Memory Sources</small><strong>{memories.length}</strong></span>
+          <span><small>Pi 上下文</small><strong>{memories.length}</strong></span>
           <span><small>Skills</small><strong>{commandResources.filter((resource) => resource.kind === "skill").length}</strong></span>
           <span><small>Prompts</small><strong>{commandResources.filter((resource) => resource.kind === "prompt").length}</strong></span>
           <span><small>Diagnostics</small><strong>{resourceIssues.length}</strong></span>
@@ -154,7 +154,7 @@ export function RuntimeSettings() {
           </button>
           {resourceIssues.length > 0 && <span>{resourceIssues[0]?.message}</span>}
         </div>
-        <p className="settings-privacy-note">MCP 凭据由对应 Pi Extension 管理；Memory 页面只展示当前加载的上下文文件，不会复制保存其内容。</p>
+        <p className="settings-privacy-note">MCP 凭据由对应 Pi Extension 管理；“Pi 上下文”页面只展示当前加载的上下文文件，不会复制保存其内容。</p>
       </SettingsGroup>
 
       {agentError && <p className="settings-error">{agentError}</p>}

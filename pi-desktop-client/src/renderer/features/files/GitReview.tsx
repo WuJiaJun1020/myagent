@@ -220,7 +220,7 @@ export function GitReview({ onClose }: { onClose?: () => void }) {
   const cwd = useWorkspaceStore((state) => state.cwd);
   const openFile = useWorkspaceStore((state) => state.openFile);
   const selectFile = useUiStore((state) => state.selectFile);
-  const setSidebarView = useUiStore((state) => state.setSidebarView);
+  const setAgentView = useUiStore((state) => state.setAgentView);
   const reviewTreeWidth = useSettingsStore((state) => state.reviewTreeWidth);
   const setReviewTreeWidth = useSettingsStore((state) => state.setReviewTreeWidth);
   const busy = useAgentStore((state) => state.busy);
@@ -266,6 +266,7 @@ export function GitReview({ onClose }: { onClose?: () => void }) {
   const scopeRef = useRef<ReviewScope>(lastTurnFiles.length > 0 ? "last-turn" : "unstaged");
   const scopeMenuRef = useRef<HTMLDivElement>(null);
   const diffRequestRef = useRef(0);
+  const reviewBodyRef = useRef<HTMLDivElement>(null);
 
   async function inspect(
     path: string,
@@ -494,7 +495,7 @@ export function GitReview({ onClose }: { onClose?: () => void }) {
         <div className="git-review-clean"><FileDiff size={26} /><strong>没有待审查的更改</strong><span>当前 Git 工作区是干净的。</span></div>
       )}
       {status && (status.files.length > 0 || lastTurnFiles.length > 0) && (
-        <div className="git-review-body" style={{ "--review-tree-width": `${reviewTreeWidth}px` } as CSSProperties}>
+        <div ref={reviewBodyRef} className="git-review-body" style={{ "--review-tree-width": `${reviewTreeWidth}px` } as CSSProperties}>
           <section className="git-review-diff">
             {selectedFile ? (
               <>
@@ -512,7 +513,7 @@ export function GitReview({ onClose }: { onClose?: () => void }) {
                     onClick={() => {
                       selectFile(selectedFile.path);
                       void openFile(selectedFile.path);
-                      setSidebarView("activity");
+                      setAgentView("activity");
                     }}
                   ><Eye size={14} /></button>
                 </header>
@@ -527,6 +528,7 @@ export function GitReview({ onClose }: { onClose?: () => void }) {
                       emptyLabel="该范围没有可展示的文本 Diff。"
                       expandingContext={diffLoading}
                       onExpandContext={canExpandSelectedContext ? expandContext : undefined}
+                      virtualize
                     />
                   ) : null}
                 </div>
@@ -543,7 +545,9 @@ export function GitReview({ onClose }: { onClose?: () => void }) {
             max={480}
             direction="left"
             oppositeMin={260}
-            onChange={setReviewTreeWidth}
+            previewTarget={reviewBodyRef}
+            previewProperty="--review-tree-width"
+            onCommit={setReviewTreeWidth}
           />
 
           <aside className="git-review-tree">
