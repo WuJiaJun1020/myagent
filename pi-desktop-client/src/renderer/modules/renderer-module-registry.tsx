@@ -57,12 +57,15 @@ const interviewModule: RendererModuleDefinition<"interview"> = {
   DetailPanel: InterviewDetailPanel,
   keepWorkspaceAlive: true,
   preload: loadInterviewRendererModule,
-  resolveLayout: (view) => ({
-    detailVariant: "default",
-    topbarSuppressed: view === "algorithms",
-    sidebarSuppressed: view === "algorithms",
-    detailSuppressed: view === "algorithms",
-  }),
+  resolveLayout: (view) => {
+    const focused = view === "algorithms" || view === "question-bank";
+    return {
+      detailVariant: "default",
+      topbarSuppressed: focused,
+      sidebarSuppressed: focused,
+      detailSuppressed: focused,
+    };
+  },
 };
 
 const rendererModuleRegistry = {

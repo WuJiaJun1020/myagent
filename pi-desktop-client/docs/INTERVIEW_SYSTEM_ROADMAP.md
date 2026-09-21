@@ -1,8 +1,8 @@
 # 智能面试系统开发路线图
 
-> 文档版本：1.1  
-> 对应客户端基线：0.6.0  
-> 最后更新：2026-09-20  
+> 文档版本：1.2
+> 对应客户端基线：0.6.0
+> 最后更新：2026-09-21
 > 状态：后续开发执行依据
 
 平台级结构以 [Pi Desktop 多业务模块架构规划](./PRODUCT_MODULE_ARCHITECTURE.md) 为准。智能面试是业务模块之一，不再假定客户端以后只包含 Agent 和 Interview 两个系统。
@@ -37,6 +37,7 @@
 - 已建立独立 `InterviewModelProvider`，通过共享 Provider 配置直接调用模型，不创建 Pi Session。
 - 已支持草稿经隐私确认后生成固定题目计划，并将计划、题目与安全调用摘要持久化到 Schema v3。
 - 已提供独立面试会话页，展示准备进度、失败重试和可恢复的 Ready 状态；全部题目不会一次性发送给 Renderer。
+- 可复用面试问答题库已完成离线浏览、收藏与本地练习闭环，详细边界见 [面试问答题库架构与迭代计划](./INTERVIEW_QUESTION_BANK_ARCHITECTURE.md)。
 
 ### 2.2 尚未完成
 
@@ -206,27 +207,53 @@ draft
 - `model_invocations`
 - 在 `interviews` 增加活动问题、准备错误和版本字段。
 
-#### Schema v4：评分与报告
+#### Schema v5：可复用面试问答题库
+
+- `question_bank_items`
+- `question_versions`
+- `question_sources`
+- `question_tags`
+- `question_rubric_items`
+- `question_followups`
+- `question_user_state`
+- `question_imports`
+- 早期开发版 v4 的题库子表不是正式用户数据；检测到结构漂移时仅重建 `question_*`，不触碰面试、简历、岗位和题目计划。
+
+#### Schema v6：面试问答题库练习
+
+- `question_practice_sessions`
+- `question_practice_items`
+- `question_practice_attempts`
+- `question_practice_progress`
+- 练习题在开始时保存完整不可变快照，题库升级不改变旧练习。
+
+#### Schema v7：练习计时持久化补丁
+
+- 为 `question_practice_items` 增加 `draft_elapsed_seconds`。
+- 采用只增列的原地迁移，保留已有练习批次、草稿、作答与复习进度。
+- 新数据库和由 v6 升级的数据库最终结构一致。
+
+#### Schema v8：评分与报告
 
 - `turn_evaluations`
 - `interview_reports`
 - `report_evidence`
 
-#### Schema v5：可复用简历与候选人资料
+#### Schema v9：可复用简历与候选人资料
 
 - `candidate_profiles`
 - `resumes`
 - `resume_sections`
 - `resume_evidence`
 
-#### Schema v6：知识库与 RAG
+#### Schema v10：知识库与 RAG
 
 - `knowledge_documents`
 - `document_chunks`
 - `index_jobs`
 - `retrieval_logs`
 
-#### Schema v7：岗位画像与训练闭环
+#### Schema v11：岗位画像与训练闭环
 
 - `skills`
 - `job_skills`
@@ -281,6 +308,51 @@ draft
 
 ## 9. 开发阶段
 
+## 题库阶段 Q1：本地可复用问答题库（已完成）
+
+目标：先完成不依赖模型和网络的题库浏览闭环，并为文件、网页导入及后续 RAG 选题建立稳定数据边界。
+
+### 任务
+
+- 增加 Schema v5、旧库升级测试和 FTS 搜索。
+- 建立版本化内置题包，启动时通过统一导入接口幂等同步。
+- 实现关键词、题型、难度、岗位、技能和收藏筛选。
+- 实现分页列表、按需详情、答题思路、评分点、常见误区、追问与来源展示。
+- 收藏状态持久化，题包升级不能覆盖用户状态。
+- 为后续 PDF、DOCX、Markdown、TXT、网页和手工录入保留来源、解析器、定位及 import receipt。
+
+### 验收标准
+
+- 重启和重复同步不会生成重复题目。
+- 列表不加载完整参考答案，详情按选中题目读取。
+- 搜索、筛选和收藏完全离线可用。
+- Schema v3 旧数据无损升级。
+- 内置题包损坏时拒绝半量导入并给出明确错误。
+
+详细设计与后续阶段见 [面试问答题库架构与迭代计划](./INTERVIEW_QUESTION_BANK_ARCHITECTURE.md)。
+
+## 题库阶段 Q2：本地练习闭环（已完成）
+
+目标：在不依赖模型和网络的前提下，让题库具备可恢复、可复盘、可追踪的真实练习入口。
+
+### 任务
+
+- 增加 Schema v6、v5 升级测试以及练习批次、题目快照、作答和进度表。
+- 支持从单题或当前筛选结果开始练习，并固化题目顺序和版本。
+- 支持草稿自动保存、提交、跳过、继续练习、主动结束与历史查看。
+- 回答提交前隐藏参考框架和评分点，提交后再展示 rubric 供用户复盘。
+- 保存自评、已覆盖评分点、备注、薄弱技能和待复习状态。
+- 使用 operation ID、状态版本和草稿版本处理重复点击、重试和乱序保存。
+
+### 验收标准
+
+- 客户端关闭后可恢复唯一的进行中练习及最新草稿。
+- 回答提交前，IPC 响应中不包含参考答案、rubric、常见误区或来源详情。
+- 重复提交、自评、跳过和结束不会产生重复记录。
+- 题库升级后，历史练习仍按创建时的题目版本显示。
+- 新题包损坏不影响已存在练习的恢复和历史读取。
+- 练习业务不创建 Pi Session，也不要求模型或网络可用。
+
 ## 阶段 1：打通完整文本面试（进行中）
 
 目标：从现有草稿出发，完成一场可以中断恢复的 3～10 题文本面试。
@@ -318,7 +390,7 @@ draft
 
 ### 任务
 
-- 增加 Schema v4。
+- 增加 Schema v8。
 - 为每道题保存能力维度、评分量表和最低证据要求。
 - 按正确性、完整性、证据性、表达结构进行逐题评分。
 - 区分“回答错误”“回答不完整”“缺少证据”和“不足以判断”。
@@ -340,7 +412,7 @@ draft
 
 ### 任务
 
-- 增加 Schema v5。
+- 增加 Schema v9。
 - 支持 PDF、DOCX、TXT 导入。
 - 保存文件哈希，防止重复导入。
 - 提取教育、工作经历、项目、技能和成果指标。
@@ -362,7 +434,7 @@ draft
 
 ### 任务
 
-- 增加 Schema v6。
+- 增加 Schema v10。
 - 建立文档管理和索引任务页面。
 - 支持 Markdown、TXT、PDF 和手动录入题目。
 - 实现分块、Embedding、LanceDB 写入和索引重建。
@@ -384,7 +456,7 @@ draft
 
 ### 任务
 
-- 增加 Schema v7。
+- 增加 Schema v11。
 - 建立标准技能词典、别名和能力分类。
 - 从 JD 提取带原文证据的岗位技能画像。
 - 从简历提取带原文证据的候选人技能画像。
@@ -615,11 +687,14 @@ interview:job-collection-progress
 | 2026-09-20 | 先完成固定计划文本面试 | 先验证完整闭环，再增加动态追问和语音 |
 | 2026-09-20 | 岗位采集遵循公开、低频、可失败原则 | 不以绕过站点限制换取数据量 |
 | 2026-09-20 | 固定题目计划仅在主进程持久化，Renderer 按当前进度读取 | 避免面试开始前泄露整套题目，并为恢复与审计保留事实来源 |
+| 2026-09-21 | 题库练习使用 Schema v6 独立快照与进度表 | 保证离线恢复、版本稳定，并避免与正式面试作答和评分混用 |
 
 ## 17. 当前执行位置
 
 - 已完成：智能面试模块骨架、SQLite/LanceDB 基础、草稿、岗位库、阿里与字节采集。
 - 已完成平台前置：`PLAT-101` 至 `PLAT-104`，包括独立模块导航、Renderer/Main ModuleHost 和中立 AI Gateway 端口。
+- 已完成题库 Q1：40 道版本化内置题目、SQLite Schema v5、中文搜索与筛选、分页详情、收藏和来源追踪；统一导入模型已为文件、网页、手工及生成式来源预留解析器、定位与导入回执。
+- 已完成题库 Q2：SQLite Schema v6、单题/筛选练习、自动保存、提交后复盘、自评、跳过、恢复、历史和复习状态；练习开始时固化题目版本，且不依赖模型或 Pi Session。
 - 已完成：`INT-101`；`INT-102` 的题目计划与模型调用部分；`INT-103` 的 `prepareInterview` / `getInterviewSession`；对应的 `INT-104` IPC 和 `INT-105` 草稿、准备、Ready 页面。
 - 当前可见闭环：草稿 → 明确隐私确认 → 模型生成固定计划 → SQLite 持久化 → Ready；失败可重试，重复请求防重，客户端中断后可恢复。
 - 下一候选任务：实现 `startInterview`、`submitInterviewAnswer`、`finishInterview` 和逐题恢复，完成真正可作答的固定计划文本面试；开始前先向用户说明具体功能并取得同意。

@@ -13,12 +13,39 @@ import type {
   JobLibrarySnapshot,
   JobSource,
 } from "../../shared/contracts/interview";
+import {
+  INTERVIEW_QUESTION_DIFFICULTIES,
+  INTERVIEW_QUESTION_KINDS,
+} from "../../shared/contracts/interview";
+import type {
+  QuestionBankFavoriteRequest,
+  QuestionBankFavoriteResult,
+  QuestionBankListQuery,
+  QuestionBankListResult,
+  QuestionBankQuestionDetail,
+  QuestionBankSnapshot,
+} from "../../shared/contracts/interview-question-bank";
+import {
+  QUESTION_PRACTICE_SELF_RATINGS,
+  type QuestionPracticeAbandonRequest,
+  type QuestionPracticeCompleteReviewRequest,
+  type QuestionPracticeHistoryQuery,
+  type QuestionPracticeHistoryResult,
+  type QuestionPracticeOverview,
+  type QuestionPracticeSaveDraftRequest,
+  type QuestionPracticeSaveDraftResult,
+  type QuestionPracticeSession,
+  type QuestionPracticeSkipRequest,
+  type QuestionPracticeStartRequest,
+  type QuestionPracticeSubmitAnswerRequest,
+} from "../../shared/contracts/interview-question-practice";
 import { InterviewDatabase } from "./interview-database";
 import {
   INTERVIEW_PREPARE_QUESTIONS_PROMPT_VERSION,
   type InterviewModelProvider,
 } from "./interview-model-provider";
 import type { InterviewJobCollector } from "./job-collector";
+import { loadQuestionBankCatalog } from "./question-bank-catalog";
 import { LanceDbInterviewVectorStore, type InterviewVectorStore } from "./interview-vector-store";
 
 type ActivePreparation = {
@@ -33,6 +60,44 @@ function requiredText(value: unknown, label: string, maximum: number): string {
   if (!normalized) throw new Error(`${label}不能为空`);
   if (normalized.length > maximum) throw new Error(`${label}不能超过 ${maximum.toLocaleString()} 个字符`);
   return normalized;
+}
+
+function strictRecord(value: unknown, label: string, allowedKeys: readonly string[]): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label}无效`);
+  const record = value as Record<string, unknown>;
+  const unknownKey = Object.keys(record).find((key) => !allowedKeys.includes(key));
+  if (unknownKey) throw new Error(`${label}包含未知字段：${unknownKey}`);
+  return record;
+}
+
+function identifier(value: unknown, label: string, maximum = 160): string {
+  const parsed = requiredText(value, label, maximum);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u.test(parsed)) throw new Error(`${label}无效`);
+  return parsed;
+}
+
+function safeInteger(
+  value: unknown,
+  label: string,
+  minimum: number,
+  maximum: number,
+): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${label}必须在 ${minimum.toLocaleString()} 到 ${maximum.toLocaleString()} 之间`);
+  }
+  return value;
+}
+
+function optionalText(value: unknown, label: string, maximum: number): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  return requiredText(value, label, maximum);
+}
+
+function requiredContentText(value: unknown, label: string, maximum: number): string {
+  if (typeof value !== "string") throw new Error(`${label}无效`);
+  if (!value.trim()) throw new Error(`${label}不能为空`);
+  if (value.length > maximum) throw new Error(`${label}不能超过 ${maximum.toLocaleString()} 个字符`);
+  return value;
 }
 
 function parseCreateRequest(value: unknown): InterviewCreateRequest {
@@ -96,6 +161,220 @@ function parsePrepareRequest(value: unknown): InterviewPrepareRequest {
   return { interviewId, operationId, privacyConfirmed: true };
 }
 
+function optionalFilterText(value: unknown, label: string, maximum = 100): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  return requiredText(value, label, maximum);
+}
+
+function parseQuestionBankListQuery(value: unknown): QuestionBankListQuery {
+  if (value === undefined || value === null) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("题库筛选参数无效");
+  const query = value as Record<string, unknown>;
+  const kind = optionalFilterText(query.kind, "题目类型", 40);
+  if (kind && !INTERVIEW_QUESTION_KINDS.includes(kind as never)) throw new Error("题目类型无效");
+  const difficulty = optionalFilterText(query.difficulty, "题目难度", 40);
+  if (difficulty && !INTERVIEW_QUESTION_DIFFICULTIES.includes(difficulty as never)) throw new Error("题目难度无效");
+  if (query.favoritesOnly !== undefined && typeof query.favoritesOnly !== "boolean") {
+    throw new Error("收藏筛选参数无效");
+  }
+  const limit = query.limit;
+  if (limit !== undefined && (typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 1 || limit > 100)) {
+    throw new Error("题库每页数量必须在 1 到 100 之间");
+  }
+  const offset = query.offset;
+  if (offset !== undefined && (typeof offset !== "number" || !Number.isSafeInteger(offset) || offset < 0 || offset > 1_000_000)) {
+    throw new Error("题库分页位置无效");
+  }
+  return {
+    ...(optionalFilterText(query.search, "搜索关键词", 200) ? { search: String(query.search).trim() } : {}),
+    ...(kind ? { kind: kind as QuestionBankListQuery["kind"] } : {}),
+    ...(difficulty ? { difficulty: difficulty as QuestionBankListQuery["difficulty"] } : {}),
+    ...(optionalFilterText(query.role, "岗位筛选", 100) ? { role: String(query.role).trim() } : {}),
+    ...(optionalFilterText(query.skill, "技能筛选", 100) ? { skill: String(query.skill).trim() } : {}),
+    ...(query.favoritesOnly === true ? { favoritesOnly: true } : {}),
+    ...(limit === undefined ? {} : { limit }),
+    ...(offset === undefined ? {} : { offset }),
+  };
+}
+
+function parseQuestionBankFavoriteRequest(value: unknown): QuestionBankFavoriteRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("收藏参数无效");
+  const request = value as Record<string, unknown>;
+  if (typeof request.favorite !== "boolean") throw new Error("收藏状态无效");
+  return {
+    questionId: requiredText(request.questionId, "题目 ID", 160),
+    favorite: request.favorite,
+  };
+}
+
+const QUESTION_PRACTICE_FILTER_KEYS = [
+  "search",
+  "kind",
+  "difficulty",
+  "role",
+  "skill",
+  "favoritesOnly",
+] as const;
+
+function parseQuestionPracticeFilter(value: unknown): QuestionBankListQuery {
+  const query = strictRecord(value, "练习筛选参数", QUESTION_PRACTICE_FILTER_KEYS);
+  return parseQuestionBankListQuery(query);
+}
+
+function parseQuestionPracticeStartRequest(value: unknown): QuestionPracticeStartRequest {
+  const request = strictRecord(value, "练习创建参数", ["operationId", "selection"]);
+  const operationId = identifier(request.operationId, "练习操作 ID", 128);
+  const selection = strictRecord(request.selection, "练习选题参数", [
+    "kind",
+    "questionId",
+    "expectedVersion",
+    "query",
+    "count",
+    "order",
+  ]);
+
+  if (selection.kind === "single") {
+    const presentKeys = Object.keys(selection);
+    const unexpected = presentKeys.find((key) => !["kind", "questionId", "expectedVersion"].includes(key));
+    if (unexpected) throw new Error(`单题练习参数包含未知字段：${unexpected}`);
+    return {
+      operationId,
+      selection: {
+        kind: "single",
+        questionId: identifier(selection.questionId, "题目 ID"),
+        ...(selection.expectedVersion === undefined
+          ? {}
+          : { expectedVersion: safeInteger(selection.expectedVersion, "题目版本", 1, 1_000_000) }),
+      },
+    };
+  }
+
+  if (selection.kind === "filtered") {
+    const presentKeys = Object.keys(selection);
+    const unexpected = presentKeys.find((key) => !["kind", "query", "count", "order"].includes(key));
+    if (unexpected) throw new Error(`筛选练习参数包含未知字段：${unexpected}`);
+    if (selection.order !== "random" && selection.order !== "latest") throw new Error("练习题目顺序无效");
+    return {
+      operationId,
+      selection: {
+        kind: "filtered",
+        query: parseQuestionPracticeFilter(selection.query),
+        count: safeInteger(selection.count, "练习题数", 1, 100),
+        order: selection.order,
+      },
+    };
+  }
+
+  throw new Error("练习选题类型无效");
+}
+
+function parseQuestionPracticeSaveDraftRequest(value: unknown): QuestionPracticeSaveDraftRequest {
+  const request = strictRecord(value, "练习草稿参数", [
+    "sessionId",
+    "itemId",
+    "draftRevision",
+    "answer",
+    "elapsedSeconds",
+  ]);
+  if (typeof request.answer !== "string") throw new Error("练习回答无效");
+  if (request.answer.length > 100_000) throw new Error("练习回答不能超过 100,000 个字符");
+  return {
+    sessionId: identifier(request.sessionId, "练习批次 ID"),
+    itemId: identifier(request.itemId, "练习题目 ID"),
+    draftRevision: safeInteger(request.draftRevision, "草稿版本", 0, 1_000_000_000),
+    answer: request.answer,
+    ...(request.elapsedSeconds === undefined
+      ? {}
+      : { elapsedSeconds: safeInteger(request.elapsedSeconds, "练习用时", 0, 604_800) }),
+  };
+}
+
+function parseQuestionPracticeSubmitAnswerRequest(value: unknown): QuestionPracticeSubmitAnswerRequest {
+  const request = strictRecord(value, "练习提交参数", [
+    "sessionId",
+    "itemId",
+    "operationId",
+    "expectedStateVersion",
+    "draftRevision",
+    "answer",
+    "elapsedSeconds",
+  ]);
+  return {
+    sessionId: identifier(request.sessionId, "练习批次 ID"),
+    itemId: identifier(request.itemId, "练习题目 ID"),
+    operationId: identifier(request.operationId, "练习操作 ID", 128),
+    expectedStateVersion: safeInteger(request.expectedStateVersion, "练习状态版本", 0, 1_000_000_000),
+    draftRevision: safeInteger(request.draftRevision, "草稿版本", 0, 1_000_000_000),
+    answer: requiredContentText(request.answer, "练习回答", 100_000),
+    ...(request.elapsedSeconds === undefined
+      ? {}
+      : { elapsedSeconds: safeInteger(request.elapsedSeconds, "练习用时", 0, 604_800) }),
+  };
+}
+
+function parseQuestionPracticeCompleteReviewRequest(value: unknown): QuestionPracticeCompleteReviewRequest {
+  const request = strictRecord(value, "练习复盘参数", [
+    "sessionId",
+    "itemId",
+    "operationId",
+    "expectedStateVersion",
+    "selfRating",
+    "coveredRubricIds",
+    "note",
+  ]);
+  if (typeof request.selfRating !== "string" || !QUESTION_PRACTICE_SELF_RATINGS.includes(request.selfRating as never)) {
+    throw new Error("练习自评等级无效");
+  }
+  if (!Array.isArray(request.coveredRubricIds) || request.coveredRubricIds.length > 20) {
+    throw new Error("练习评分点无效");
+  }
+  const coveredRubricIds = request.coveredRubricIds.map((rubricId) =>
+    identifier(rubricId, "评分点 ID", 80));
+  if (new Set(coveredRubricIds).size !== coveredRubricIds.length) throw new Error("评分点不能重复");
+  return {
+    sessionId: identifier(request.sessionId, "练习批次 ID"),
+    itemId: identifier(request.itemId, "练习题目 ID"),
+    operationId: identifier(request.operationId, "练习操作 ID", 128),
+    expectedStateVersion: safeInteger(request.expectedStateVersion, "练习状态版本", 0, 1_000_000_000),
+    selfRating: request.selfRating as QuestionPracticeCompleteReviewRequest["selfRating"],
+    coveredRubricIds,
+    ...(optionalText(request.note, "练习复盘备注", 4_000) ? { note: String(request.note).trim() } : {}),
+  };
+}
+
+function parseQuestionPracticeSkipRequest(value: unknown): QuestionPracticeSkipRequest {
+  const request = strictRecord(value, "跳过题目参数", [
+    "sessionId",
+    "itemId",
+    "operationId",
+    "expectedStateVersion",
+  ]);
+  return {
+    sessionId: identifier(request.sessionId, "练习批次 ID"),
+    itemId: identifier(request.itemId, "练习题目 ID"),
+    operationId: identifier(request.operationId, "练习操作 ID", 128),
+    expectedStateVersion: safeInteger(request.expectedStateVersion, "练习状态版本", 0, 1_000_000_000),
+  };
+}
+
+function parseQuestionPracticeAbandonRequest(value: unknown): QuestionPracticeAbandonRequest {
+  const request = strictRecord(value, "放弃练习参数", ["sessionId", "operationId", "expectedStateVersion"]);
+  return {
+    sessionId: identifier(request.sessionId, "练习批次 ID"),
+    operationId: identifier(request.operationId, "练习操作 ID", 128),
+    expectedStateVersion: safeInteger(request.expectedStateVersion, "练习状态版本", 0, 1_000_000_000),
+  };
+}
+
+function parseQuestionPracticeHistoryQuery(value: unknown): QuestionPracticeHistoryQuery {
+  if (value === undefined || value === null) return {};
+  const query = strictRecord(value, "练习历史参数", ["limit", "offset"]);
+  return {
+    ...(query.limit === undefined ? {} : { limit: safeInteger(query.limit, "练习历史每页数量", 1, 100) }),
+    ...(query.offset === undefined ? {} : { offset: safeInteger(query.offset, "练习历史分页位置", 0, 1_000_000) }),
+  };
+}
+
 export class InterviewService {
   private database?: InterviewDatabase;
   private activeCollection?: Promise<JobCollectionResult>;
@@ -103,6 +382,7 @@ export class InterviewService {
   private readonly activePreparations = new Map<string, ActivePreparation>();
   private closeTask?: Promise<void>;
   private closing = false;
+  private questionBankInitialization?: Promise<void>;
   readonly vectors: InterviewVectorStore;
 
   constructor(
@@ -110,6 +390,7 @@ export class InterviewService {
     vectorStore?: InterviewVectorStore,
     private readonly jobCollector?: InterviewJobCollector,
     private readonly modelProvider?: InterviewModelProvider,
+    private readonly questionBankResourceDirectory?: string,
   ) {
     this.vectors = vectorStore ?? new LanceDbInterviewVectorStore(join(dataDirectory, "vectors", "lancedb"));
   }
@@ -187,6 +468,74 @@ export class InterviewService {
 
   getJobLibrary(): JobLibrarySnapshot {
     return this.getDatabase().getJobLibrary();
+  }
+
+  async getQuestionBankSnapshot(): Promise<QuestionBankSnapshot> {
+    await this.ensureQuestionBankReady();
+    return this.getDatabase().getQuestionBankSnapshot();
+  }
+
+  async listQuestionBankQuestions(value: unknown): Promise<QuestionBankListResult> {
+    const query = parseQuestionBankListQuery(value);
+    await this.ensureQuestionBankReady();
+    return this.getDatabase().listQuestionBank(query);
+  }
+
+  async getQuestionBankQuestion(value: unknown): Promise<QuestionBankQuestionDetail | null> {
+    const id = requiredText(value, "题目 ID", 160);
+    await this.ensureQuestionBankReady();
+    return this.getDatabase().getQuestionBankItem(id);
+  }
+
+  async setQuestionBankFavorite(value: unknown): Promise<QuestionBankFavoriteResult> {
+    const request = parseQuestionBankFavoriteRequest(value);
+    await this.ensureQuestionBankReady();
+    return this.getDatabase().setQuestionFavorite(request.questionId, request.favorite);
+  }
+
+  async getQuestionPracticeOverview(): Promise<QuestionPracticeOverview> {
+    return this.getDatabase().getQuestionPracticeOverview();
+  }
+
+  async startQuestionPractice(value: unknown): Promise<QuestionPracticeSession> {
+    const request = parseQuestionPracticeStartRequest(value);
+    await this.ensureQuestionBankReady();
+    return this.getDatabase().startQuestionPractice(request);
+  }
+
+  async getQuestionPracticeSession(value: unknown): Promise<QuestionPracticeSession | null> {
+    const sessionId = identifier(value, "练习批次 ID");
+    return this.getDatabase().getQuestionPracticeSession(sessionId);
+  }
+
+  async saveQuestionPracticeDraft(value: unknown): Promise<QuestionPracticeSaveDraftResult> {
+    const request = parseQuestionPracticeSaveDraftRequest(value);
+    return this.getDatabase().saveQuestionPracticeDraft(request);
+  }
+
+  async submitQuestionPracticeAnswer(value: unknown): Promise<QuestionPracticeSession> {
+    const request = parseQuestionPracticeSubmitAnswerRequest(value);
+    return this.getDatabase().submitQuestionPracticeAnswer(request);
+  }
+
+  async completeQuestionPracticeReview(value: unknown): Promise<QuestionPracticeSession> {
+    const request = parseQuestionPracticeCompleteReviewRequest(value);
+    return this.getDatabase().completeQuestionPracticeReview(request);
+  }
+
+  async skipQuestionPracticeItem(value: unknown): Promise<QuestionPracticeSession> {
+    const request = parseQuestionPracticeSkipRequest(value);
+    return this.getDatabase().skipQuestionPracticeItem(request);
+  }
+
+  async abandonQuestionPracticeSession(value: unknown): Promise<QuestionPracticeSession> {
+    const request = parseQuestionPracticeAbandonRequest(value);
+    return this.getDatabase().abandonQuestionPracticeSession(request);
+  }
+
+  async listQuestionPracticeHistory(value: unknown): Promise<QuestionPracticeHistoryResult> {
+    const query = parseQuestionPracticeHistoryQuery(value);
+    return this.getDatabase().listQuestionPracticeHistory(query);
   }
 
   async collectJobs(
@@ -405,6 +754,7 @@ export class InterviewService {
       // Cancellation or collection failure is already reflected in its run and IPC result.
     }
     await Promise.allSettled([...this.activePreparations.values()].map((preparation) => preparation.task));
+    if (this.questionBankInitialization) await Promise.allSettled([this.questionBankInitialization]);
     try {
       await this.vectors.close();
     } catch (error) {
@@ -425,5 +775,23 @@ export class InterviewService {
     if (this.closing) throw new Error("面试模块正在关闭");
     this.database ??= new InterviewDatabase(join(this.dataDirectory, "interview.db"));
     return this.database;
+  }
+
+  private ensureQuestionBankReady(): Promise<void> {
+    if (this.closing) return Promise.reject(new Error("面试模块正在关闭"));
+    if (!this.questionBankResourceDirectory) return Promise.resolve();
+    if (!this.questionBankInitialization) {
+      const initialization = loadQuestionBankCatalog(this.questionBankResourceDirectory)
+        .then((catalog) => {
+          this.getDatabase().importQuestionBankCatalog(catalog);
+        });
+      this.questionBankInitialization = initialization;
+      void initialization.catch(() => {
+        if (this.questionBankInitialization === initialization && !this.closing) {
+          this.questionBankInitialization = undefined;
+        }
+      });
+    }
+    return this.questionBankInitialization;
   }
 }

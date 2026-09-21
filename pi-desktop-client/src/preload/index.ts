@@ -10,6 +10,8 @@ import {
   type JobCollectionProgress,
 } from "../shared/contracts/interview";
 import { ALGORITHM_PRACTICE_IPC } from "../shared/contracts/algorithm-practice";
+import { QUESTION_BANK_IPC } from "../shared/contracts/interview-question-bank";
+import { QUESTION_PRACTICE_IPC } from "../shared/contracts/interview-question-practice";
 import type { ExtensionUiResponse, PiDesktopApi, ProcessStatus, RpcCommand, RpcMessage } from "../shared/rpc";
 
 const api: PiDesktopApi = {
@@ -93,6 +95,19 @@ const api: PiDesktopApi = {
     ipcRenderer.on(INTERVIEW_IPC.jobCollectionProgress, handler);
     return () => ipcRenderer.removeListener(INTERVIEW_IPC.jobCollectionProgress, handler);
   },
+  getQuestionBankSnapshot: () => ipcRenderer.invoke(QUESTION_BANK_IPC.getSnapshot),
+  listQuestionBankQuestions: (query) => ipcRenderer.invoke(QUESTION_BANK_IPC.listQuestions, query),
+  getQuestionBankQuestion: (id) => ipcRenderer.invoke(QUESTION_BANK_IPC.getQuestion, id),
+  setQuestionBankFavorite: (request) => ipcRenderer.invoke(QUESTION_BANK_IPC.setFavorite, request),
+  getQuestionPracticeOverview: () => ipcRenderer.invoke(QUESTION_PRACTICE_IPC.getOverview),
+  startQuestionPractice: (request) => ipcRenderer.invoke(QUESTION_PRACTICE_IPC.startSession, request),
+  getQuestionPracticeSession: (sessionId) => ipcRenderer.invoke(QUESTION_PRACTICE_IPC.getSession, sessionId),
+  saveQuestionPracticeDraft: (request) => ipcRenderer.invoke(QUESTION_PRACTICE_IPC.saveDraft, request),
+  submitQuestionPracticeAnswer: (request) => ipcRenderer.invoke(QUESTION_PRACTICE_IPC.submitAnswer, request),
+  completeQuestionPracticeReview: (request) => ipcRenderer.invoke(QUESTION_PRACTICE_IPC.completeReview, request),
+  skipQuestionPractice: (request) => ipcRenderer.invoke(QUESTION_PRACTICE_IPC.skipQuestion, request),
+  abandonQuestionPractice: (request) => ipcRenderer.invoke(QUESTION_PRACTICE_IPC.abandonSession, request),
+  listQuestionPracticeHistory: (query) => ipcRenderer.invoke(QUESTION_PRACTICE_IPC.listHistory, query),
   getAlgorithmPracticeSnapshot: () => ipcRenderer.invoke(ALGORITHM_PRACTICE_IPC.getSnapshot),
   getAlgorithmProblem: (slug) => ipcRenderer.invoke(ALGORITHM_PRACTICE_IPC.getProblem, slug),
   saveAlgorithmDraft: (request) => ipcRenderer.invoke(ALGORITHM_PRACTICE_IPC.saveDraft, request),

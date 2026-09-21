@@ -1,6 +1,6 @@
 const { spawn } = require("node:child_process");
 const { existsSync, readFileSync, unlinkSync, writeFileSync } = require("node:fs");
-const { join } = require("node:path");
+const { isAbsolute, join, relative, resolve, sep } = require("node:path");
 const { version } = require("../package.json");
 
 const projectRoot = join(__dirname, "..");
@@ -13,6 +13,8 @@ const unpackedAppResult = join(projectRoot, "release", ".unpacked-app-smoke-resu
 const appArchive = join(unpackedRoot, "resources", "app.asar");
 const embeddedPython = join(unpackedRoot, "resources", "python", "python.exe");
 const algorithmCatalog = join(unpackedRoot, "resources", "algorithm-practice", "catalog.json");
+const questionBankRoot = join(unpackedRoot, "resources", "interview-question-bank");
+const questionBankManifest = join(questionBankRoot, "manifest.json");
 const rpcEntry = join(
   unpackedRoot,
   "resources",
@@ -31,8 +33,77 @@ function createElectronAppEnv(extra = {}) {
   return env;
 }
 
-if (!existsSync(executable) || !existsSync(appArchive) || !existsSync(embeddedPython) || !existsSync(algorithmCatalog)) {
+function verifyInterviewQuestionBankResources() {
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(questionBankManifest, "utf8"));
+  } catch (error) {
+    throw new Error(`题库清单无法读取：${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (manifest?.schemaVersion !== 1 || !Array.isArray(manifest.packs) || manifest.packs.length === 0) {
+    throw new Error("题库清单格式无效或未声明任何题包");
+  }
+
+  const absoluteRoot = resolve(questionBankRoot);
+  for (const reference of manifest.packs) {
+    const file = reference?.file;
+    if (
+      typeof reference?.id !== "string"
+      || typeof reference?.version !== "string"
+      || typeof file !== "string"
+      || isAbsolute(file)
+      || file.includes("\\")
+      || file.split("/").some((part) => part === "" || part === "..")
+    ) {
+      throw new Error("题库清单包含无效的题包声明");
+    }
+
+    const packPath = resolve(absoluteRoot, file);
+    const pathFromRoot = relative(absoluteRoot, packPath);
+    if (
+      pathFromRoot === ""
+      || pathFromRoot === ".."
+      || pathFromRoot.startsWith(`..${sep}`)
+      || isAbsolute(pathFromRoot)
+      || !existsSync(packPath)
+    ) {
+      throw new Error(`题库题包缺失或越出资源目录：${file}`);
+    }
+
+    let pack;
+    try {
+      pack = JSON.parse(readFileSync(packPath, "utf8"));
+    } catch (error) {
+      throw new Error(`题库题包无法读取：${file}（${error instanceof Error ? error.message : String(error)}）`);
+    }
+    if (
+      pack?.schemaVersion !== manifest.schemaVersion
+      || pack?.pack?.id !== reference.id
+      || pack?.pack?.version !== reference.version
+      || !Array.isArray(pack?.questions)
+      || pack.questions.length === 0
+    ) {
+      throw new Error(`题库题包与清单不一致：${file}`);
+    }
+  }
+}
+
+if (
+  !existsSync(executable)
+  || !existsSync(appArchive)
+  || !existsSync(embeddedPython)
+  || !existsSync(algorithmCatalog)
+  || !existsSync(questionBankManifest)
+) {
   console.error("缺少打包产物，请先运行 npm.cmd run dist:win");
+  process.exit(1);
+}
+
+try {
+  verifyInterviewQuestionBankResources();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 }
 

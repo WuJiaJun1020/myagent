@@ -76,6 +76,13 @@
     ],
     "extraResources": [
       {
+        "from": "resources/interview-question-bank",
+        "to": "interview-question-bank",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
         "from": "resources/algorithm-practice",
         "to": "algorithm-practice",
         "filter": [

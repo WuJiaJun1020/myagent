@@ -57,6 +57,27 @@ import type {
   AlgorithmRunResult,
   AlgorithmSaveDraftRequest,
 } from "./contracts/algorithm-practice";
+import type {
+  QuestionBankFavoriteRequest,
+  QuestionBankFavoriteResult,
+  QuestionBankListQuery,
+  QuestionBankListResult,
+  QuestionBankQuestionDetail,
+  QuestionBankSnapshot,
+} from "./contracts/interview-question-bank";
+import type {
+  QuestionPracticeAbandonRequest,
+  QuestionPracticeCompleteReviewRequest,
+  QuestionPracticeHistoryQuery,
+  QuestionPracticeHistoryResult,
+  QuestionPracticeOverview,
+  QuestionPracticeSaveDraftRequest,
+  QuestionPracticeSaveDraftResult,
+  QuestionPracticeSession,
+  QuestionPracticeSkipRequest,
+  QuestionPracticeStartRequest,
+  QuestionPracticeSubmitAnswerRequest,
+} from "./contracts/interview-question-practice";
 
 export type RpcCommand = {
   id?: string;
@@ -156,6 +177,19 @@ export interface PiDesktopApi {
   getJobLibrary(): Promise<JobLibrarySnapshot>;
   collectJobs(request: JobCollectionRequest): Promise<JobCollectionResult>;
   onJobCollectionProgress(listener: (progress: JobCollectionProgress) => void): () => void;
+  getQuestionBankSnapshot(): Promise<QuestionBankSnapshot>;
+  listQuestionBankQuestions(query: QuestionBankListQuery): Promise<QuestionBankListResult>;
+  getQuestionBankQuestion(id: string): Promise<QuestionBankQuestionDetail | null>;
+  setQuestionBankFavorite(request: QuestionBankFavoriteRequest): Promise<QuestionBankFavoriteResult>;
+  getQuestionPracticeOverview(): Promise<QuestionPracticeOverview>;
+  startQuestionPractice(request: QuestionPracticeStartRequest): Promise<QuestionPracticeSession>;
+  getQuestionPracticeSession(sessionId: string): Promise<QuestionPracticeSession | null>;
+  saveQuestionPracticeDraft(request: QuestionPracticeSaveDraftRequest): Promise<QuestionPracticeSaveDraftResult>;
+  submitQuestionPracticeAnswer(request: QuestionPracticeSubmitAnswerRequest): Promise<QuestionPracticeSession>;
+  completeQuestionPracticeReview(request: QuestionPracticeCompleteReviewRequest): Promise<QuestionPracticeSession>;
+  skipQuestionPractice(request: QuestionPracticeSkipRequest): Promise<QuestionPracticeSession>;
+  abandonQuestionPractice(request: QuestionPracticeAbandonRequest): Promise<QuestionPracticeSession>;
+  listQuestionPracticeHistory(query?: QuestionPracticeHistoryQuery): Promise<QuestionPracticeHistoryResult>;
   getAlgorithmPracticeSnapshot(): Promise<AlgorithmPracticeSnapshot>;
   getAlgorithmProblem(slug: string): Promise<AlgorithmProblemDetail>;
   saveAlgorithmDraft(request: AlgorithmSaveDraftRequest): Promise<void>;

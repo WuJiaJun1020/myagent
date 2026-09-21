@@ -6,6 +6,8 @@ import {
   type InterviewPreparationProgress,
   type JobCollectionProgress,
 } from "../../shared/contracts/interview";
+import { QUESTION_BANK_IPC } from "../../shared/contracts/interview-question-bank";
+import { QUESTION_PRACTICE_IPC } from "../../shared/contracts/interview-question-practice";
 import type { MainModule } from "../../platform/main/main-module-host";
 import { sendToRenderer, type RendererWindow } from "../send-to-renderer";
 import { InterviewService } from "./interview-service";
@@ -20,6 +22,19 @@ const INTERVIEW_IPC_CHANNELS = [
   INTERVIEW_IPC.prepareInterview,
   INTERVIEW_IPC.getJobLibrary,
   INTERVIEW_IPC.collectJobs,
+  QUESTION_BANK_IPC.getSnapshot,
+  QUESTION_BANK_IPC.listQuestions,
+  QUESTION_BANK_IPC.getQuestion,
+  QUESTION_BANK_IPC.setFavorite,
+  QUESTION_PRACTICE_IPC.getOverview,
+  QUESTION_PRACTICE_IPC.startSession,
+  QUESTION_PRACTICE_IPC.getSession,
+  QUESTION_PRACTICE_IPC.saveDraft,
+  QUESTION_PRACTICE_IPC.submitAnswer,
+  QUESTION_PRACTICE_IPC.completeReview,
+  QUESTION_PRACTICE_IPC.skipQuestion,
+  QUESTION_PRACTICE_IPC.abandonSession,
+  QUESTION_PRACTICE_IPC.listHistory,
 ] as const;
 
 type InterviewIpcChannel = (typeof INTERVIEW_IPC_CHANNELS)[number];
@@ -29,15 +44,22 @@ export type InterviewIpcMain = Pick<IpcMain, "handle" | "removeHandler">;
 export type InterviewServicePort = Pick<
   InterviewService,
   "getSnapshot" | "getInterview" | "getInterviewSession" | "createInterview" | "prepareInterview"
-  | "getJobLibrary" | "collectJobs" | "close"
+  | "getJobLibrary" | "collectJobs"
+  | "getQuestionBankSnapshot" | "listQuestionBankQuestions" | "getQuestionBankQuestion"
+  | "setQuestionBankFavorite"
+  | "getQuestionPracticeOverview" | "startQuestionPractice" | "getQuestionPracticeSession"
+  | "saveQuestionPracticeDraft" | "submitQuestionPracticeAnswer" | "completeQuestionPracticeReview"
+  | "skipQuestionPracticeItem" | "abandonQuestionPracticeSession" | "listQuestionPracticeHistory"
+  | "close"
 >;
 
 export type InterviewMainModuleOptions = {
   dataDirectory: string;
+  questionBankResourceDirectory: string;
   ipcMain: InterviewIpcMain;
   getWindow: () => RendererWindow | null;
   modelGateway?: ModelGateway;
-  createService?: (dataDirectory: string) => InterviewServicePort;
+  createService?: (dataDirectory: string, questionBankResourceDirectory: string) => InterviewServicePort;
 };
 
 /**
@@ -68,13 +90,14 @@ export class InterviewMainModule implements MainModule {
   private async startModule(): Promise<void> {
     if (this.service) return;
 
-    const createService = this.options.createService ?? ((dataDirectory: string) => new InterviewService(
+    const createService = this.options.createService ?? ((dataDirectory: string, questionBankResourceDirectory: string) => new InterviewService(
       dataDirectory,
       undefined,
       new ElectronJobCollector(),
       this.options.modelGateway ? new GatewayInterviewModelProvider(this.options.modelGateway) : undefined,
+      questionBankResourceDirectory,
     ));
-    this.service = createService(this.options.dataDirectory);
+    this.service = createService(this.options.dataDirectory, this.options.questionBankResourceDirectory);
 
     try {
       this.registerIpc();
@@ -115,6 +138,19 @@ export class InterviewMainModule implements MainModule {
         request,
         (progress) => this.sendJobProgress(progress),
       ));
+      handle(QUESTION_BANK_IPC.getSnapshot, () => service.getQuestionBankSnapshot());
+      handle(QUESTION_BANK_IPC.listQuestions, (_event, query: unknown) => service.listQuestionBankQuestions(query));
+      handle(QUESTION_BANK_IPC.getQuestion, (_event, id: unknown) => service.getQuestionBankQuestion(id));
+      handle(QUESTION_BANK_IPC.setFavorite, (_event, request: unknown) => service.setQuestionBankFavorite(request));
+      handle(QUESTION_PRACTICE_IPC.getOverview, () => service.getQuestionPracticeOverview());
+      handle(QUESTION_PRACTICE_IPC.startSession, (_event, request: unknown) => service.startQuestionPractice(request));
+      handle(QUESTION_PRACTICE_IPC.getSession, (_event, sessionId: unknown) => service.getQuestionPracticeSession(sessionId));
+      handle(QUESTION_PRACTICE_IPC.saveDraft, (_event, request: unknown) => service.saveQuestionPracticeDraft(request));
+      handle(QUESTION_PRACTICE_IPC.submitAnswer, (_event, request: unknown) => service.submitQuestionPracticeAnswer(request));
+      handle(QUESTION_PRACTICE_IPC.completeReview, (_event, request: unknown) => service.completeQuestionPracticeReview(request));
+      handle(QUESTION_PRACTICE_IPC.skipQuestion, (_event, request: unknown) => service.skipQuestionPracticeItem(request));
+      handle(QUESTION_PRACTICE_IPC.abandonSession, (_event, request: unknown) => service.abandonQuestionPracticeSession(request));
+      handle(QUESTION_PRACTICE_IPC.listHistory, (_event, query: unknown) => service.listQuestionPracticeHistory(query));
       this.registered = true;
     } catch (error) {
       for (const channel of registeredChannels.reverse()) this.options.ipcMain.removeHandler(channel);

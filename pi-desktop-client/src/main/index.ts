@@ -22,6 +22,7 @@ import { WorkspaceGitService } from "./workspace/workspace-git";
 import { TurnFileChangeStore } from "./workspace/turn-file-change-store";
 import { TerminalService } from "./terminal/terminal-service";
 import { InterviewMainModule } from "./interview/interview-main-module";
+import { resolveBuiltinQuestionBankDirectory } from "./interview/question-bank-catalog";
 import { AlgorithmPracticeMainModule } from "./algorithm/algorithm-practice-main-module";
 import { MainModuleHost } from "../platform/main/main-module-host";
 import { createPiModelGateway } from "../platform/main/ai/pi-model-gateway";
@@ -500,6 +501,11 @@ app.whenReady().then(async () => {
   });
   mainModuleHost.register(new InterviewMainModule({
     dataDirectory: join(app.getPath("userData"), "interview"),
+    questionBankResourceDirectory: resolveBuiltinQuestionBankDirectory({
+      appPath: app.getAppPath(),
+      resourcesPath: process.resourcesPath,
+      packaged: app.isPackaged,
+    }),
     ipcMain,
     getWindow: () => mainWindow,
     modelGateway: interviewModelGateway,

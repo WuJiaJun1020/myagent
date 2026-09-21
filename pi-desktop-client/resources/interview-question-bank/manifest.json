@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "builtin.interview-question-bank.zh-cn",
+  "catalogVersion": "1.0.0",
+  "locale": "zh-CN",
+  "title": "Pi Desktop 中文面试问答题库",
+  "packs": [
+    {
+      "id": "builtin.python-backend",
+      "version": "1.0.0",
+      "file": "packs/python-backend.zh-CN.json",
+      "contentHash": "e696b7f032817fd55442ff6c165e9c7c96b8958e61a60ba065500be2aeaa3c6a"
+    },
+    {
+      "id": "builtin.ai-application",
+      "version": "1.0.0",
+      "file": "packs/ai-application.zh-CN.json",
+      "contentHash": "b0e15489ca6a3bd2bece388a5fc902752e61212bab2563056cedba05f9a05354"
+    },
+    {
+      "id": "builtin.agent-rag",
+      "version": "1.0.0",
+      "file": "packs/agent-rag.zh-CN.json",
+      "contentHash": "9eff436b12cfe24115cde80a9c4ce9fa5c223106e55f1b6c9945493f7103d70d"
+    },
+    {
+      "id": "builtin.general-engineering",
+      "version": "1.0.0",
+      "file": "packs/general-engineering.zh-CN.json",
+      "contentHash": "cd083aa61996e0ec260e830fd30c103f2be03a50b9d3852c443112df9db5bbec"
+    }
+  ]
+}

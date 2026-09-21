@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -161,6 +161,324 @@ describe("InterviewService", () => {
     await expect(service.collectJobs({ sources: [], keywords: ["AI"], limitPerSource: 10 }))
       .rejects.toThrow("请选择至少一个采集来源");
     await service.close();
+  });
+
+  it("loads the versioned built-in question catalog and persists user favorites", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-interview-service-"));
+    cleanup.push(directory);
+    const catalogDirectory = join(process.cwd(), "resources", "interview-question-bank");
+    const service = new InterviewService(
+      directory,
+      vectorStore,
+      undefined,
+      undefined,
+      catalogDirectory,
+    );
+
+    const snapshot = await service.getQuestionBankSnapshot();
+    expect(snapshot.published).toBeGreaterThanOrEqual(40);
+    const page = await service.listQuestionBankQuestions({
+      search: "Python",
+      limit: 5,
+      offset: 0,
+    });
+    expect(page.items.length).toBeGreaterThan(0);
+    expect(page.items.length).toBeLessThanOrEqual(5);
+    const selected = page.items[0]!;
+    const detail = await service.getQuestionBankQuestion(selected.id);
+    expect(detail).toMatchObject({ id: selected.id, stableKey: selected.stableKey });
+
+    const favorite = await service.setQuestionBankFavorite({ questionId: selected.id, favorite: true });
+    expect(favorite).toMatchObject({ questionId: selected.id, favorite: true, favorites: 1 });
+    await service.close();
+
+    const reopened = new InterviewService(
+      directory,
+      vectorStore,
+      undefined,
+      undefined,
+      catalogDirectory,
+    );
+    expect((await reopened.getQuestionBankSnapshot()).favorites).toBe(1);
+    expect((await reopened.listQuestionBankQuestions({ favoritesOnly: true })).items)
+      .toEqual([expect.objectContaining({ id: selected.id, favorite: true })]);
+    await reopened.close();
+  });
+
+  it("rejects invalid question-bank filters before reading storage", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-interview-service-"));
+    cleanup.push(directory);
+    const service = new InterviewService(directory, vectorStore);
+
+    await expect(service.listQuestionBankQuestions({ kind: "unsupported" }))
+      .rejects.toThrow("题目类型无效");
+    await expect(service.listQuestionBankQuestions({ limit: 1_000 }))
+      .rejects.toThrow("题库每页数量");
+    await expect(service.listQuestionBankQuestions({ limit: "10" }))
+      .rejects.toThrow("题库每页数量");
+    await expect(service.listQuestionBankQuestions({ offset: true }))
+      .rejects.toThrow("题库分页位置无效");
+    await expect(service.setQuestionBankFavorite({ questionId: "question-1", favorite: "yes" }))
+      .rejects.toThrow("收藏状态无效");
+    await service.close();
+  });
+
+  it("strictly validates every question-practice IPC input before reading storage", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-interview-service-"));
+    cleanup.push(directory);
+    const service = new InterviewService(directory, vectorStore);
+
+    await expect(service.startQuestionPractice({
+      operationId: "practice-1",
+      selection: { kind: "single", questionId: "question-1" },
+      unexpected: true,
+    })).rejects.toThrow("未知字段");
+    await expect(service.startQuestionPractice({
+      operationId: "practice-1",
+      selection: { kind: "single", questionId: "question-1", query: {} },
+    })).rejects.toThrow("单题练习参数包含未知字段");
+    await expect(service.startQuestionPractice({
+      operationId: "practice-1",
+      selection: { kind: "filtered", query: { limit: 10 }, count: 5, order: "latest" },
+    })).rejects.toThrow("练习筛选参数包含未知字段");
+    await expect(service.startQuestionPractice({
+      operationId: "practice-1",
+      selection: { kind: "filtered", query: {}, count: 101, order: "latest" },
+    })).rejects.toThrow("练习题数必须在 1 到 100 之间");
+    await expect(service.getQuestionPracticeSession("not a valid id"))
+      .rejects.toThrow("练习批次 ID无效");
+    await expect(service.saveQuestionPracticeDraft({
+      sessionId: "session-1",
+      itemId: "item-1",
+      draftRevision: 0,
+      answer: "draft",
+      extra: true,
+    })).rejects.toThrow("未知字段");
+    await expect(service.saveQuestionPracticeDraft({
+      sessionId: "session-1",
+      itemId: "item-1",
+      draftRevision: -1,
+      answer: "draft",
+    })).rejects.toThrow("草稿版本必须在");
+    await expect(service.saveQuestionPracticeDraft({
+      sessionId: "session-1",
+      itemId: "item-1",
+      draftRevision: 0,
+      answer: "draft",
+      elapsedSeconds: 604_801,
+    })).rejects.toThrow("练习用时必须在");
+    await expect(service.submitQuestionPracticeAnswer({
+      sessionId: "session-1",
+      itemId: "item-1",
+      operationId: "submit-1",
+      expectedStateVersion: 0,
+      draftRevision: 0,
+      answer: "  ",
+    })).rejects.toThrow("练习回答不能为空");
+    await expect(service.submitQuestionPracticeAnswer({
+      sessionId: "session-1",
+      itemId: "item-1",
+      operationId: "submit-1",
+      expectedStateVersion: 0,
+      draftRevision: 0,
+      answer: "answer",
+      elapsedSeconds: 604_801,
+    })).rejects.toThrow("练习用时必须在");
+    await expect(service.completeQuestionPracticeReview({
+      sessionId: "session-1",
+      itemId: "item-1",
+      operationId: "review-1",
+      expectedStateVersion: 1,
+      selfRating: "excellent",
+      coveredRubricIds: [],
+    })).rejects.toThrow("练习自评等级无效");
+    await expect(service.completeQuestionPracticeReview({
+      sessionId: "session-1",
+      itemId: "item-1",
+      operationId: "review-1",
+      expectedStateVersion: 1,
+      selfRating: "developing",
+      coveredRubricIds: ["criterion-1", "criterion-1"],
+    })).rejects.toThrow("评分点不能重复");
+    await expect(service.skipQuestionPracticeItem({
+      sessionId: "session-1",
+      itemId: "item-1",
+      operationId: "skip-1",
+      expectedStateVersion: "1",
+    })).rejects.toThrow("练习状态版本必须在");
+    await expect(service.abandonQuestionPracticeSession({
+      sessionId: "session-1",
+      operationId: "abandon-1",
+      expectedStateVersion: 1,
+      reason: "unsupported",
+    })).rejects.toThrow("未知字段");
+    await expect(service.listQuestionPracticeHistory({ limit: 0, offset: 0 }))
+      .rejects.toThrow("练习历史每页数量必须在 1 到 100 之间");
+    await expect(service.listQuestionPracticeHistory({ limit: 20, extra: true }))
+      .rejects.toThrow("未知字段");
+
+    await service.close();
+  });
+
+  it("runs the persisted question-practice lifecycle through validated service methods", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-interview-service-"));
+    cleanup.push(directory);
+    const service = new InterviewService(
+      directory,
+      vectorStore,
+      undefined,
+      undefined,
+      join(process.cwd(), "resources", "interview-question-bank"),
+    );
+    const selected = (await service.listQuestionBankQuestions({ limit: 1 })).items[0]!;
+
+    const started = await service.startQuestionPractice({
+      operationId: "practice-service-start-1",
+      selection: { kind: "single", questionId: selected.id, expectedVersion: selected.version },
+    });
+    expect(started).toMatchObject({ status: "active", questionCount: 1, stateVersion: 0 });
+    expect(started.currentItem).not.toHaveProperty("review");
+    expect(await service.getQuestionPracticeSession(started.id)).toMatchObject({ id: started.id });
+
+    const answer = "  保留回答原始空白  \n";
+    const saved = await service.saveQuestionPracticeDraft({
+      sessionId: started.id,
+      itemId: started.currentItem!.id,
+      draftRevision: 1,
+      answer,
+    });
+    expect(saved).toMatchObject({ draftRevision: 1 });
+    const submitted = await service.submitQuestionPracticeAnswer({
+      sessionId: started.id,
+      itemId: started.currentItem!.id,
+      operationId: "practice-service-submit-1",
+      expectedStateVersion: started.stateVersion,
+      draftRevision: 1,
+      answer,
+      elapsedSeconds: 12,
+    });
+    expect(submitted.currentItem).toMatchObject({ status: "reviewing", answerText: answer, elapsedSeconds: 12 });
+    expect(submitted.currentItem?.review?.rubric.length).toBeGreaterThan(0);
+
+    const completed = await service.completeQuestionPracticeReview({
+      sessionId: submitted.id,
+      itemId: submitted.currentItem!.id,
+      operationId: "practice-service-review-1",
+      expectedStateVersion: submitted.stateVersion,
+      selfRating: "developing",
+      coveredRubricIds: [submitted.currentItem!.review!.rubric[0]!.id],
+      note: "需要复习",
+    });
+    expect(completed).toMatchObject({ status: "completed", summary: { answered: 1, reviewed: 1 } });
+    expect(await service.getQuestionPracticeOverview()).toMatchObject({
+      completedSessions: 1,
+      practicedQuestions: 1,
+    });
+    expect((await service.listQuestionPracticeHistory({ limit: 10, offset: 0 })).items[0])
+      .toMatchObject({ id: completed.id, status: "completed", reviewed: 1 });
+
+    const skipped = await service.startQuestionPractice({
+      operationId: "practice-service-start-2",
+      selection: { kind: "single", questionId: selected.id },
+    });
+    const afterSkip = await service.skipQuestionPracticeItem({
+      sessionId: skipped.id,
+      itemId: skipped.currentItem!.id,
+      operationId: "practice-service-skip-1",
+      expectedStateVersion: skipped.stateVersion,
+    });
+    expect(afterSkip.status).toBe("completed");
+
+    const abandoned = await service.startQuestionPractice({
+      operationId: "practice-service-start-3",
+      selection: { kind: "single", questionId: selected.id },
+    });
+    expect(await service.abandonQuestionPracticeSession({
+      sessionId: abandoned.id,
+      operationId: "practice-service-abandon-1",
+      expectedStateVersion: abandoned.stateVersion,
+    })).toMatchObject({ status: "abandoned" });
+
+    await service.close();
+  });
+
+  it("recovers an existing practice without reloading the packaged question catalog", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-interview-service-"));
+    cleanup.push(directory);
+    const service = new InterviewService(
+      directory,
+      vectorStore,
+      undefined,
+      undefined,
+      join(process.cwd(), "resources", "interview-question-bank"),
+    );
+    const selected = (await service.listQuestionBankQuestions({ limit: 1 })).items[0]!;
+    const started = await service.startQuestionPractice({
+      operationId: "practice-service-recovery-start-1",
+      selection: { kind: "single", questionId: selected.id, expectedVersion: selected.version },
+    });
+    await service.saveQuestionPracticeDraft({
+      sessionId: started.id,
+      itemId: started.currentItem!.id,
+      draftRevision: 1,
+      answer: "客户端关闭前保存的回答",
+      elapsedSeconds: 37,
+    });
+    await service.close();
+
+    const reopened = new InterviewService(
+      directory,
+      vectorStore,
+      undefined,
+      undefined,
+      join(directory, "missing-question-bank"),
+    );
+    await expect(reopened.getQuestionPracticeOverview()).resolves.toMatchObject({
+      activeSession: { id: started.id },
+    });
+    await expect(reopened.getQuestionPracticeSession(started.id)).resolves.toMatchObject({
+      id: started.id,
+      currentItem: {
+        id: started.currentItem!.id,
+        draftAnswer: "客户端关闭前保存的回答",
+        draftRevision: 1,
+        elapsedSeconds: 37,
+      },
+    });
+    await expect(reopened.listQuestionPracticeHistory({ limit: 10, offset: 0 })).resolves.toMatchObject({
+      items: [{ id: started.id, status: "active" }],
+    });
+    await expect(reopened.getQuestionBankSnapshot()).rejects.toThrow();
+    await reopened.close();
+  });
+
+  it("allows a failed catalog load to be retried after the resource becomes available", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-interview-service-"));
+    cleanup.push(directory);
+    const catalogDirectory = join(directory, "late-question-bank");
+    const service = new InterviewService(directory, vectorStore, undefined, undefined, catalogDirectory);
+
+    await expect(service.getQuestionBankSnapshot()).rejects.toThrow();
+    await cp(join(process.cwd(), "resources", "interview-question-bank"), catalogDirectory, { recursive: true });
+    await expect(service.getQuestionBankSnapshot()).resolves.toMatchObject({ published: 40 });
+    await service.close();
+  });
+
+  it("does not start question-bank work after the interview module begins closing", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-interview-service-"));
+    cleanup.push(directory);
+    const service = new InterviewService(
+      directory,
+      vectorStore,
+      undefined,
+      undefined,
+      join(process.cwd(), "resources", "interview-question-bank"),
+    );
+
+    await service.close();
+
+    await expect(service.getQuestionBankSnapshot()).rejects.toThrow("面试模块正在关闭");
+    await expect(service.listQuestionBankQuestions({ limit: 10 })).rejects.toThrow("面试模块正在关闭");
   });
 
   it("cancels and waits for an active collection before closing storage", async () => {

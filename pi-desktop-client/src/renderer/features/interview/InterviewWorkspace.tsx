@@ -79,6 +79,7 @@ export function InterviewWorkspace() {
     () => interviews.find((interview) => interview.id === selectedId) ?? null,
     [interviews, selectedId],
   );
+  const focusedView = section === "algorithms" || section === "question-bank";
 
   useEffect(() => {
     void initialize();
@@ -124,9 +125,9 @@ export function InterviewWorkspace() {
   if (section === "session") return <InterviewRoom />;
 
   return (
-    <div className={`interview-page-scroll${section === "algorithms" ? " algorithm-workbench-host" : ""}`}>
-      <main className={`interview-page${section === "algorithms" ? " algorithm-workbench-page" : ""}`}>
-        {section !== "algorithms" && <header className="interview-page-header">
+    <div className={`interview-page-scroll${focusedView ? " interview-focus-host" : ""}`}>
+      <main className={`interview-page${focusedView ? " interview-focus-page" : ""}`}>
+        {!focusedView && <header className="interview-page-header">
           <div>
             <span className="eyebrow">INTERVIEW PILOT</span>
             <h1>智能面试</h1>
@@ -145,7 +146,7 @@ export function InterviewWorkspace() {
         </nav>
 
         {section === "jobs" ? <JobLibrary onUseJob={useCollectedJob} />
-          : section === "question-bank" ? <InterviewQuestionBank />
+          : section === "question-bank" ? <InterviewQuestionBank onBack={() => setInterviewView("dashboard")} />
             : section === "algorithms" ? <AlgorithmPractice onBack={() => setInterviewView("dashboard")} /> : <>
         <section className="interview-summary-grid" aria-label="面试概览">
           <article><ClipboardList size={18} /><span><small>全部面试</small><strong>{interviews.length}</strong></span></article>
