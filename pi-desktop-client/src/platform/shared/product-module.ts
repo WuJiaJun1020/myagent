@@ -1,5 +1,5 @@
 /** Product areas known to this build. Modules are registered at compile time. */
-export const PRODUCT_MODULE_IDS = ["agent", "interview"] as const;
+export const PRODUCT_MODULE_IDS = ["agent", "interview", "knowledge-studio"] as const;
 
 export type ProductModuleId = (typeof PRODUCT_MODULE_IDS)[number];
 

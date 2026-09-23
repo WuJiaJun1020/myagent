@@ -119,6 +119,47 @@ afterEach(() => {
 });
 
 describe("PiModelGateway", () => {
+  it("preserves provider-visible thinking when the runtime returns it", async () => {
+    const harness = runtimeWithResponse(response({ content: [
+      { type: "thinking", thinking: "先核对资料。" },
+      { type: "text", text: "generated text" },
+    ] }));
+    const result = await new PiModelGateway(harness.runtime, settings()).generate(request());
+    expect(result).toMatchObject({ ok: true, value: { text: "generated text", reasoningText: "先核对资料。" } });
+  });
+
+  it("reports the configured default route without sending a model request", async () => {
+    const harness = runtimeWithResponse();
+    const piSettings = settings();
+    const gateway = new PiModelGateway(harness.runtime, piSettings);
+
+    await expect(gateway.getConfiguredModel()).resolves.toEqual({
+      providerId: "test-provider",
+      modelId: "test-model",
+    });
+    expect(harness.runtime.completeSimple).not.toHaveBeenCalled();
+  });
+
+  it("lists locally available models with their supported reasoning levels", async () => {
+    const reasoningModel = {
+      ...model, id: "reasoning-model", name: "Reasoning Model", reasoning: true,
+      thinkingLevelMap: { xhigh: "extra", max: null, high: null },
+    } as RuntimeModel;
+    const runtime: PiModelRuntimePort = {
+      getModel: vi.fn((providerId, modelId) => providerId === model.provider && modelId === model.id ? model : undefined),
+      getAvailableSnapshot: () => [reasoningModel],
+      completeSimple: vi.fn(async () => response()),
+      streamSimple: vi.fn(() => { throw new Error("unused"); }),
+    };
+    const gateway = new PiModelGateway(runtime, settings());
+
+    await expect(gateway.getAvailableModels()).resolves.toEqual([
+      { providerId: "test-provider", modelId: "reasoning-model", name: "Reasoning Model", reasoningLevels: ["minimal", "low", "medium", "xhigh"], contextWindowTokens: 128_000, maxOutputTokens: 8_000 },
+      { providerId: "test-provider", modelId: "test-model", name: "Test Model", reasoningLevels: [], contextWindowTokens: 128_000, maxOutputTokens: 8_000 },
+    ]);
+    expect(runtime.completeSimple).not.toHaveBeenCalled();
+  });
+
   it("uses Pi defaults and maps messages, options, text, usage, and stop reason", async () => {
     const harness = runtimeWithResponse();
     const piSettings = settings();
@@ -191,6 +232,58 @@ describe("PiModelGateway", () => {
     });
   });
 
+  it("passes the selected reasoning effort to Pi and rejects unsupported levels", async () => {
+    const reasoningModel = { ...model, reasoning: true, thinkingLevelMap: { xhigh: null, max: null } } as RuntimeModel;
+    let options: RuntimeOptions;
+    const runtime: PiModelRuntimePort = {
+      getModel: () => reasoningModel,
+      completeSimple: vi.fn(async (_model, _context, value) => { options = value; return response(); }),
+      streamSimple: vi.fn(() => { throw new Error("unused"); }),
+    };
+    const gateway = new PiModelGateway(runtime, settings());
+
+    expect((await gateway.generate(request({ reasoning: "high" }))).ok).toBe(true);
+    expect(options).toMatchObject({ reasoning: "high" });
+    const unsupported = await gateway.generate(request({ reasoning: "max" }));
+    expect(unsupported).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    expect(runtime.completeSimple).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits unsupported sampling parameters for GPT-6 reasoning requests", async () => {
+    const gpt6 = { ...model, provider: "openai-codex", id: "gpt-6-luna", reasoning: true } as RuntimeModel;
+    let options: RuntimeOptions;
+    const runtime: PiModelRuntimePort = {
+      getModel: () => gpt6,
+      completeSimple: vi.fn(async (_model, _context, value) => { options = value; return response(); }),
+      streamSimple: vi.fn(() => { throw new Error("unused"); }),
+    };
+    const gateway = new PiModelGateway(runtime, settings());
+
+    expect((await gateway.generate(request({
+      model: { providerId: "openai-codex", modelId: "gpt-6-luna" }, reasoning: "medium",
+    }))).ok).toBe(true);
+    expect(options).toMatchObject({ reasoning: "medium", samplingParams: { stop: ["<END>"] } });
+    expect(options).not.toHaveProperty("temperature");
+    expect(options?.samplingParams).not.toHaveProperty("top_p");
+  });
+
+  it("classifies a provider's unsupported-parameter response as an invalid request", async () => {
+    const harness = runtimeWithResponse();
+    vi.mocked(harness.runtime.completeSimple).mockRejectedValueOnce(new Error("Unsupported parameter: temperature"));
+
+    expect(await new PiModelGateway(harness.runtime, settings()).generate(request())).toMatchObject({
+      ok: false, error: { code: "invalid_request", diagnosticCode: "UNSUPPORTED_PARAMETER", retryable: false },
+    });
+  });
+
+  it("classifies a provider context-window rejection without leaking its raw message", async () => {
+    const harness = runtimeWithResponse();
+    vi.mocked(harness.runtime.completeSimple).mockRejectedValueOnce(new Error("maximum context length exceeded; private input marker"));
+    const result = await new PiModelGateway(harness.runtime, settings()).generate(request());
+    expect(result).toMatchObject({ ok: false, error: { code: "budget_exceeded", diagnosticCode: "CONTEXT_LIMIT", retryable: false } });
+    expect(JSON.stringify(result)).not.toContain("private input marker");
+  });
+
   it("adds and enforces a bounded JSON response contract", async () => {
     const harness = runtimeWithResponse(response({
       content: [{ type: "text", text: "{\"questions\":[\"one\",\"two\"]}" }],
@@ -231,6 +324,12 @@ describe("PiModelGateway", () => {
       ok: false,
       error: { code: "invalid_provider_response", retryable: true, providerId: "test-provider" },
     });
+
+    const missingHarness = runtimeWithResponse(response({ content: [{ type: "text", text: "{}" }] }));
+    const missing = await new PiModelGateway(missingHarness.runtime, settings()).generate(jsonRequest);
+    expect(missing).toMatchObject({ ok: false, error: {
+      code: "invalid_provider_response", validationIssues: ["$.questions: 缺少必填字段"],
+    } });
   });
 
   it("returns not_configured when settings do not select a model", async () => {
@@ -306,9 +405,27 @@ describe("PiModelGateway", () => {
     expect(JSON.stringify(result)).not.toContain("sk-secret-value");
   });
 
+  it("retains a safe transport diagnosis without leaking the provider message", async () => {
+    const unsafe = new Error("fetch failed while sending private prompt sk-secret-value", {
+      cause: Object.assign(new Error("socket closed"), { code: "ECONNRESET" }),
+    });
+    const harness = runtimeWithResponse();
+    vi.mocked(harness.runtime.completeSimple).mockRejectedValueOnce(unsafe);
+
+    const result = await new PiModelGateway(harness.runtime, settings()).generate(request());
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "provider_unavailable", diagnosticCode: "CONNECTION_RESET", retryable: true },
+    });
+    expect(JSON.stringify(result)).not.toContain("private prompt");
+    expect(JSON.stringify(result)).not.toContain("sk-secret-value");
+  });
+
   it("maps a Pi stream into exactly one terminal gateway event", async () => {
-    const finalResponse = response({ content: [{ type: "text", text: "hello" }] });
+    const finalResponse = response({ content: [{ type: "thinking", thinking: "先检查输入" }, { type: "text", text: "hello" }] });
     async function* events(): AsyncIterable<RuntimeStreamEvent> {
+      yield { type: "thinking_delta", delta: "先检查输入" } as RuntimeStreamEvent;
       yield { type: "text_delta", delta: "hel" } as RuntimeStreamEvent;
       yield { type: "text_delta", delta: "lo" } as RuntimeStreamEvent;
       yield { type: "done", reason: "stop", message: finalResponse } as RuntimeStreamEvent;
@@ -321,15 +438,49 @@ describe("PiModelGateway", () => {
     const gateway = new PiModelGateway(runtime, settings(), { createRequestId: () => "stream-1" });
 
     const received = [];
-    for await (const event of gateway.stream(request())) received.push(event);
+    const streamedRequest = request();
+    for await (const event of gateway.stream(streamedRequest)) received.push(event);
+
+    const expectedInputCharacters = streamedRequest.messages.reduce((total, message) => total + message.content.length, 0);
 
     expect(received).toMatchObject([
-      { type: "started", requestId: "stream-1" },
+      { type: "started", requestId: "stream-1", diagnostics: { effectiveSystemPrompt: "Follow the response contract.",
+        estimatedInputTokens: expect.any(Number), inputTextCharacters: expectedInputCharacters,
+        modelContextWindowTokens: 128_000, effectiveTimeoutMs: 10_000, maxOutputTokens: 1_000, temperatureApplied: true } },
+      { type: "reasoning_delta", delta: "先检查输入" },
       { type: "text_delta", delta: "hel" },
       { type: "text_delta", delta: "lo" },
       { type: "usage", usage: { inputTokens: 10, outputTokens: 3 } },
-      { type: "completed", response: { requestId: "stream-1", text: "hello", finishReason: "stop" } },
+      { type: "completed", response: { requestId: "stream-1", text: "hello", reasoningText: "先检查输入", finishReason: "stop" } },
     ]);
     expect(received.filter((event) => event.type === "completed" || event.type === "failed")).toHaveLength(1);
+  });
+
+  it("counts the final system text including the JSON contract in stream diagnostics", async () => {
+    const finalResponse = response({ content: [{ type: "text", text: '{"ok":true}' }] });
+    async function* events(): AsyncIterable<RuntimeStreamEvent> {
+      yield { type: "done", reason: "stop", message: finalResponse } as RuntimeStreamEvent;
+    }
+    const runtime: PiModelRuntimePort = {
+      getModel: () => model,
+      completeSimple: vi.fn(async () => finalResponse),
+      streamSimple: vi.fn(() => events()),
+    };
+    const gateway = new PiModelGateway(runtime, settings());
+    const received = [];
+    for await (const event of gateway.stream(request({
+      messages: [{ role: "system", content: "规则" }, { role: "user", content: "资料正文" }],
+      responseFormat: { type: "json", schemaName: "test_contract", jsonSchema: {
+        type: "object", required: ["ok"], properties: { ok: { type: "boolean" } },
+      } },
+    }))) received.push(event);
+
+    const started = received[0];
+    expect(started?.type).toBe("started");
+    if (started?.type !== "started") return;
+    expect(started.diagnostics?.effectiveSystemPrompt).toContain("JSON contract name: test_contract.");
+    expect(started.diagnostics?.inputTextCharacters).toBe(
+      (started.diagnostics?.effectiveSystemPrompt?.length ?? 0) + "资料正文".length,
+    );
   });
 });

@@ -10,16 +10,22 @@ import {
   type AiCallOptions,
   type AiGatewayError,
   type AiGatewayErrorCode,
+  type AiGatewayDiagnosticCode,
   type AiGatewayResult,
+  type AiResolvedModel,
   type AiUsage,
 } from "../../shared/ai/contracts";
-import type {
-  ModelFinishReason,
-  ModelGateway,
-  ModelRequest,
-  ModelResponse,
-  ModelStreamEvent,
+import {
+  usesFixedReasoningSampling,
+  type AiAvailableModel,
+  type ModelFinishReason,
+  type ModelGateway,
+  type ModelRequest,
+  type ModelReasoningLevel,
+  type ModelResponse,
+  type ModelStreamEvent,
 } from "../../shared/ai/model-gateway";
+import { estimateTextTokens } from "../../shared/ai/token-estimate";
 
 type PiModel = NonNullable<ReturnType<ModelRuntime["getModel"]>>;
 type PiContext = Parameters<ModelRuntime["completeSimple"]>[1];
@@ -30,6 +36,7 @@ type PiStreamEvent = ReturnType<ModelRuntime["streamSimple"]> extends AsyncItera
 /** The small, session-free surface consumed from Pi's model runtime. */
 export interface PiModelRuntimePort {
   getModel(providerId: string, modelId: string): PiModel | undefined;
+  getAvailableSnapshot?(): readonly PiModel[];
   completeSimple(model: PiModel, context: PiContext, options?: PiRequestOptions): Promise<PiAssistantMessage>;
   streamSimple(model: PiModel, context: PiContext, options?: PiRequestOptions): AsyncIterable<PiStreamEvent>;
   refresh?(options?: { allowNetwork?: boolean; providers?: readonly string[]; signal?: AbortSignal }): Promise<unknown>;
@@ -62,7 +69,10 @@ export type CreatePiModelGatewayOptions = PiModelGatewayOptions & {
   signal?: AbortSignal;
 };
 
-type PiRuntimeModule = Pick<typeof import("@earendil-works/pi-coding-agent"), "ModelRuntime" | "SettingsManager">;
+type PiRuntimeModule = Pick<typeof import("@earendil-works/pi-coding-agent"), "ModelRuntime" | "SettingsManager"> & {
+  applyHttpProxySettings(proxy: string | undefined): void;
+  configureHttpDispatcher(timeoutMs: number): void;
+};
 
 type ResolvedRequest = {
   model: PiModel;
@@ -85,6 +95,15 @@ type ErrorLike = {
 const MAX_SCHEMA_CHARACTERS = 100_000;
 const MAX_SCHEMA_DEPTH = 64;
 const SAFE_ID = /^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/u;
+const REASONING_LEVELS: readonly ModelReasoningLevel[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
+
+function supportedReasoningLevels(model: PiModel): ModelReasoningLevel[] {
+  if (!model.reasoning) return [];
+  return REASONING_LEVELS.filter((level) => {
+    const mapped = model.thinkingLevelMap?.[level];
+    return mapped !== null && (level !== "xhigh" && level !== "max" || mapped !== undefined);
+  });
+}
 
 class SafeRequestError extends Error {
   constructor(
@@ -206,6 +225,9 @@ function validateRequest(request: ModelRequest): void {
 
   safeRoutingValue(request.model?.providerId, "model.providerId");
   safeRoutingValue(request.model?.modelId, "model.modelId");
+  if (request.reasoning !== undefined && !REASONING_LEVELS.includes(request.reasoning)) {
+    throw new SafeRequestError("invalid_request", "reasoning level is invalid");
+  }
   if (request.temperature !== undefined
     && (!Number.isFinite(request.temperature) || request.temperature < 0 || request.temperature > 2)) {
     throw new SafeRequestError("invalid_request", "temperature must be between 0 and 2");
@@ -401,6 +423,45 @@ function matchesSchema(value: unknown, rawSchema: unknown, depth = 0): boolean {
   return true;
 }
 
+/** Diagnostic paths are deliberately schema-only: never echo provider or source text. */
+function schemaMismatchPaths(value: unknown, rawSchema: unknown, path = "$", depth = 0): string[] {
+  if (!isRecord(rawSchema) || depth > MAX_SCHEMA_DEPTH) return [`${path}: 结构不符合约束`];
+  const schema = rawSchema;
+  const issues: string[] = [];
+  const expected = schema.type;
+  if (expected === "object" && !isRecord(value)) return [`${path}: 应为对象`];
+  if (expected === "array" && !Array.isArray(value)) return [`${path}: 应为数组`];
+  if (expected === "string" && typeof value !== "string") return [`${path}: 应为字符串`];
+  if (expected === "integer" && !Number.isInteger(value)) return [`${path}: 应为整数`];
+  if (Array.isArray(schema.enum) && !schema.enum.some((entry) => deepEqualJson(entry, value))) {
+    issues.push(`${path}: 不在允许的枚举值中`);
+  }
+  if (Array.isArray(value)) {
+    if (typeof schema.minItems === "number" && value.length < schema.minItems) issues.push(`${path}: 数量 ${value.length}，至少需要 ${schema.minItems}`);
+    if (typeof schema.maxItems === "number" && value.length > schema.maxItems) issues.push(`${path}: 数量 ${value.length}，最多允许 ${schema.maxItems}`);
+    if (schema.items !== undefined) {
+      for (let index = 0; index < value.length && issues.length < 8; index += 1) {
+        if (!matchesSchema(value[index], schema.items)) issues.push(...schemaMismatchPaths(value[index], schema.items, `${path}[${index}]`, depth + 1));
+      }
+    }
+  }
+  if (isRecord(value)) {
+    const properties = isRecord(schema.properties) ? schema.properties : {};
+    if (Array.isArray(schema.required)) {
+      for (const key of schema.required) {
+        if (typeof key === "string" && !Object.hasOwn(value, key)) issues.push(`${path}.${key}: 缺少必填字段`);
+      }
+    }
+    for (const key of Object.keys(value)) {
+      if (issues.length >= 8) break;
+      if (Object.hasOwn(properties, key)) {
+        if (!matchesSchema(value[key], properties[key])) issues.push(...schemaMismatchPaths(value[key], properties[key], `${path}.${key}`, depth + 1));
+      } else if (schema.additionalProperties === false) issues.push(`${path}: 不允许额外字段`);
+    }
+  }
+  return issues.slice(0, 8).length ? issues.slice(0, 8) : [`${path}: 结构不符合约束`];
+}
+
 function jsonInstruction(request: ModelRequest): string | undefined {
   if (request.responseFormat?.type !== "json") return undefined;
   const serializedSchema = serializeAndValidateSchema(request.responseFormat.jsonSchema);
@@ -456,16 +517,6 @@ function buildContext(request: ModelRequest, model: PiModel, timestamp: number):
   };
 }
 
-function estimateTextTokens(text: string): number {
-  let ascii = 0;
-  let nonAscii = 0;
-  for (const character of text) {
-    if (character.codePointAt(0)! <= 0x7f) ascii += 1;
-    else nonAscii += 1;
-  }
-  return Math.ceil(ascii / 4 + nonAscii);
-}
-
 function estimateContextTokens(context: PiContext): number {
   let tokens = context.systemPrompt ? estimateTextTokens(context.systemPrompt) : 0;
   for (const message of context.messages) {
@@ -478,6 +529,19 @@ function estimateContextTokens(context: PiContext): number {
     }
   }
   return tokens;
+}
+
+function inputTextCharacters(context: PiContext): number {
+  let characters = context.systemPrompt?.length ?? 0;
+  for (const message of context.messages) {
+    if (message.role === "user" && typeof message.content === "string") characters += message.content.length;
+    if (message.role === "assistant") {
+      for (const block of message.content) {
+        if (block.type === "text") characters += block.text.length;
+      }
+    }
+  }
+  return characters;
 }
 
 function maximumRate(model: PiModel, key: "input" | "output"): number {
@@ -516,14 +580,17 @@ function assertActualBudget(request: ModelRequest, usage: AiUsage): void {
   }
 }
 
-function requestOptions(request: ModelRequest, settings: PiModelSettingsPort, signal: AbortSignal): PiRequestOptions {
+function requestOptions(request: ModelRequest, model: PiModel, settings: PiModelSettingsPort, signal: AbortSignal): PiRequestOptions {
   const retry = settings.getProviderRetrySettings?.();
   const configuredTimeout = retry?.timeoutMs ?? settings.getHttpIdleTimeoutMs?.();
   const timeoutMs = configuredTimeout === undefined || configuredTimeout === 0
     ? request.metadata.budget.timeoutMs
     : Math.min(configuredTimeout, request.metadata.budget.timeoutMs);
+  // GPT-6 reasoning requests reject temperature and top_p. All reasoning
+  // levels supported by this gateway are non-none, as is the provider default.
+  const defaultSampling = usesFixedReasoningSampling({ providerId: model.provider, modelId: model.id });
   const samplingParams = {
-    ...(request.topP === undefined ? {} : { top_p: request.topP }),
+    ...(defaultSampling || request.topP === undefined ? {} : { top_p: request.topP }),
     ...(request.stopSequences === undefined ? {} : { stop: [...request.stopSequences] }),
   };
   return {
@@ -534,7 +601,8 @@ function requestOptions(request: ModelRequest, settings: PiModelSettingsPort, si
     ...(settings.getWebSocketConnectTimeoutMs?.() === undefined
       ? {}
       : { websocketConnectTimeoutMs: settings.getWebSocketConnectTimeoutMs?.() }),
-    ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
+    ...(defaultSampling || request.temperature === undefined ? {} : { temperature: request.temperature }),
+    ...(request.reasoning === undefined ? {} : { reasoning: request.reasoning }),
     ...(request.metadata.budget.maxOutputTokens === undefined
       ? {}
       : { maxTokens: request.metadata.budget.maxOutputTokens }),
@@ -547,6 +615,14 @@ function piText(message: PiAssistantMessage): string {
     .filter((block): block is Extract<(typeof message.content)[number], { type: "text" }> => block.type === "text")
     .map((block) => block.text)
     .join("");
+}
+
+function piReasoningText(message: PiAssistantMessage): string | undefined {
+  const text = message.content
+    .filter((block): block is Extract<(typeof message.content)[number], { type: "thinking" }> => block.type === "thinking")
+    .map((block) => block.thinking)
+    .join("\n\n").trim();
+  return text || undefined;
 }
 
 function mapUsage(message: PiAssistantMessage, durationMs: number): AiUsage {
@@ -607,7 +683,7 @@ function retryAfterMs(chain: readonly ErrorLike[]): number | undefined {
 function safeFailure(
   code: AiGatewayErrorCode,
   providerId?: string,
-  details: Partial<Pick<AiGatewayError, "statusCode" | "retryAfterMs">> = {},
+  details: Partial<Pick<AiGatewayError, "statusCode" | "retryAfterMs" | "diagnosticCode" | "validationIssues">> = {},
 ): AiGatewayError {
   const descriptions: Record<AiGatewayErrorCode, { message: string; retryable: boolean }> = {
     invalid_request: { message: "The AI request is invalid", retryable: false },
@@ -632,6 +708,16 @@ function safeFailure(
   };
 }
 
+function transportDiagnostic(detail: string): AiGatewayDiagnosticCode | undefined {
+  if (/\bENOTFOUND\b|\bEAI_AGAIN\b/iu.test(detail)) return "DNS_FAILURE";
+  if (/\bECONNREFUSED\b/iu.test(detail)) return "CONNECTION_REFUSED";
+  if (/\bECONNRESET\b/iu.test(detail)) return "CONNECTION_RESET";
+  if (/headers? timed out|UND_ERR_HEADERS_TIMEOUT/iu.test(detail)) return "HEADER_TIMEOUT";
+  if (/websocket/iu.test(detail)) return "WEBSOCKET_FAILURE";
+  if (/fetch failed/iu.test(detail)) return "FETCH_FAILED";
+  return undefined;
+}
+
 function mapError(error: unknown, providerId: string | undefined, scope?: CallScope): AiGatewayError {
   const scopeCode = scope?.failureCode;
   if (scopeCode) return safeFailure(scopeCode, providerId);
@@ -646,9 +732,11 @@ function mapError(error: unknown, providerId: string | undefined, scope?: CallSc
   const names = chain.map((entry) => String(entry.name ?? "")).join(" ");
   const codes = chain.map((entry) => String(entry.code ?? "")).join(" ");
   const detail = `${message} ${names} ${codes}`;
+  const diagnosticCode = transportDiagnostic(detail);
   const responseDetails = {
     ...(statusCode === undefined ? {} : { statusCode }),
     ...(retryAfter === undefined ? {} : { retryAfterMs: retryAfter }),
+    ...(diagnosticCode === undefined ? {} : { diagnosticCode }),
   };
 
   if (/content.?filter|safety|moderation|blocked.?content|responsible.?ai/iu.test(detail)) {
@@ -668,6 +756,12 @@ function mapError(error: unknown, providerId: string | undefined, scope?: CallSc
   }
   if (statusCode !== undefined && statusCode >= 500) {
     return safeFailure("provider_unavailable", providerId, responseDetails);
+  }
+  if (/unsupported parameter|invalid parameter|unknown parameter/iu.test(detail)) {
+    return safeFailure("invalid_request", providerId, { ...responseDetails, diagnosticCode: "UNSUPPORTED_PARAMETER" });
+  }
+  if (statusCode === 413 || /context.{0,20}(?:window|length|limit)|maximum.{0,20}context|too many tokens|prompt.{0,20}too long|input.{0,30}(?:token|length).{0,30}(?:exceed|limit)/iu.test(detail)) {
+    return safeFailure("budget_exceeded", providerId, { ...responseDetails, diagnosticCode: "CONTEXT_LIMIT" });
   }
   if (statusCode === 400 || statusCode === 404 || statusCode === 413 || statusCode === 422) {
     return safeFailure("invalid_request", providerId, responseDetails);
@@ -700,11 +794,13 @@ function validateJsonResponse(request: ModelRequest, text: string): void {
   try {
     value = JSON.parse(text);
   } catch {
-    throw new SafeGatewayFailure(safeFailure("invalid_provider_response"));
+    throw new SafeGatewayFailure(safeFailure("invalid_provider_response", undefined, { validationIssues: ["$: 不是合法 JSON"] }));
   }
   if (request.responseFormat.jsonSchema !== undefined
     && !matchesSchema(value, request.responseFormat.jsonSchema)) {
-    throw new SafeGatewayFailure(safeFailure("invalid_provider_response"));
+    throw new SafeGatewayFailure(safeFailure("invalid_provider_response", undefined, {
+      validationIssues: schemaMismatchPaths(value, request.responseFormat.jsonSchema),
+    }));
   }
 }
 
@@ -714,10 +810,12 @@ function responseFromPi(
   message: PiAssistantMessage,
   durationMs: number,
 ): ModelResponse {
+  const reasoningText = piReasoningText(message);
   return {
     requestId,
     model: { providerId: resolved.providerId, modelId: resolved.modelId },
     text: piText(message),
+    ...(reasoningText ? { reasoningText } : {}),
     finishReason: mapFinishReason(message.stopReason),
     usage: mapUsage(message, durationMs),
   };
@@ -739,6 +837,30 @@ export class PiModelGateway implements ModelGateway {
   ) {
     this.now = options.now ?? Date.now;
     this.createRequestId = options.createRequestId ?? randomUUID;
+  }
+
+  async getConfiguredModel(): Promise<AiResolvedModel | null> {
+    await this.reloadSettings();
+    const providerId = safeRoutingValue(this.settings.getDefaultProvider(), "default provider");
+    const modelId = safeRoutingValue(this.settings.getDefaultModel(), "default model");
+    return providerId && modelId ? { providerId, modelId } : null;
+  }
+
+  async getAvailableModels(): Promise<AiAvailableModel[]> {
+    await this.reloadSettings();
+    const models = [...(this.runtime.getAvailableSnapshot?.() ?? [])];
+    const providerId = safeRoutingValue(this.settings.getDefaultProvider(), "default provider");
+    const modelId = safeRoutingValue(this.settings.getDefaultModel(), "default model");
+    if (providerId && modelId && !models.some((model) => model.provider === providerId && model.id === modelId)) {
+      const configured = this.runtime.getModel(providerId, modelId);
+      if (configured) models.push(configured);
+    }
+    return [...new Map(models.map((model) => [`${model.provider}/${model.id}`, {
+      providerId: model.provider, modelId: model.id, name: model.name,
+      reasoningLevels: supportedReasoningLevels(model),
+      ...(model.contextWindow > 0 ? { contextWindowTokens: model.contextWindow } : {}),
+      ...(model.maxTokens > 0 ? { maxOutputTokens: model.maxTokens } : {}),
+    }])).values()].sort((a, b) => `${a.providerId}/${a.name}`.localeCompare(`${b.providerId}/${b.name}`));
   }
 
   async generate(request: ModelRequest, options: AiCallOptions = {}): Promise<AiGatewayResult<ModelResponse>> {
@@ -792,7 +914,18 @@ export class PiModelGateway implements ModelGateway {
       const requestId = this.createRequestId();
       const source = this.runtime.streamSimple(resolved.model, resolved.context, resolved.options);
       const iterator = source[Symbol.asyncIterator]();
-      yield { type: "started", requestId, model: { providerId: resolved.providerId, modelId: resolved.modelId } };
+      yield { type: "started", requestId, model: { providerId: resolved.providerId, modelId: resolved.modelId }, diagnostics: {
+        effectiveSystemPrompt: resolved.context.systemPrompt,
+        estimatedInputTokens: estimateContextTokens(resolved.context),
+        inputTextCharacters: inputTextCharacters(resolved.context),
+        ...(resolved.model.contextWindow > 0 ? { modelContextWindowTokens: resolved.model.contextWindow } : {}),
+        effectiveTimeoutMs: resolved.options.timeoutMs,
+        maxOutputTokens: resolved.options.maxTokens,
+        temperatureApplied: resolved.options.temperature !== undefined,
+        ...(resolved.options.temperature === undefined ? {} : { effectiveTemperature: resolved.options.temperature }),
+        ...(resolved.options.reasoning === undefined ? {} : { reasoning: resolved.options.reasoning }),
+        ...(resolved.options.maxRetries === undefined ? {} : { providerMaxRetries: resolved.options.maxRetries }),
+      } };
 
       while (true) {
         const item = await scope.race(Promise.resolve().then(() => iterator.next()));
@@ -802,6 +935,10 @@ export class PiModelGateway implements ModelGateway {
         const event = item.value;
         if (event.type === "text_delta") {
           yield { type: "text_delta", delta: event.delta };
+          continue;
+        }
+        if (event.type === "thinking_delta") {
+          yield { type: "reasoning_delta", delta: event.delta };
           continue;
         }
         if (event.type === "error") {
@@ -861,6 +998,9 @@ export class PiModelGateway implements ModelGateway {
       model = this.runtime.getModel(providerId, modelId);
     }
     if (!model) throw new SafeGatewayFailure(safeFailure("not_configured", providerId));
+    if (request.reasoning && !supportedReasoningLevels(model).includes(request.reasoning)) {
+      throw new SafeRequestError("invalid_request", `model ${providerId}/${modelId} does not support reasoning level ${request.reasoning}`);
+    }
     const context = buildContext(request, model, this.now());
     assertBudget(request, model, context);
     return {
@@ -868,7 +1008,7 @@ export class PiModelGateway implements ModelGateway {
       providerId,
       modelId,
       context,
-      options: requestOptions(request, this.settings, signal),
+      options: requestOptions(request, model, this.settings, signal),
     };
   }
 
@@ -904,7 +1044,8 @@ function piBundleEntry(appRoot: string): string {
 export async function loadPiRuntimeModule(appRoot: string): Promise<PiRuntimeModule> {
   try {
     const loaded = await import(pathToFileURL(piBundleEntry(appRoot)).href) as Partial<PiRuntimeModule>;
-    if (typeof loaded.ModelRuntime?.create !== "function" || typeof loaded.SettingsManager?.create !== "function") {
+    if (typeof loaded.ModelRuntime?.create !== "function" || typeof loaded.SettingsManager?.create !== "function"
+      || typeof loaded.applyHttpProxySettings !== "function" || typeof loaded.configureHttpDispatcher !== "function") {
       throw new Error("Required Pi runtime exports are missing");
     }
     return loaded as PiRuntimeModule;
@@ -924,6 +1065,8 @@ export async function createPiModelGateway(options: CreatePiModelGatewayOptions)
     options.agentDir,
     { projectTrusted: options.projectTrusted ?? true },
   );
+  pi.applyHttpProxySettings(settings.getGlobalSettings().httpProxy);
+  pi.configureHttpDispatcher(settings.getHttpIdleTimeoutMs());
   const runtime = await pi.ModelRuntime.create({
     ...(options.agentDir === undefined
       ? {}

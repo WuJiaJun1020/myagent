@@ -91,6 +91,17 @@ export const AI_GATEWAY_ERROR_CODES = [
 
 export type AiGatewayErrorCode = (typeof AI_GATEWAY_ERROR_CODES)[number];
 
+/** Whitelisted request/transport diagnostics; never contains provider response bodies or user input. */
+export type AiGatewayDiagnosticCode =
+  | "UNSUPPORTED_PARAMETER"
+  | "CONTEXT_LIMIT"
+  | "FETCH_FAILED"
+  | "DNS_FAILURE"
+  | "CONNECTION_REFUSED"
+  | "CONNECTION_RESET"
+  | "WEBSOCKET_FAILURE"
+  | "HEADER_TIMEOUT";
+
 /**
  * A provider-neutral, serializable error safe to pass across module boundaries.
  * `message` must not include raw prompts, document content, credentials, or response bodies.
@@ -102,6 +113,9 @@ export type AiGatewayError = {
   providerId?: string;
   statusCode?: number;
   retryAfterMs?: number;
+  diagnosticCode?: AiGatewayDiagnosticCode;
+  /** Schema paths only; never include model text or user-provided values. */
+  validationIssues?: string[];
 };
 
 export type AiGatewayResult<T> =

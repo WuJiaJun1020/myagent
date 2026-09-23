@@ -24,4 +24,14 @@ describe("renderer module layout", () => {
     expect(getRendererModule("agent").resolveLayout("activity")).toEqual({ detailVariant: "default" });
     expect(getRendererModule("agent").resolveLayout("review")).toEqual({ detailVariant: "review" });
   });
+
+  it("loads Knowledge Studio as an independent focused product module", () => {
+    const studio = getRendererModule("knowledge-studio");
+
+    expect(studio.title).toBe("知识工坊");
+    expect(studio.resolveLayout("studio")).toMatchObject({
+      detailVariant: "default",
+      detailSuppressed: true,
+    });
+  });
 });

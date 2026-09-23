@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { ImageAttachment } from "../../shared/contracts/agent-session";
 import { isProductModuleId, type ProductModuleId } from "../../platform/shared/product-module";
-import type { AgentView, InterviewView, ModuleViews } from "../modules/module-navigation";
+import type { AgentView, InterviewView, KnowledgeStudioView, ModuleViews } from "../modules/module-navigation";
 
 export type ResourceCenterTab = "online" | "packages" | "skills" | "extensions" | "prompts" | "tools";
 export type DetailSelection =
@@ -44,6 +44,7 @@ type UiStore = {
   setActiveModule: (moduleId: ProductModuleId) => void;
   setAgentView: (view: AgentView) => void;
   setInterviewView: (view: InterviewView) => void;
+  setKnowledgeStudioView: (view: KnowledgeStudioView) => void;
   setResourceCenterTab: (tab: ResourceCenterTab) => void;
   setComposerDraft: (draft: string | null) => void;
   setSessionComposerDraft: (sessionId: string, draft: SessionComposerDraft) => void;
@@ -66,6 +67,10 @@ function isInterviewView(value: unknown): value is InterviewView {
     || value === "algorithms" || value === "session";
 }
 
+function isKnowledgeStudioView(value: unknown): value is KnowledgeStudioView {
+  return value === "studio";
+}
+
 function isResourceCenterTab(value: unknown): value is ResourceCenterTab {
   return value === "online" || value === "packages" || value === "skills"
     || value === "extensions" || value === "prompts" || value === "tools";
@@ -79,14 +84,14 @@ export type PersistedNavigation = {
 
 const DEFAULT_NAVIGATION: PersistedNavigation = {
   activeModule: "agent",
-  moduleViews: { agent: "activity", interview: "dashboard" },
+  moduleViews: { agent: "activity", interview: "dashboard", "knowledge-studio": "studio" },
   resourceCenterTab: "online",
 };
 
 export function parsePersistedNavigation(input: unknown): PersistedNavigation {
   const fallback: PersistedNavigation = {
     activeModule: "agent",
-    moduleViews: { agent: "activity", interview: "dashboard" },
+    moduleViews: { agent: "activity", interview: "dashboard", "knowledge-studio": "studio" },
     resourceCenterTab: "online",
   };
   if (!input || typeof input !== "object" || Array.isArray(input)) return fallback;
@@ -97,7 +102,7 @@ export function parsePersistedNavigation(input: unknown): PersistedNavigation {
     resourceCenterTab?: unknown;
   };
   const storedModuleViews = value.moduleViews && typeof value.moduleViews === "object" && !Array.isArray(value.moduleViews)
-    ? value.moduleViews as { agent?: unknown; interview?: unknown }
+    ? value.moduleViews as { agent?: unknown; interview?: unknown; "knowledge-studio"?: unknown }
     : undefined;
 
   // Migrate the previous single sidebarView value without losing the user's
@@ -111,6 +116,9 @@ export function parsePersistedNavigation(input: unknown): PersistedNavigation {
     moduleViews: {
       agent: isAgentView(storedModuleViews?.agent) ? storedModuleViews.agent : legacyAgentView,
       interview: isInterviewView(storedModuleViews?.interview) ? storedModuleViews.interview : fallback.moduleViews.interview,
+      "knowledge-studio": isKnowledgeStudioView(storedModuleViews?.["knowledge-studio"])
+        ? storedModuleViews["knowledge-studio"]
+        : fallback.moduleViews["knowledge-studio"],
     },
     resourceCenterTab: isResourceCenterTab(value.resourceCenterTab) ? value.resourceCenterTab : fallback.resourceCenterTab,
   };
@@ -171,6 +179,11 @@ export const useUiStore = create<UiStore>((set) => ({
   }),
   setInterviewView: (interviewView) => set((state) => {
     const moduleViews = { ...state.moduleViews, interview: interviewView };
+    saveNavigation({ activeModule: state.activeModule, moduleViews, resourceCenterTab: state.resourceCenterTab });
+    return { moduleViews };
+  }),
+  setKnowledgeStudioView: (knowledgeStudioView) => set((state) => {
+    const moduleViews = { ...state.moduleViews, "knowledge-studio": knowledgeStudioView };
     saveNavigation({ activeModule: state.activeModule, moduleViews, resourceCenterTab: state.resourceCenterTab });
     return { moduleViews };
   }),

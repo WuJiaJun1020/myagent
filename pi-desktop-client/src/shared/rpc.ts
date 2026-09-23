@@ -78,6 +78,24 @@ import type {
   QuestionPracticeStartRequest,
   QuestionPracticeSubmitAnswerRequest,
 } from "./contracts/interview-question-practice";
+import type {
+  KnowledgeCreateBatchRequest,
+  KnowledgeDeleteBatchResult,
+  KnowledgeDeleteSourceRequest,
+  KnowledgeDeleteSourceResult,
+  KnowledgeGenerationBatch,
+  KnowledgeGenerationProgress,
+  KnowledgeImportFilesResult,
+  KnowledgeImportTextRequest,
+  KnowledgeImportUrlRequest,
+  KnowledgeReviewCandidateRequest,
+  KnowledgeSourceDetail,
+  KnowledgeSourceOriginalPreview,
+  KnowledgeSourceSummary,
+  KnowledgeStudioModelInfo,
+  KnowledgeWindowPreview,
+  KnowledgeStudioSnapshot,
+} from "./contracts/knowledge-studio";
 
 export type RpcCommand = {
   id?: string;
@@ -190,6 +208,24 @@ export interface PiDesktopApi {
   skipQuestionPractice(request: QuestionPracticeSkipRequest): Promise<QuestionPracticeSession>;
   abandonQuestionPractice(request: QuestionPracticeAbandonRequest): Promise<QuestionPracticeSession>;
   listQuestionPracticeHistory(query?: QuestionPracticeHistoryQuery): Promise<QuestionPracticeHistoryResult>;
+  getKnowledgeStudioSnapshot(): Promise<KnowledgeStudioSnapshot>;
+  getKnowledgeStudioModelInfo(): Promise<KnowledgeStudioModelInfo>;
+  previewKnowledgeBatch(request: KnowledgeCreateBatchRequest): Promise<KnowledgeWindowPreview>;
+  getKnowledgeSource(id: string): Promise<KnowledgeSourceDetail | null>;
+  getKnowledgeSourceOriginal(id: string): Promise<KnowledgeSourceOriginalPreview | null>;
+  importKnowledgeText(request: KnowledgeImportTextRequest): Promise<KnowledgeSourceSummary>;
+  importKnowledgeFiles(): Promise<KnowledgeImportFilesResult>;
+  importKnowledgeUrl(request: KnowledgeImportUrlRequest): Promise<KnowledgeSourceSummary>;
+  deleteKnowledgeSource(id: string, deleteReferencingBatches?: boolean): Promise<KnowledgeDeleteSourceResult>;
+  createKnowledgeBatch(request: KnowledgeCreateBatchRequest): Promise<KnowledgeGenerationBatch>;
+  retryKnowledgeBatch(id: string): Promise<KnowledgeGenerationBatch>;
+  cancelKnowledgeBatch(id: string): Promise<KnowledgeGenerationBatch>;
+  deleteKnowledgeBatch(id: string): Promise<KnowledgeDeleteBatchResult>;
+  getKnowledgeBatch(id: string): Promise<KnowledgeGenerationBatch | null>;
+  reviewKnowledgeCandidate(request: KnowledgeReviewCandidateRequest): Promise<KnowledgeGenerationBatch>;
+  publishKnowledgeBatch(id: string): Promise<KnowledgeGenerationBatch>;
+  revealKnowledgeArtifact(path: string): Promise<void>;
+  onKnowledgeGenerationProgress(listener: (progress: KnowledgeGenerationProgress) => void): () => void;
   getAlgorithmPracticeSnapshot(): Promise<AlgorithmPracticeSnapshot>;
   getAlgorithmProblem(slug: string): Promise<AlgorithmProblemDetail>;
   saveAlgorithmDraft(request: AlgorithmSaveDraftRequest): Promise<void>;

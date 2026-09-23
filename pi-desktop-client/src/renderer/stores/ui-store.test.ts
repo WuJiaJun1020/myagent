@@ -18,7 +18,7 @@ describe("session composer drafts", () => {
       composerDraft: null,
       chatFollowRequest: 0,
       activeModule: "agent",
-      moduleViews: { agent: "activity", interview: "dashboard" },
+      moduleViews: { agent: "activity", interview: "dashboard", "knowledge-studio": "studio" },
       resourceCenterTab: "online",
     });
   });
@@ -97,12 +97,12 @@ describe("session composer drafts", () => {
   it("migrates the previous sidebar-only navigation without losing its location", () => {
     expect(parsePersistedNavigation({ sidebarView: "interview", resourceCenterTab: "packages" })).toEqual({
       activeModule: "interview",
-      moduleViews: { agent: "activity", interview: "dashboard" },
+      moduleViews: { agent: "activity", interview: "dashboard", "knowledge-studio": "studio" },
       resourceCenterTab: "packages",
     });
     expect(parsePersistedNavigation({ sidebarView: "review" })).toEqual({
       activeModule: "agent",
-      moduleViews: { agent: "review", interview: "dashboard" },
+      moduleViews: { agent: "review", interview: "dashboard", "knowledge-studio": "studio" },
       resourceCenterTab: "online",
     });
   });
@@ -110,11 +110,11 @@ describe("session composer drafts", () => {
   it("keeps the current per-module navigation format and rejects invalid pages", () => {
     expect(parsePersistedNavigation({
       activeModule: "interview",
-      moduleViews: { agent: "files", interview: "jobs" },
+      moduleViews: { agent: "files", interview: "jobs", "knowledge-studio": "studio" },
       resourceCenterTab: "skills",
     })).toEqual({
       activeModule: "interview",
-      moduleViews: { agent: "files", interview: "jobs" },
+      moduleViews: { agent: "files", interview: "jobs", "knowledge-studio": "studio" },
       resourceCenterTab: "skills",
     });
     expect(parsePersistedNavigation({
@@ -122,7 +122,7 @@ describe("session composer drafts", () => {
       moduleViews: { agent: "unknown", interview: "unknown" },
     })).toEqual({
       activeModule: "agent",
-      moduleViews: { agent: "activity", interview: "dashboard" },
+      moduleViews: { agent: "activity", interview: "dashboard", "knowledge-studio": "studio" },
       resourceCenterTab: "online",
     });
   });
@@ -130,11 +130,11 @@ describe("session composer drafts", () => {
   it("restores the interview session page as module-local navigation", () => {
     expect(parsePersistedNavigation({
       activeModule: "interview",
-      moduleViews: { agent: "activity", interview: "session" },
+      moduleViews: { agent: "activity", interview: "session", "knowledge-studio": "studio" },
       resourceCenterTab: "online",
     })).toEqual({
       activeModule: "interview",
-      moduleViews: { agent: "activity", interview: "session" },
+      moduleViews: { agent: "activity", interview: "session", "knowledge-studio": "studio" },
       resourceCenterTab: "online",
     });
   });
@@ -143,11 +143,11 @@ describe("session composer drafts", () => {
     for (const interviewView of ["question-bank", "algorithms"] as const) {
       expect(parsePersistedNavigation({
         activeModule: "interview",
-        moduleViews: { agent: "activity", interview: interviewView },
+        moduleViews: { agent: "activity", interview: interviewView, "knowledge-studio": "studio" },
         resourceCenterTab: "online",
       })).toEqual({
         activeModule: "interview",
-        moduleViews: { agent: "activity", interview: interviewView },
+        moduleViews: { agent: "activity", interview: interviewView, "knowledge-studio": "studio" },
         resourceCenterTab: "online",
       });
     }

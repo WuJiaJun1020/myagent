@@ -12,6 +12,7 @@ import {
 import { ALGORITHM_PRACTICE_IPC } from "../shared/contracts/algorithm-practice";
 import { QUESTION_BANK_IPC } from "../shared/contracts/interview-question-bank";
 import { QUESTION_PRACTICE_IPC } from "../shared/contracts/interview-question-practice";
+import { KNOWLEDGE_STUDIO_IPC, type KnowledgeGenerationProgress } from "../shared/contracts/knowledge-studio";
 import type { ExtensionUiResponse, PiDesktopApi, ProcessStatus, RpcCommand, RpcMessage } from "../shared/rpc";
 
 const api: PiDesktopApi = {
@@ -108,6 +109,28 @@ const api: PiDesktopApi = {
   skipQuestionPractice: (request) => ipcRenderer.invoke(QUESTION_PRACTICE_IPC.skipQuestion, request),
   abandonQuestionPractice: (request) => ipcRenderer.invoke(QUESTION_PRACTICE_IPC.abandonSession, request),
   listQuestionPracticeHistory: (query) => ipcRenderer.invoke(QUESTION_PRACTICE_IPC.listHistory, query),
+  getKnowledgeStudioSnapshot: () => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.getSnapshot),
+  getKnowledgeStudioModelInfo: () => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.getModelInfo),
+  previewKnowledgeBatch: (request) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.previewBatch, request),
+  getKnowledgeSource: (id) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.getSource, id),
+  getKnowledgeSourceOriginal: (id) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.getSourceOriginal, id),
+  importKnowledgeText: (request) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.importText, request),
+  importKnowledgeFiles: () => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.importFiles),
+  importKnowledgeUrl: (request) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.importUrl, request),
+  deleteKnowledgeSource: (id, deleteReferencingBatches) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.deleteSource, id, deleteReferencingBatches),
+  createKnowledgeBatch: (request) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.createBatch, request),
+  retryKnowledgeBatch: (id) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.retryBatch, id),
+  cancelKnowledgeBatch: (id) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.cancelBatch, id),
+  deleteKnowledgeBatch: (id) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.deleteBatch, id),
+  getKnowledgeBatch: (id) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.getBatch, id),
+  reviewKnowledgeCandidate: (request) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.reviewCandidate, request),
+  publishKnowledgeBatch: (id) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.publishBatch, id),
+  revealKnowledgeArtifact: (path) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.revealArtifact, path),
+  onKnowledgeGenerationProgress: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: KnowledgeGenerationProgress) => listener(progress);
+    ipcRenderer.on(KNOWLEDGE_STUDIO_IPC.generationProgress, handler);
+    return () => ipcRenderer.removeListener(KNOWLEDGE_STUDIO_IPC.generationProgress, handler);
+  },
   getAlgorithmPracticeSnapshot: () => ipcRenderer.invoke(ALGORITHM_PRACTICE_IPC.getSnapshot),
   getAlgorithmProblem: (slug) => ipcRenderer.invoke(ALGORITHM_PRACTICE_IPC.getProblem, slug),
   saveAlgorithmDraft: (request) => ipcRenderer.invoke(ALGORITHM_PRACTICE_IPC.saveDraft, request),

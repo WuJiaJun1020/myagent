@@ -1,7 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from "electron";
 import { existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, realpath, writeFile } from "node:fs/promises";
+import { extname, join, resolve, sep } from "node:path";
 import type { ExtensionUiResponse, RpcCommand } from "../shared/rpc";
 import type { TerminalCreateRequest } from "../shared/contracts/terminal";
 import type { FileChange, WorkspaceFileSaveRequest, WorkspaceGitDiffScope } from "../shared/contracts/workspace";
@@ -26,6 +26,14 @@ import { resolveBuiltinQuestionBankDirectory } from "./interview/question-bank-c
 import { AlgorithmPracticeMainModule } from "./algorithm/algorithm-practice-main-module";
 import { MainModuleHost } from "../platform/main/main-module-host";
 import { createPiModelGateway } from "../platform/main/ai/pi-model-gateway";
+import { KnowledgeStudioMainModule } from "./knowledge-studio/knowledge-studio-main-module";
+import { captureWebPageSnapshot } from "./knowledge-studio/web-page-snapshot";
+
+const KNOWLEDGE_SOURCE_SCHEME = "knowledge-source";
+protocol.registerSchemesAsPrivileged([{
+  scheme: KNOWLEDGE_SOURCE_SCHEME,
+  privileges: { standard: true, secure: true, corsEnabled: true, supportFetchAPI: true },
+}]);
 
 let mainWindow: BrowserWindow | null = null;
 let pi: PiProcess;
@@ -44,6 +52,37 @@ let agentEventQueue = Promise.resolve();
 let shutdownStarted = false;
 let shutdownComplete = false;
 const eventAdapter = new PiEventAdapter();
+
+function knowledgeSourceMimeType(path: string): string {
+  return ({
+    ".html": "text/html; charset=utf-8", ".htm": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+    ".svg": "image/svg+xml", ".ico": "image/x-icon", ".woff": "font/woff", ".woff2": "font/woff2",
+    ".ttf": "font/ttf", ".otf": "font/otf", ".json": "application/json; charset=utf-8",
+  } as Record<string, string>)[extname(path).toLowerCase()] ?? "application/octet-stream";
+}
+
+async function handleKnowledgeSourceRequest(request: Request): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const sourceId = url.hostname;
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/u.test(sourceId)) return new Response("Not found", { status: 404 });
+    const relativePath = decodeURIComponent(url.pathname).replace(/^\/+/, "");
+    if (!relativePath || relativePath.includes("\0") || relativePath.includes("\\")) return new Response("Not found", { status: 404 });
+    const root = resolve(join(app.getPath("userData"), "modules", "knowledge-studio", "sources", sourceId));
+    const target = resolve(root, relativePath);
+    const normalizedRoot = `${root.toLowerCase()}${sep}`;
+    if (!target.toLowerCase().startsWith(normalizedRoot)) return new Response("Forbidden", { status: 403 });
+    const [realRoot, realTarget] = await Promise.all([realpath(root), realpath(target)]);
+    if (!realTarget.toLowerCase().startsWith(`${realRoot.toLowerCase()}${sep}`)) return new Response("Forbidden", { status: 403 });
+    const content = await readFile(realTarget);
+    return new Response(new Uint8Array(content), {
+      headers: { "content-type": knowledgeSourceMimeType(realTarget), "cache-control": "private, max-age=31536000, immutable" },
+    });
+  } catch {
+    return new Response("Not found", { status: 404 });
+  }
+}
 
 function rpcData<T>(response: { data?: unknown; command?: string }): T {
   if (!response.data || typeof response.data !== "object") throw new Error(`Pi RPC ${response.command ?? "响应"} 缺少有效数据`);
@@ -459,6 +498,7 @@ async function runPackagedSmokeTest(resultPath: string): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  protocol.handle(KNOWLEDGE_SOURCE_SCHEME, handleKnowledgeSourceRequest);
   const smokeResultPath = getSmokeResultPath();
   if (smokeResultPath) {
     await runPackagedSmokeTest(smokeResultPath);
@@ -489,14 +529,14 @@ app.whenReady().then(async () => {
   imageAttachments = new ImageAttachmentStore();
   terminalService = new TerminalService();
   mainModuleHost = new MainModuleHost();
-  const interviewModelGateway = await createPiModelGateway({
+  const sharedModelGateway = await createPiModelGateway({
     cwd: process.cwd(),
     appRoot: app.getAppPath(),
     // Interview shares the user's global provider/model configuration, but it
     // must not inherit project-local settings from the Agent workspace.
     projectTrusted: false,
   }).catch((error: unknown) => {
-    console.error("初始化智能面试模型网关失败；其他模块仍可使用", error);
+    console.error("初始化共享模型网关失败；不依赖模型的模块仍可使用", error);
     return undefined;
   });
   mainModuleHost.register(new InterviewMainModule({
@@ -508,7 +548,27 @@ app.whenReady().then(async () => {
     }),
     ipcMain,
     getWindow: () => mainWindow,
-    modelGateway: interviewModelGateway,
+    modelGateway: sharedModelGateway,
+  }));
+  mainModuleHost.register(new KnowledgeStudioMainModule({
+    dataDirectory: join(app.getPath("userData"), "modules", "knowledge-studio"),
+    ipcMain,
+    getWindow: () => mainWindow,
+    modelGateway: sharedModelGateway,
+    selectFiles: async () => {
+      const options = {
+        title: "导入知识资料",
+        properties: ["openFile", "multiSelections"],
+        filters: [
+          { name: "支持的资料", extensions: ["txt", "md", "markdown", "html", "htm", "pdf", "docx", "json", "csv", "yaml", "yml", "toml", "rst"] },
+          { name: "所有文件", extensions: ["*"] },
+        ],
+      } satisfies Electron.OpenDialogOptions;
+      const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
+      return result.canceled ? [] : result.filePaths;
+    },
+    revealPath: (path) => shell.showItemInFolder(path),
+    captureWebPage: captureWebPageSnapshot,
   }));
   mainModuleHost.register(new AlgorithmPracticeMainModule({
     dataDirectory: join(app.getPath("userData"), "algorithm-practice"),

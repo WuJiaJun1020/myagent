@@ -1,4 +1,4 @@
-import { Bot, ScanFace } from "lucide-react";
+import { Bot, Factory, ScanFace } from "lucide-react";
 import { lazy } from "react";
 import { PRODUCT_MODULE_IDS, type ProductModuleId } from "../../platform/shared/product-module";
 import {
@@ -29,6 +29,12 @@ const InterviewDetailPanel = lazy(async () => {
   const module = await loadInterviewRendererModule();
   return { default: module.InterviewModuleDetailPanel };
 });
+
+const loadKnowledgeStudioRendererModule = () => import("./knowledge-studio/KnowledgeStudioRendererModule");
+const KnowledgeStudioSidebar = lazy(async () => ({ default: (await loadKnowledgeStudioRendererModule()).KnowledgeStudioSidebar }));
+const KnowledgeStudioTopBar = lazy(async () => ({ default: (await loadKnowledgeStudioRendererModule()).KnowledgeStudioTopBar }));
+const KnowledgeStudioWorkspace = lazy(async () => ({ default: (await loadKnowledgeStudioRendererModule()).KnowledgeStudioWorkspace }));
+const KnowledgeStudioDetailPanel = lazy(async () => ({ default: (await loadKnowledgeStudioRendererModule()).KnowledgeStudioDetailPanel }));
 
 const agentModule: RendererModuleDefinition<"agent"> = {
   id: "agent",
@@ -68,9 +74,25 @@ const interviewModule: RendererModuleDefinition<"interview"> = {
   },
 };
 
+const knowledgeStudioModule: RendererModuleDefinition<"knowledge-studio"> = {
+  id: "knowledge-studio",
+  title: "知识工坊",
+  navigationLabel: "知识工坊",
+  navigationDescription: "资料转题库",
+  icon: Factory,
+  Sidebar: KnowledgeStudioSidebar,
+  TopBar: KnowledgeStudioTopBar,
+  Workspace: KnowledgeStudioWorkspace,
+  DetailPanel: KnowledgeStudioDetailPanel,
+  keepWorkspaceAlive: true,
+  preload: loadKnowledgeStudioRendererModule,
+  resolveLayout: () => ({ detailVariant: "default", detailSuppressed: true }),
+};
+
 const rendererModuleRegistry = {
   agent: agentModule,
   interview: interviewModule,
+  "knowledge-studio": knowledgeStudioModule,
 } satisfies { [ModuleId in ProductModuleId]: RendererModuleDefinition<ModuleId> };
 
 export const rendererModuleDefinitions = PRODUCT_MODULE_IDS.map((moduleId) => rendererModuleRegistry[moduleId]);
