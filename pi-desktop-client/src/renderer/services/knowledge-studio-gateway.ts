@@ -8,6 +8,7 @@ import type {
   KnowledgeImportFilesResult,
   KnowledgeImportTextRequest,
   KnowledgeImportUrlRequest,
+  KnowledgeInterviewImportResult,
   KnowledgeReviewCandidateRequest,
   KnowledgeSourceDetail,
   KnowledgeSourceOriginalPreview,
@@ -34,6 +35,7 @@ export interface KnowledgeStudioGateway {
   getBatch(id: string): Promise<KnowledgeGenerationBatch | null>;
   reviewCandidate(request: KnowledgeReviewCandidateRequest): Promise<KnowledgeGenerationBatch>;
   publishBatch(id: string): Promise<KnowledgeGenerationBatch>;
+  importSupportedToInterview(id: string): Promise<KnowledgeInterviewImportResult>;
   revealArtifact(path: string): Promise<void>;
   onProgress(listener: (progress: KnowledgeGenerationProgress) => void): () => void;
 }
@@ -55,6 +57,7 @@ class DesktopKnowledgeStudioGateway implements KnowledgeStudioGateway {
   getBatch = (id: string) => window.piDesktop.getKnowledgeBatch(id);
   reviewCandidate = (request: KnowledgeReviewCandidateRequest) => window.piDesktop.reviewKnowledgeCandidate(request);
   publishBatch = (id: string) => window.piDesktop.publishKnowledgeBatch(id);
+  importSupportedToInterview = (id: string) => window.piDesktop.importSupportedKnowledgeToInterview(id);
   revealArtifact = (path: string) => window.piDesktop.revealKnowledgeArtifact(path);
   onProgress = (listener: (progress: KnowledgeGenerationProgress) => void) => window.piDesktop.onKnowledgeGenerationProgress(listener);
 }

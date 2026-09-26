@@ -17,7 +17,6 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   PackageCatalogDetails,
-  PackageCatalogEntry,
   PackageCatalogKind,
   PackageCatalogResult,
 } from "../../../shared/contracts/package-catalog";

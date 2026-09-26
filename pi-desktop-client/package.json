@@ -23,6 +23,7 @@
     "@codemirror/lang-python": "^6.2.1",
     "@earendil-works/pi-coding-agent": "file:../pi-agent/packages/coding-agent",
     "@lancedb/lancedb": "^0.39.0",
+    "@langchain/langgraph": "^1.4.17",
     "@radix-ui/react-tooltip": "^1.2.16",
     "@tanstack/react-virtual": "^3.14.11",
     "@uiw/react-codemirror": "^4.25.11",

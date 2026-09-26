@@ -115,6 +115,10 @@ function taxonomyLabel(value: string): string {
   return TAXONOMY_LABELS[value] ?? value.replaceAll("-", " ");
 }
 
+function questionKindLabel(question: Pick<QuestionBankQuestionSummary, "kind" | "subtype">): string {
+  return question.subtype === "system-design" ? "系统设计" : KIND_LABELS[question.kind];
+}
+
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds} 秒`;
   return `${Math.round(seconds / 60)} 分钟`;
@@ -143,7 +147,7 @@ function QuestionListItem({
     <article className={`question-bank-list-item${active ? " active" : ""}`}>
       <button className="question-bank-list-select" type="button" onClick={onSelect}>
         <span className="question-bank-list-heading">
-          <span className="question-kind-badge" data-kind={question.kind}>{KIND_LABELS[question.kind]}</span>
+          <span className="question-kind-badge" data-kind={question.kind}>{questionKindLabel(question)}</span>
           <span className="question-difficulty" data-difficulty={question.difficulty}>{DIFFICULTY_LABELS[question.difficulty]}</span>
         </span>
         <strong>{question.title}</strong>
@@ -187,7 +191,7 @@ function QuestionDetail({
       <header className="question-bank-detail-header">
         <div>
           <span className="question-bank-detail-kicker">
-            <span className="question-kind-badge" data-kind={question.kind}>{KIND_LABELS[question.kind]}</span>
+            <span className="question-kind-badge" data-kind={question.kind}>{questionKindLabel(question)}</span>
             <span className="question-difficulty" data-difficulty={question.difficulty}>{DIFFICULTY_LABELS[question.difficulty]}</span>
             <span>v{question.version}</span>
           </span>
@@ -223,8 +227,8 @@ function QuestionDetail({
       )}
 
       <section>
-        <div className="question-bank-section-title"><BookOpenCheck size={15} /><h4>答案提纲</h4></div>
-        {question.answerOutline.length > 0 ? (
+        <div className="question-bank-section-title"><BookOpenCheck size={15} /><h4>{question.referenceAnswer ? "参考答案" : "答案提纲"}</h4></div>
+        {question.referenceAnswer ? <p className="question-bank-reference-answer">{question.referenceAnswer}</p> : question.answerOutline.length > 0 ? (
           <ol className="question-bank-outline">
             {question.answerOutline.map((item, index) => <li key={`${index}:${item}`}><span>{index + 1}</span><p>{item}</p></li>)}
           </ol>
@@ -266,11 +270,20 @@ function QuestionDetail({
         </section>
       )}
 
+      {Boolean(question.evidence?.length) && (
+        <section className="question-bank-evidence">
+          <div className="question-bank-section-title"><ShieldCheck size={15} /><h4>原文证据</h4></div>
+          {question.evidence!.map((item, index) => <blockquote key={`${item.segmentId}:${index}`}>
+            <small>{item.sourceTitle} · {item.segmentId}</small><p>{item.quote}</p>
+          </blockquote>)}
+        </section>
+      )}
+
       <section className="question-bank-source">
         <div className="question-bank-section-title"><ShieldCheck size={15} /><h4>来源与版本</h4></div>
         <div>
           <span><small>来源</small><strong>{question.source.title || SOURCE_LABELS[question.source.type]}</strong></span>
-          <span><small>类型</small><strong>{SOURCE_LABELS[question.source.type]}</strong></span>
+          <span><small>类型</small><strong>{question.source.parserId === "knowledge-studio" ? "知识工坊资料" : SOURCE_LABELS[question.source.type]}</strong></span>
           <span><small>更新时间</small><strong>{formatDate(question.updatedAt)}</strong></span>
           {sourceCanOpen && <button type="button" onClick={() => void window.piDesktop.openExternal(question.source.uri!)}><Link2 size={13} />查看原始网页</button>}
         </div>

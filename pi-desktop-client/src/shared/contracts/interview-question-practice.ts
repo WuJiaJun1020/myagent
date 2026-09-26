@@ -62,6 +62,7 @@ export type QuestionPracticeQueueItem = {
 export type QuestionPracticeReviewMaterial = {
   intent: string;
   answerOutline: string[];
+  referenceAnswer?: string;
   rubric: QuestionBankRubricItem[];
   commonMistakes: string[];
   followUps: QuestionBankFollowUp[];

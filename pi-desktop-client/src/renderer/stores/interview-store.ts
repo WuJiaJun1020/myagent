@@ -1,14 +1,23 @@
 import { create } from "zustand";
 import type {
   InterviewCreateRequest,
+  InterviewChatSettings,
+  InterviewChatPrompts,
+  InterviewDirectorConfig,
+  CandidateTurnResult,
+  InterviewAlgorithmSubmitRequest,
   InterviewListItem,
-  InterviewPreparationProgress,
   InterviewRecord,
   InterviewSession,
   InterviewSnapshot,
   InterviewStatus,
 } from "../../shared/contracts/interview";
 import { interviewGateway } from "../services/interview-gateway";
+import { clearInterviewChatSettings } from "../features/interview/interview-chat-preferences";
+import { clearInterviewChatPrompts } from "../features/interview/interview-prompt-preferences";
+import { clearInterviewCandidatePreferences } from "../features/interview/interview-candidate-preferences";
+import { clearInterviewDirectorPreferences } from "../features/interview/interview-director-preferences";
+import { clearInterviewScorePrompt, readInterviewScorePrompt, readInterviewScoreSettings } from "../features/interview/interview-score-preferences";
 
 const EMPTY_COUNTS: Record<InterviewStatus, number> = {
   draft: 0,
@@ -27,14 +36,26 @@ type InterviewStore = InterviewSnapshot & {
   selectedId: string | null;
   session: InterviewSession | null;
   sessionLoading: boolean;
-  preparingInterviewId: string | null;
-  preparationProgress: InterviewPreparationProgress | null;
+  chattingInterviewId: string | null;
+  autoStartInterviewId: string | null;
+  algorithmSubmittingId: string | null;
+  scoringInterviewId: string | null;
   initialize: (force?: boolean) => Promise<void>;
   createInterview: (request: InterviewCreateRequest) => Promise<InterviewRecord>;
+  deleteInterview: (id: string) => Promise<void>;
+  finishInterview: (id: string) => Promise<InterviewSession>;
+  scoreInterview: (id: string) => Promise<InterviewSession>;
+  consumeAutoStart: (id: string) => void;
   selectInterview: (id: string | null) => void;
   openInterview: (id: string) => Promise<InterviewSession | null>;
-  prepareInterview: (id: string, privacyConfirmed: boolean) => Promise<InterviewSession>;
-  setPreparationProgress: (progress: InterviewPreparationProgress) => void;
+  sendChat: (id: string, kind: "start" | "reply", content: string | undefined,
+    settings: InterviewChatSettings, prompts: InterviewChatPrompts, director?: InterviewDirectorConfig) => Promise<InterviewSession>;
+  simulateCandidateTurn: (id: string, candidateSettings: InterviewChatSettings, candidatePrompt: string,
+    candidateErrorRate: number,
+    interviewerSettings: InterviewChatSettings, interviewerPrompts: InterviewChatPrompts,
+    director?: InterviewDirectorConfig) => Promise<CandidateTurnResult>;
+  startAlgorithmExam: (id: string) => Promise<InterviewSession>;
+  submitAlgorithmCode: (request: InterviewAlgorithmSubmitRequest) => Promise<InterviewSession>;
 };
 
 function replaceOrInsert(interviews: InterviewListItem[], interview: InterviewListItem): InterviewListItem[] {
@@ -73,8 +94,10 @@ export const useInterviewStore = create<InterviewStore>((set, get) => ({
   selectedId: null,
   session: null,
   sessionLoading: false,
-  preparingInterviewId: null,
-  preparationProgress: null,
+  chattingInterviewId: null,
+  autoStartInterviewId: null,
+  algorithmSubmittingId: null,
+  scoringInterviewId: null,
   initialize: async (force = false) => {
     if (get().loading || (get().initialized && !force)) return;
     set({ loading: true, error: null });
@@ -100,8 +123,8 @@ export const useInterviewStore = create<InterviewStore>((set, get) => ({
       set((state) => ({
         ...reconcileInterview(state.interviews, state.counts, interview),
         selectedId: interview.id,
+        autoStartInterviewId: interview.id,
         session: null,
-        preparationProgress: null,
         mutation: false,
       }));
       return interview;
@@ -111,14 +134,69 @@ export const useInterviewStore = create<InterviewStore>((set, get) => ({
       throw error;
     }
   },
+  deleteInterview: async (id) => {
+    if (get().mutation) throw new Error("正在修改面试记录");
+    set({ mutation: true, error: null });
+    try {
+      const snapshot = await interviewGateway.deleteInterview(id);
+      clearInterviewChatSettings(id);
+      clearInterviewChatPrompts(id);
+      clearInterviewCandidatePreferences(id);
+      clearInterviewDirectorPreferences(id);
+      clearInterviewScorePrompt(id);
+      if (get().selectedId === id) sessionLoadSequence += 1;
+      set((state) => ({
+        ...snapshot,
+        selectedId: state.selectedId === id ? snapshot.interviews[0]?.id ?? null : state.selectedId,
+        session: state.session?.interview.id === id ? null : state.session,
+        autoStartInterviewId: state.autoStartInterviewId === id ? null : state.autoStartInterviewId,
+        sessionLoading: state.selectedId === id ? false : state.sessionLoading,
+        mutation: false,
+      }));
+    } catch (error) {
+      set({ mutation: false, error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  },
+  finishInterview: async (id) => {
+    if (get().mutation || get().chattingInterviewId === id) throw new Error("面试正在处理中，请稍候再结束");
+    set({ mutation: true, error: null });
+    try {
+      const session = await interviewGateway.finishInterview(id);
+      set((state) => ({ ...reconcileInterview(state.interviews, state.counts, session.interview),
+        session: state.selectedId === id ? session : state.session,
+        autoStartInterviewId: state.autoStartInterviewId === id ? null : state.autoStartInterviewId,
+        mutation: false }));
+      return session;
+    } catch (error) {
+      set({ mutation: false, error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  },
+  scoreInterview: async (id) => {
+    if (get().scoringInterviewId === id) throw new Error("本场面试正在评分");
+    set({ scoringInterviewId: id });
+    try {
+      const session = await interviewGateway.scoreInterview({ interviewId: id, operationId: createOperationId(),
+        settings: readInterviewScoreSettings(id), prompt: readInterviewScorePrompt(id) });
+      set((state) => ({ session: state.selectedId === id ? session : state.session, scoringInterviewId: null }));
+      return session;
+    } catch (error) {
+      set({ scoringInterviewId: null });
+      throw error;
+    }
+  },
+  consumeAutoStart: (id) => {
+    if (get().autoStartInterviewId === id) set({ autoStartInterviewId: null });
+  },
   selectInterview: (selectedId) => {
     if (get().selectedId === selectedId) return;
     sessionLoadSequence += 1;
-    set({ selectedId, session: null, sessionLoading: false, preparationProgress: null, error: null });
+    set({ selectedId, session: null, sessionLoading: false, error: null });
   },
   openInterview: async (id) => {
     const requestSequence = ++sessionLoadSequence;
-    set({ selectedId: id, session: null, sessionLoading: true, preparationProgress: null, error: null });
+    set({ selectedId: id, session: null, sessionLoading: true, error: null });
     try {
       const session = await interviewGateway.getInterviewSession(id);
       if (requestSequence !== sessionLoadSequence || get().selectedId !== id) return session;
@@ -139,72 +217,78 @@ export const useInterviewStore = create<InterviewStore>((set, get) => ({
       return null;
     }
   },
-  prepareInterview: async (id, privacyConfirmed) => {
-    if (!privacyConfirmed) {
-      const error = new Error("请先确认将岗位描述和简历发送给当前模型 Provider。");
-      set({ error: error.message });
-      throw error;
-    }
-    if (get().preparingInterviewId) throw new Error("已有面试正在准备中");
-
+  sendChat: async (id, kind, content, settings, prompts, director) => {
+    if (get().chattingInterviewId) throw new Error("模型正在回答，请稍候");
     const operationId = createOperationId();
-    set({
-      preparingInterviewId: id,
-      preparationProgress: {
-        interviewId: id,
-        operationId,
-        phase: "validating",
-        message: "正在校验面试配置…",
-      },
-      error: null,
-    });
+    set({ chattingInterviewId: id, error: null });
     try {
-      const session = await interviewGateway.prepareInterview({ interviewId: id, operationId, privacyConfirmed: true });
-      set((state) => ({
-        ...reconcileInterview(state.interviews, state.counts, session.interview),
-        session: state.selectedId === id ? session : state.session,
-        preparingInterviewId: null,
-        preparationProgress: state.selectedId === id ? {
-          interviewId: id,
-          operationId,
-          phase: "completed",
-          message: "面试计划已准备完成。",
-        } : state.preparationProgress,
-      }));
+      const session = await interviewGateway.sendChat({ interviewId: id, operationId, kind,
+        ...(content ? { content } : {}), settings, prompts, ...(director ? { director } : {}) });
+      set((state) => ({ ...reconcileInterview(state.interviews, state.counts, session.interview),
+        session: state.selectedId === id ? session : state.session, chattingInterviewId: null }));
       return session;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
       let recovered: InterviewSession | null = null;
       try {
         recovered = await interviewGateway.getInterviewSession(id);
       } catch {
-        // The original preparation error is more useful than a secondary refresh failure.
+        // Keep the original model error if refreshing debug records also fails.
       }
       set((state) => ({
         ...(recovered ? reconcileInterview(state.interviews, state.counts, recovered.interview) : {}),
         session: state.selectedId === id && recovered ? recovered : state.session,
-        preparingInterviewId: null,
-        preparationProgress: state.selectedId === id ? {
-          interviewId: id,
-          operationId,
-          phase: "failed",
-          message,
-        } : state.preparationProgress,
-        error: message,
+        chattingInterviewId: null,
+        error: error instanceof Error ? error.message : String(error),
       }));
       throw error;
     }
   },
-  setPreparationProgress: (progress) => {
-    if (progress.interviewId !== get().selectedId) return;
-    set({ preparationProgress: progress });
-
-    // A renderer reload loses the in-memory prepare promise while the main
-    // process keeps working. Re-read the persisted terminal state when that
-    // happens so the page cannot remain stuck on the old `preparing` snapshot.
-    const isTerminal = progress.phase === "completed" || progress.phase === "failed";
-    if (isTerminal && get().preparingInterviewId !== progress.interviewId) {
-      void get().openInterview(progress.interviewId);
+  simulateCandidateTurn: async (id, candidateSettings, candidatePrompt, candidateErrorRate,
+    interviewerSettings, interviewerPrompts, director) => {
+    if (get().chattingInterviewId) throw new Error("模型正在回答，请稍候");
+    const operationId = createOperationId();
+    set({ chattingInterviewId: id, error: null });
+    try {
+      const result = await interviewGateway.simulateCandidateTurn({ interviewId: id, operationId,
+          candidateSettings, candidatePrompt, candidateErrorRate, interviewerSettings, interviewerPrompts,
+          ...(director ? { director } : {}) }, (progress) => {
+        set((state) => ({ ...reconcileInterview(state.interviews, state.counts, progress.session.interview),
+          session: state.selectedId === id ? progress.session : state.session }));
+      });
+      set((state) => ({ ...reconcileInterview(state.interviews, state.counts, result.session.interview),
+        session: state.selectedId === id ? result.session : state.session, chattingInterviewId: null,
+        error: result.status === "interviewer_failed" ? result.error ?? "面试官回复失败" : null }));
+      return result;
+    } catch (error) {
+      let recovered: InterviewSession | null = null;
+      try { recovered = await interviewGateway.getInterviewSession(id); } catch { /* Preserve the original failure. */ }
+      set((state) => ({
+        ...(recovered ? reconcileInterview(state.interviews, state.counts, recovered.interview) : {}),
+        session: state.selectedId === id && recovered ? recovered : state.session,
+        chattingInterviewId: null,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      throw error;
+    }
+  },
+  startAlgorithmExam: async (id) => {
+    const session = await interviewGateway.startAlgorithmExam(id);
+    set((state) => ({ ...reconcileInterview(state.interviews, state.counts, session.interview),
+      session: state.selectedId === id ? session : state.session }));
+    return session;
+  },
+  submitAlgorithmCode: async (request) => {
+    if (get().algorithmSubmittingId) throw new Error("算法代码正在判题，请稍候");
+    set({ algorithmSubmittingId: request.interviewId });
+    try {
+      const session = await interviewGateway.submitAlgorithmCode(request);
+      set((state) => ({ ...reconcileInterview(state.interviews, state.counts, session.interview),
+        session: state.selectedId === request.interviewId ? session : state.session,
+        algorithmSubmittingId: null }));
+      return session;
+    } catch (error) {
+      set({ algorithmSubmittingId: null });
+      throw error;
     }
   },
 }));

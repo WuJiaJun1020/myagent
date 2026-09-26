@@ -1,5 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { normalizeAlibabaJob, normalizeByteDanceJob, splitJobItems } from "./job-collector";
+import { byteDanceInternshipPageUrl, byteDanceSearchItems, normalizeAlibabaJob,
+  normalizeByteDanceJob, splitJobItems, ElectronJobCollector, type ByteDanceBrowser } from "./job-collector";
+
+function fakeByteDanceBrowser(pageCount: number, failAtPage?: number): { browser: ByteDanceBrowser; urls: string[] } {
+  const urls: string[] = [];
+  const bodies = new Map<string, string>();
+  const listeners = new Map<string, Set<(params: Record<string, unknown>) => void>>();
+  const emit = (event: string, params: Record<string, unknown>) => {
+    for (const listener of listeners.get(event) ?? []) listener(params);
+  };
+  const browser: ByteDanceBrowser = {
+    on(event, listener) {
+      const group = listeners.get(event) ?? new Set<(params: Record<string, unknown>) => void>();
+      group.add(listener);
+      listeners.set(event, group);
+      return () => group.delete(listener);
+    },
+    async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+      if (method === "Network.getResponseBody") return { body: bodies.get(String(params.requestId)) } as T;
+      if (method !== "Page.navigate") throw new Error(`Unexpected CDP method: ${method}`);
+      const url = String(params.url);
+      urls.push(url);
+      const page = Number(new URL(url).searchParams.get("current"));
+      if (page === failAtPage) return { errorText: "test network failure" } as T;
+      const requestId = `jobs-${urls.length}`;
+      bodies.set(requestId, JSON.stringify({ data: { job_post_list: page > pageCount ? []
+        : Array.from({ length: 10 }, (_, index) => ({ id: `job-${page}-${index}`, title: `技术实习 ${page}-${index}` })) } }));
+      queueMicrotask(() => {
+        emit("Network.responseReceived", { requestId, response: { url: "https://jobs.bytedance.com/api/v1/search/job/posts" } });
+        emit("Network.loadingFinished", { requestId });
+      });
+      return {} as T;
+    },
+    async dispose() {},
+    terminate() {},
+  };
+  return { browser, urls };
+}
 
 describe("job collector normalization", () => {
   it("normalizes Alibaba career-site fields", () => {
@@ -51,5 +88,44 @@ describe("job collector normalization", () => {
 
   it("keeps plain unnumbered text as one item", () => {
     expect(splitJobItems("具备良好的沟通与协作能力")).toEqual(["具备良好的沟通与协作能力"]);
+  });
+
+  it("keeps the selected ByteDance internship and technical filters while paging", () => {
+    const first = new URL(byteDanceInternshipPageUrl("", 1));
+    const next = new URL(byteDanceInternshipPageUrl("AI Agent", 12));
+    expect(first.origin + first.pathname).toBe("https://jobs.bytedance.com/campus/position");
+    expect(first.searchParams.get("project")?.split(",")).toEqual([
+      "7194661644654577981", "7194661126919358757",
+    ]);
+    expect(first.searchParams.get("category")?.split(",")).toHaveLength(15);
+    expect(first.searchParams.get("current")).toBe("1");
+    expect(next.searchParams.get("current")).toBe("12");
+    expect(next.searchParams.get("keywords")).toBe("AI Agent");
+    expect(next.searchParams.get("project")).toBe(first.searchParams.get("project"));
+    expect(next.searchParams.get("category")).toBe(first.searchParams.get("category"));
+  });
+
+  it("recognizes an empty final ByteDance page instead of treating it as a failed response", () => {
+    expect(byteDanceSearchItems({ data: { job_post_list: [] } })).toEqual([]);
+    expect(byteDanceSearchItems({ data: { job_post_list: [{ id: "1" }] } })).toEqual([{ id: "1" }]);
+    expect(byteDanceSearchItems({ data: { message: "error" } })).toBeNull();
+  });
+
+  it("collects beyond the former three-page ByteDance limit", async () => {
+    const fake = fakeByteDanceBrowser(5);
+    const collector = new ElectronJobCollector(async () => fake.browser);
+    const [output] = await collector.collect({ sources: ["bytedance"], keywords: [], limitPerSource: 45 }, () => undefined);
+    expect(output).toMatchObject({ source: "bytedance" });
+    expect(output.jobs).toHaveLength(45);
+    expect(fake.urls.map((url) => new URL(url).searchParams.get("current"))).toEqual(["1", "2", "3", "4", "5"]);
+    expect(fake.urls.every((url) => new URL(url).searchParams.get("project")?.includes("7194661644654577981"))).toBe(true);
+  }, 10_000);
+
+  it("keeps already captured ByteDance jobs if a later page fails", async () => {
+    const fake = fakeByteDanceBrowser(5, 2);
+    const collector = new ElectronJobCollector(async () => fake.browser);
+    const [output] = await collector.collect({ sources: ["bytedance"], keywords: [], limitPerSource: 45 }, () => undefined);
+    expect(output.jobs).toHaveLength(10);
+    expect(output.error).toContain("test network failure");
   });
 });

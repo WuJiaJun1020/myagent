@@ -41,6 +41,7 @@ function service(): KnowledgeStudioServicePort {
     getBatch: vi.fn(() => null),
     reviewCandidate: vi.fn(() => ({} as never)),
     publishBatch: vi.fn(async () => ({} as never)),
+    importSupportedToInterview: vi.fn(async () => ({ eligibleCount: 1, skippedCount: 0, inserted: 1, updated: 0, unchanged: 0, alreadyImported: false })),
     revealArtifact: vi.fn(),
     close: vi.fn(async () => undefined),
   };
@@ -62,7 +63,9 @@ describe("KnowledgeStudioMainModule", () => {
     });
 
     module.start();
-    expect(handlers.size).toBe(17);
+    expect(handlers.size).toBe(18);
+    await handlers.get("knowledge-studio:import-supported-to-interview")?.({}, "batch-1");
+    expect(instance.importSupportedToInterview).toHaveBeenCalledWith("batch-1");
     await handlers.get("knowledge-studio:preview-batch")?.({}, { title: "preview" });
     expect(instance.previewBatch).toHaveBeenCalledWith({ title: "preview" });
     await handlers.get("knowledge-studio:delete-source")?.({}, "source-a", true);

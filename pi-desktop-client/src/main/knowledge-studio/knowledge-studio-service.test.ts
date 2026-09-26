@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { DEFAULT_KNOWLEDGE_AI_SETTINGS } from "../../shared/contracts/knowledge-studio";
 import type { KnowledgeGenerationWorkflow } from "./knowledge-model-provider";
 import { KnowledgeStudioService } from "./knowledge-studio-service";
+import { InterviewService } from "../interview/interview-service";
 
 const cleanup: string[] = [];
 
@@ -14,6 +15,63 @@ afterEach(async () => {
 });
 
 describe("KnowledgeStudioService", () => {
+  it("imports only independently supported, quote-backed questions into the real interview bank", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-knowledge-interview-bridge-"));
+    cleanup.push(directory);
+    const interview = new InterviewService(join(directory, "interview"));
+    const quote = "Agent 需要明确的工具权限边界";
+    const generate = vi.fn<KnowledgeGenerationWorkflow["generate"]>(async (input) => ({
+      providerId: "test", modelId: "test", usage: {}, requestHash: "a".repeat(64),
+      candidates: [
+        { ordinal: 0, kind: "technical", difficulty: "basic", competency: "工具安全", question: "Agent 调用工具前为什么需要权限边界？",
+          answer: "要把可用工具和副作用限定在授权范围内，并保留审计记录。", rubric: [{ title: "权限", description: "说明授权边界", weight: 100 }],
+          pitfalls: [], followUps: [], evidence: [{ segmentId: input.segments[0]!.id, sourceId: input.segments[0]!.sourceId,
+            sourceTitle: input.segments[0]!.sourceTitle, quote }], validationStatus: "supported", validationNotes: [] },
+        { ordinal: 1, kind: "technical", difficulty: "basic", competency: "待复核", question: "尚未通过的题目？",
+          answer: "不能导入。", rubric: [{ title: "测试", description: "测试", weight: 100 }], pitfalls: [], followUps: [],
+          evidence: [{ segmentId: input.segments[0]!.id, sourceId: input.segments[0]!.sourceId,
+            sourceTitle: input.segments[0]!.sourceTitle, quote }], validationStatus: "needs_review", validationNotes: [] },
+        { ordinal: 2, kind: "technical", difficulty: "basic", competency: "无效引文", question: "引文无法匹配的题目？",
+          answer: "不能导入。", rubric: [{ title: "测试", description: "测试", weight: 100 }], pitfalls: [], followUps: [],
+          evidence: [{ segmentId: input.segments[0]!.id, sourceId: input.segments[0]!.sourceId,
+            sourceTitle: input.segments[0]!.sourceTitle, quote: "原文不存在的引文" }], validationStatus: "supported", validationNotes: [] },
+      ],
+    }));
+    const knowledge = new KnowledgeStudioService({ dataDirectory: join(directory, "knowledge"), workflow: { generate },
+      importToInterview: (payload) => interview.importKnowledgeStudioQuestions(payload) });
+    try {
+      const source = await knowledge.importText({ title: "Agent 安全", content: `${quote}，并记录每次工具调用的授权范围和审计日志，避免未经允许的操作造成副作用。` });
+      const batch = await knowledge.createBatch({ title: "联调题包", targetRole: "Agent 工程师", sourceIds: [source.id],
+        questionCount: 3, difficulty: "basic", privacyConfirmed: true });
+      let ready = knowledge.getBatch(batch.id)!;
+      for (let attempt = 0; attempt < 40 && ready.status !== "review"; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        ready = knowledge.getBatch(batch.id)!;
+      }
+      expect(ready.status).toBe("review");
+      await expect(knowledge.importSupportedToInterview(batch.id)).resolves.toMatchObject({
+        eligibleCount: 1, skippedCount: 2, inserted: 1, alreadyImported: false,
+      });
+      expect((await interview.listQuestionBankQuestions({})).total).toBe(1);
+      const stableKey = `knowledge-studio:${batch.id}:0`;
+      expect(await interview.getQuestionBankQuestion(stableKey)).toMatchObject({
+        referenceAnswer: "要把可用工具和副作用限定在授权范围内，并保留审计记录。",
+        evidence: [{ quote }], roles: ["Agent 工程师"],
+      });
+      await expect(knowledge.importSupportedToInterview(batch.id)).resolves.toMatchObject({ alreadyImported: true });
+      expect((await interview.listQuestionBankQuestions({})).total).toBe(1);
+
+      knowledge.reviewCandidate({ candidateId: ready.candidates[0]!.id, status: "pending", answer: "修改后仍要遵守授权边界。" });
+      await expect(knowledge.importSupportedToInterview(batch.id)).resolves.toMatchObject({ updated: 1 });
+      expect(await interview.getQuestionBankQuestion(stableKey)).toMatchObject({ version: 2,
+        referenceAnswer: "修改后仍要遵守授权边界。" });
+      knowledge.reviewCandidate({ candidateId: ready.candidates[0]!.id, status: "rejected" });
+      await expect(knowledge.importSupportedToInterview(batch.id)).rejects.toThrow("没有原文引文可逐字核对的证据支持题");
+    } finally {
+      await knowledge.close();
+      await interview.close();
+    }
+  });
   it("previews with the same planner and pins runtime model capacity for the task", async () => {
     const directory = await mkdtemp(join(tmpdir(), "pi-knowledge-window-preview-"));
     cleanup.push(directory);
@@ -141,9 +199,11 @@ describe("KnowledgeStudioService", () => {
         }],
       };
     });
+    const importToInterview = vi.fn(async () => ({ inserted: 1, updated: 0, unchanged: 0, alreadyImported: false }));
     const service = new KnowledgeStudioService({
       dataDirectory: directory,
       workflow: { generate },
+      importToInterview,
       resolveModel: async () => ({ providerId: "test-provider", modelId: "test-model" }),
       listModels: async () => [{ providerId: "test-provider", modelId: "test-model", name: "Test Model", reasoningLevels: ["low", "high"] }],
       now: () => new Date("2026-09-21T00:00:00.000Z"),
@@ -203,6 +263,15 @@ describe("KnowledgeStudioService", () => {
       });
       expect(generate).toHaveBeenCalledOnce();
       expect(progress).toHaveBeenLastCalledWith(expect.objectContaining({ status: "review", progress: 100 }));
+
+      await expect(service.importSupportedToInterview(batch.id)).resolves.toMatchObject({
+        eligibleCount: 1, skippedCount: 0, inserted: 1,
+      });
+      expect(importToInterview).toHaveBeenCalledWith(expect.objectContaining({
+        batchId: batch.id, targetRole: "Agent 工程师",
+        questions: [expect.objectContaining({ question: "为什么 Agent 需要工具权限边界？",
+          evidence: [expect.objectContaining({ quote: "Agent 需要明确的工具权限边界" })] })],
+      }));
 
       const reviewed = service.reviewCandidate({
         candidateId: generated.candidates[0]!.id,

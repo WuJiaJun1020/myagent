@@ -10,8 +10,9 @@ export function InterviewTopBar() {
   const focused = view === "algorithms" || view === "question-bank";
   return (
     <TopBar
-      heading="Interview Pilot"
-      section={view === "algorithms" ? "算法练习" : view === "question-bank" ? "面试问答题库" : "智能面试"}
+      heading="Interview Studio"
+      section={view === "algorithms" ? "算法练习" : view === "question-bank" ? "面试问答题库"
+        : view === "dashboard" ? "新建面试" : view === "records" ? "面试记录" : "智能面试"}
       detailAvailable={!focused}
     />
   );

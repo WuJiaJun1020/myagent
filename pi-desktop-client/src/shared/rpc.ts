@@ -39,8 +39,14 @@ import type {
 } from "./contracts/terminal";
 import type {
   InterviewCreateRequest,
-  InterviewPreparationProgress,
-  InterviewPrepareRequest,
+  InterviewChatRequest,
+  InterviewScoreRequest,
+  CandidateTurnRequest,
+  CandidateTurnResult,
+  CandidateTurnProgress,
+  InterviewChatModelInfo,
+  InterviewAlgorithmDraftRequest,
+  InterviewAlgorithmSubmitRequest,
   InterviewRecord,
   InterviewSession,
   InterviewSnapshot,
@@ -81,13 +87,13 @@ import type {
 import type {
   KnowledgeCreateBatchRequest,
   KnowledgeDeleteBatchResult,
-  KnowledgeDeleteSourceRequest,
   KnowledgeDeleteSourceResult,
   KnowledgeGenerationBatch,
   KnowledgeGenerationProgress,
   KnowledgeImportFilesResult,
   KnowledgeImportTextRequest,
   KnowledgeImportUrlRequest,
+  KnowledgeInterviewImportResult,
   KnowledgeReviewCandidateRequest,
   KnowledgeSourceDetail,
   KnowledgeSourceOriginalPreview,
@@ -190,8 +196,16 @@ export interface PiDesktopApi {
   getInterview(id: string): Promise<InterviewRecord | null>;
   getInterviewSession(id: string): Promise<InterviewSession | null>;
   createInterview(request: InterviewCreateRequest): Promise<InterviewRecord>;
-  prepareInterview(request: InterviewPrepareRequest): Promise<InterviewSession>;
-  onInterviewPreparationProgress(listener: (progress: InterviewPreparationProgress) => void): () => void;
+  deleteInterview(id: string): Promise<InterviewSnapshot>;
+  finishInterview(id: string): Promise<InterviewSession>;
+  scoreInterview(request: InterviewScoreRequest): Promise<InterviewSession>;
+  sendInterviewChat(request: InterviewChatRequest): Promise<InterviewSession>;
+  simulateInterviewCandidateTurn(request: CandidateTurnRequest): Promise<CandidateTurnResult>;
+  onInterviewCandidateTurnProgress(listener: (progress: CandidateTurnProgress) => void): () => void;
+  startInterviewAlgorithmExam(id: string): Promise<InterviewSession>;
+  saveInterviewAlgorithmDraft(request: InterviewAlgorithmDraftRequest): Promise<InterviewSession>;
+  submitInterviewAlgorithmCode(request: InterviewAlgorithmSubmitRequest): Promise<InterviewSession>;
+  getInterviewChatModelInfo(): Promise<InterviewChatModelInfo>;
   getJobLibrary(): Promise<JobLibrarySnapshot>;
   collectJobs(request: JobCollectionRequest): Promise<JobCollectionResult>;
   onJobCollectionProgress(listener: (progress: JobCollectionProgress) => void): () => void;
@@ -224,6 +238,7 @@ export interface PiDesktopApi {
   getKnowledgeBatch(id: string): Promise<KnowledgeGenerationBatch | null>;
   reviewKnowledgeCandidate(request: KnowledgeReviewCandidateRequest): Promise<KnowledgeGenerationBatch>;
   publishKnowledgeBatch(id: string): Promise<KnowledgeGenerationBatch>;
+  importSupportedKnowledgeToInterview(id: string): Promise<KnowledgeInterviewImportResult>;
   revealKnowledgeArtifact(path: string): Promise<void>;
   onKnowledgeGenerationProgress(listener: (progress: KnowledgeGenerationProgress) => void): () => void;
   getAlgorithmPracticeSnapshot(): Promise<AlgorithmPracticeSnapshot>;

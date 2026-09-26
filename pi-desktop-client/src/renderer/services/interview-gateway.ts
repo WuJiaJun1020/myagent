@@ -1,7 +1,13 @@
 import type {
   InterviewCreateRequest,
-  InterviewPreparationProgress,
-  InterviewPrepareRequest,
+  InterviewChatRequest,
+  CandidateTurnRequest,
+  CandidateTurnResult,
+  CandidateTurnProgress,
+  InterviewChatModelInfo,
+  InterviewAlgorithmDraftRequest,
+  InterviewAlgorithmSubmitRequest,
+  InterviewScoreRequest,
   InterviewRecord,
   InterviewSession,
   InterviewSnapshot,
@@ -16,23 +22,18 @@ export interface InterviewGateway {
   getInterview(id: string): Promise<InterviewRecord | null>;
   getInterviewSession(id: string): Promise<InterviewSession | null>;
   createInterview(request: InterviewCreateRequest): Promise<InterviewRecord>;
-  prepareInterview(request: InterviewPrepareRequest): Promise<InterviewSession>;
-  onPreparationProgress(listener: (progress: InterviewPreparationProgress) => void): () => void;
+  deleteInterview(id: string): Promise<InterviewSnapshot>;
+  finishInterview(id: string): Promise<InterviewSession>;
+  scoreInterview(request: InterviewScoreRequest): Promise<InterviewSession>;
+  sendChat(request: InterviewChatRequest): Promise<InterviewSession>;
+  simulateCandidateTurn(request: CandidateTurnRequest, onCandidateReady?: (progress: CandidateTurnProgress) => void): Promise<CandidateTurnResult>;
+  startAlgorithmExam(id: string): Promise<InterviewSession>;
+  saveAlgorithmDraft(request: InterviewAlgorithmDraftRequest): Promise<InterviewSession>;
+  submitAlgorithmCode(request: InterviewAlgorithmSubmitRequest): Promise<InterviewSession>;
+  getChatModelInfo(): Promise<InterviewChatModelInfo>;
   getJobLibrary(): Promise<JobLibrarySnapshot>;
   collectJobs(request: JobCollectionRequest): Promise<JobCollectionResult>;
   onJobCollectionProgress(listener: (progress: JobCollectionProgress) => void): () => void;
-}
-
-// Keep the renderer adapter independently type-safe while preload and the shared
-// desktop API evolve in lockstep in their own module.
-type InterviewDesktopApi = typeof window.piDesktop & {
-  getInterviewSession(id: string): Promise<InterviewSession | null>;
-  prepareInterview(request: InterviewPrepareRequest): Promise<InterviewSession>;
-  onInterviewPreparationProgress(listener: (progress: InterviewPreparationProgress) => void): () => void;
-};
-
-function desktopApi(): InterviewDesktopApi {
-  return window.piDesktop as InterviewDesktopApi;
 }
 
 class DesktopInterviewGateway implements InterviewGateway {
@@ -45,19 +46,58 @@ class DesktopInterviewGateway implements InterviewGateway {
   }
 
   getInterviewSession(id: string): Promise<InterviewSession | null> {
-    return desktopApi().getInterviewSession(id);
+    return window.piDesktop.getInterviewSession(id);
   }
 
   createInterview(request: InterviewCreateRequest): Promise<InterviewRecord> {
     return window.piDesktop.createInterview(request);
   }
 
-  prepareInterview(request: InterviewPrepareRequest): Promise<InterviewSession> {
-    return desktopApi().prepareInterview(request);
+  deleteInterview(id: string): Promise<InterviewSnapshot> {
+    return window.piDesktop.deleteInterview(id);
   }
 
-  onPreparationProgress(listener: (progress: InterviewPreparationProgress) => void): () => void {
-    return desktopApi().onInterviewPreparationProgress(listener);
+  finishInterview(id: string): Promise<InterviewSession> {
+    return window.piDesktop.finishInterview(id);
+  }
+
+  scoreInterview(request: InterviewScoreRequest): Promise<InterviewSession> {
+    return window.piDesktop.scoreInterview(request);
+  }
+
+  sendChat(request: InterviewChatRequest): Promise<InterviewSession> {
+    return window.piDesktop.sendInterviewChat(request);
+  }
+
+  async simulateCandidateTurn(request: CandidateTurnRequest,
+    onCandidateReady?: (progress: CandidateTurnProgress) => void): Promise<CandidateTurnResult> {
+    const unsubscribe = onCandidateReady
+      ? window.piDesktop.onInterviewCandidateTurnProgress((progress) => {
+        if (progress.interviewId === request.interviewId && progress.operationId === request.operationId) {
+          onCandidateReady(progress);
+        }
+      }) : undefined;
+    try {
+      return await window.piDesktop.simulateInterviewCandidateTurn(request);
+    } finally {
+      unsubscribe?.();
+    }
+  }
+
+  startAlgorithmExam(id: string): Promise<InterviewSession> {
+    return window.piDesktop.startInterviewAlgorithmExam(id);
+  }
+
+  saveAlgorithmDraft(request: InterviewAlgorithmDraftRequest): Promise<InterviewSession> {
+    return window.piDesktop.saveInterviewAlgorithmDraft(request);
+  }
+
+  submitAlgorithmCode(request: InterviewAlgorithmSubmitRequest): Promise<InterviewSession> {
+    return window.piDesktop.submitInterviewAlgorithmCode(request);
+  }
+
+  getChatModelInfo(): Promise<InterviewChatModelInfo> {
+    return window.piDesktop.getInterviewChatModelInfo();
   }
 
   getJobLibrary(): Promise<JobLibrarySnapshot> {

@@ -6,6 +6,7 @@ import type {
   InterviewStatus,
 } from "../../shared/contracts/interview";
 import { interviewGateway } from "../services/interview-gateway";
+import { DEFAULT_INTERVIEW_CHAT_PROMPTS } from "../../shared/interview-chat-prompt";
 import { useInterviewStore } from "./interview-store";
 
 const EMPTY_COUNTS: Record<InterviewStatus, number> = {
@@ -48,6 +49,7 @@ function session(status: InterviewStatus = "draft"): InterviewSession {
     currentQuestion: null,
     answeredCount: 0,
     preparationError: null,
+    turns: [],
   };
 }
 
@@ -67,8 +69,8 @@ describe("interview store session flow", () => {
       selectedId: null,
       session: null,
       sessionLoading: false,
-      preparingInterviewId: null,
-      preparationProgress: null,
+      chattingInterviewId: null,
+      autoStartInterviewId: null,
     });
   });
 
@@ -91,79 +93,64 @@ describe("interview store session flow", () => {
     });
   });
 
-  it("never sends interview material before explicit privacy confirmation", async () => {
-    const prepare = vi.spyOn(interviewGateway, "prepareInterview");
-
-    await expect(useInterviewStore.getState().prepareInterview("interview-1", false))
-      .rejects.toThrow("请先确认");
-
-    expect(prepare).not.toHaveBeenCalled();
+  it("marks only a newly created interview for automatic opening question", async () => {
+    vi.spyOn(interviewGateway, "createInterview").mockResolvedValue(record());
+    await useInterviewStore.getState().createInterview({ candidateName: "张三", positionTitle: "后端工程师",
+      jobDescription: "", resumeText: "简历", questionCount: 3, competencies: ["项目经验"] });
+    expect(useInterviewStore.getState().autoStartInterviewId).toBe("interview-1");
+    useInterviewStore.getState().consumeAutoStart("interview-1");
+    expect(useInterviewStore.getState().autoStartInterviewId).toBeNull();
   });
 
-  it("reconciles the persisted ready session and status counts after preparation", async () => {
-    const readySession = session("ready");
-    vi.spyOn(interviewGateway, "prepareInterview").mockResolvedValue(readySession);
+  it("reconciles a manually finished interview and keeps its transcript available", async () => {
+    const completed = session("completed");
+    vi.spyOn(interviewGateway, "finishInterview").mockResolvedValue(completed);
+    useInterviewStore.setState({ selectedId: "interview-1", session: session(), autoStartInterviewId: "interview-1" });
+    await useInterviewStore.getState().finishInterview("interview-1");
+    expect(useInterviewStore.getState()).toMatchObject({ session: completed,
+      counts: { draft: 0, completed: 1 }, autoStartInterviewId: null, mutation: false });
+  });
+
+  it("removes a deleted interview from history and clears its open session", async () => {
+    const remove = vi.spyOn(interviewGateway, "deleteInterview").mockResolvedValue({
+      interviews: [], counts: { ...EMPTY_COUNTS },
+    });
     useInterviewStore.setState({ selectedId: "interview-1", session: session() });
-
-    await useInterviewStore.getState().prepareInterview("interview-1", true);
-
-    const state = useInterviewStore.getState();
-    expect(state.session).toEqual(readySession);
-    expect(state.interviews[0]?.status).toBe("ready");
-    expect(state.counts).toMatchObject({ draft: 0, ready: 1 });
-    expect(state.preparingInterviewId).toBeNull();
-    expect(state.preparationProgress?.phase).toBe("completed");
+    await useInterviewStore.getState().deleteInterview("interview-1");
+    expect(remove).toHaveBeenCalledWith("interview-1");
+    expect(useInterviewStore.getState()).toMatchObject({ interviews: [], selectedId: null,
+      session: null, mutation: false, counts: { draft: 0 } });
   });
 
-  it("only presents preparation progress for the open interview", () => {
-    useInterviewStore.setState({ selectedId: "interview-1" });
-    const setProgress = useInterviewStore.getState().setPreparationProgress;
-    setProgress({ interviewId: "other", operationId: "op-other", phase: "calling_model", message: "other" });
-    expect(useInterviewStore.getState().preparationProgress).toBeNull();
+  it("shows the saved candidate answer before the interviewer call resolves", async () => {
+    const opening: InterviewSession = { ...session("interviewing"), turns: [
+      { id: "question", ordinal: 0, role: "interviewer", content: "介绍项目。",
+        createdAt: "2026-09-20T00:00:00.000Z" },
+    ] };
+    const candidate: InterviewSession = { ...opening, answeredCount: 1, turns: [
+      ...opening.turns,
+      { id: "answer", ordinal: 1, role: "candidate", source: "agent", content: "我负责状态管理。",
+        createdAt: "2026-09-20T00:00:01.000Z" },
+    ] };
+    const complete: InterviewSession = { ...candidate, turns: [...candidate.turns,
+      { id: "followup", ordinal: 2, role: "interviewer", content: "如何处理失败？",
+        createdAt: "2026-09-20T00:00:02.000Z" }] };
+    let finish!: (result: { session: InterviewSession; candidateText: string; status: "completed" }) => void;
+    vi.spyOn(interviewGateway, "simulateCandidateTurn").mockImplementation((request, onCandidateReady) =>
+      new Promise((resolve) => {
+        finish = resolve;
+        queueMicrotask(() => onCandidateReady?.({ interviewId: request.interviewId,
+          operationId: request.operationId, session: candidate }));
+      }));
+    useInterviewStore.setState({ selectedId: "interview-1", session: opening });
 
-    setProgress({ interviewId: "interview-1", operationId: "op-1", phase: "saving", message: "正在保存" });
-    expect(useInterviewStore.getState().preparationProgress).toMatchObject({
-      interviewId: "interview-1",
-      phase: "saving",
-      message: "正在保存",
-    });
-  });
-
-  it("reloads persisted terminal state after the renderer was refreshed mid-preparation", async () => {
-    const readySession = session("ready");
-    const getSession = vi.spyOn(interviewGateway, "getInterviewSession").mockResolvedValue(readySession);
-    useInterviewStore.setState({
-      selectedId: "interview-1",
-      session: session("preparing"),
-      preparingInterviewId: null,
-    });
-
-    useInterviewStore.getState().setPreparationProgress({
-      interviewId: "interview-1",
-      operationId: "op-after-reload",
-      phase: "completed",
-      message: "面试计划已准备完成。",
-    });
-    await vi.waitFor(() => expect(useInterviewStore.getState().session?.interview.status).toBe("ready"));
-
-    expect(getSession).toHaveBeenCalledWith("interview-1");
-    expect(useInterviewStore.getState().sessionLoading).toBe(false);
-  });
-
-  it("reloads the persisted failure state so retry survives navigation", async () => {
-    const failedSession = { ...session(), preparationError: { code: "provider_error", message: "模型暂时不可用" } };
-    vi.spyOn(interviewGateway, "prepareInterview").mockRejectedValue(new Error("模型暂时不可用"));
-    vi.spyOn(interviewGateway, "getInterviewSession").mockResolvedValue(failedSession);
-    useInterviewStore.setState({ selectedId: "interview-1", session: session() });
-
-    await expect(useInterviewStore.getState().prepareInterview("interview-1", true))
-      .rejects.toThrow("模型暂时不可用");
-
-    expect(useInterviewStore.getState()).toMatchObject({
-      session: failedSession,
-      preparingInterviewId: null,
-      error: "模型暂时不可用",
-      preparationProgress: { phase: "failed" },
-    });
+    const task = useInterviewStore.getState().simulateCandidateTurn("interview-1", { reasoning: "medium" },
+      "回答问题。", 0, { reasoning: "medium" }, DEFAULT_INTERVIEW_CHAT_PROMPTS);
+    await vi.waitFor(() => expect(useInterviewStore.getState().session?.turns).toHaveLength(2));
+    expect(useInterviewStore.getState().chattingInterviewId).toBe("interview-1");
+    finish({ session: complete, candidateText: "我负责状态管理。", status: "completed" });
+    await task;
+    expect(useInterviewStore.getState().session?.turns).toHaveLength(3);
+    expect(useInterviewStore.getState().chattingInterviewId).toBeNull();
   });
 });

@@ -24,6 +24,7 @@ const ANSWER_BATCH_SIZE = 5;
 const REVIEW_CALL_BATCH_SIZE = 10;
 const MAX_NETWORK_RETRIES = 5;
 const MAX_NETWORK_ATTEMPTS = MAX_NETWORK_RETRIES + 1;
+const MAX_JSON_RETRIES = 3;
 const MAX_ANSWER_QUALITY_ATTEMPTS = 3;
 const MAX_ANSWER_CHARACTERS = 300;
 
@@ -877,6 +878,34 @@ export class KnowledgeGenerationWorkflow {
     window?: { index: number; count: number; hash: string; label: string };
     checkpointHash?: string;
   }): Promise<ModelResponse> {
+    for (let retry = 0; retry <= MAX_JSON_RETRIES; retry += 1) {
+      input.signal.throwIfAborted();
+      try {
+        return await this.callOnce(retry === 0 ? input : { ...input,
+          system: `${input.system}\n\n【程序格式修复：第 ${retry}/${MAX_JSON_RETRIES} 次重试】上一响应未通过 JSON / Schema 验收。请重新生成完整、单一、符合所给 Schema 的 JSON；不要附加解释、第二个 JSON 或 Markdown。`,
+        });
+      } catch (error) {
+        if (!(error instanceof KnowledgeModelError) || error.code !== "invalid_provider_response"
+          || retry === MAX_JSON_RETRIES || input.signal.aborted) throw error;
+        input.onProgress(input.stage === "drafts" ? "extracting" : input.stage === "answers" ? "answering" : "validating",
+          input.progress, `JSON / Schema 未通过，准备第 ${retry + 1}/${MAX_JSON_RETRIES} 次格式重试`, { state: "running" });
+      }
+    }
+    throw new Error("JSON 格式重试未返回结果");
+  }
+
+  private async callOnce(input: {
+    stage: "drafts" | "answers" | "review";
+    count: number;
+    system: string;
+    payload: unknown;
+    signal: AbortSignal;
+    onProgress: KnowledgeWorkflowProgress;
+    progress: number;
+    aiSettings: KnowledgeGenerationAiSettings;
+    window?: { index: number; count: number; hash: string; label: string };
+    checkpointHash?: string;
+  }): Promise<ModelResponse> {
     input.signal.throwIfAborted();
     const schema = requestSchema(input.stage, input.count);
     const schemaName = `knowledge_studio_${input.stage}_v1`;
@@ -975,7 +1004,10 @@ export class KnowledgeGenerationWorkflow {
       }
       if (!result) throw new KnowledgeModelError("模型流没有返回完成事件", true);
       if (result.finishReason === "length") throw new KnowledgeModelError("模型输出达到自身长度限制，JSON 可能不完整", true, "invalid_provider_response");
-      if (!result.text.trim()) throw new KnowledgeModelError("模型返回了空内容", true);
+      if (!result.text.trim()) throw new KnowledgeModelError("模型返回了空内容", true, "invalid_provider_response");
+      try { parseJson(result.text); } catch (error) {
+        throw new KnowledgeModelError(error instanceof Error ? error.message : String(error), true, "invalid_provider_response");
+      }
       input.onProgress(stage, input.progress, "模型输出已通过 JSON 解析与 Schema 结构校验", {
         state: "completed", details: { kind: "validation", validation: { label: `${input.stage} JSON / Schema`, passed: true, issues: [] } },
       });

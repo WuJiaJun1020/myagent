@@ -43,9 +43,9 @@ export function JobLibrary({ onUseJob }: { onUseJob: (job: JobPosting) => void }
   const initialize = useJobLibraryStore((state) => state.initialize);
   const collect = useJobLibraryStore((state) => state.collect);
   const setProgress = useJobLibraryStore((state) => state.setProgress);
-  const [sources, setSources] = useState<JobSource[]>(["alibaba", "bytedance"]);
-  const [keywords, setKeywords] = useState("后端，算法，AI");
-  const [limitPerSource, setLimitPerSource] = useState(30);
+  const [sources, setSources] = useState<JobSource[]>(["bytedance"]);
+  const [keywords, setKeywords] = useState("");
+  const [limitPerSource, setLimitPerSource] = useState(200);
   const [query, setQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<"all" | JobSource>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -81,7 +81,7 @@ export function JobLibrary({ onUseJob }: { onUseJob: (job: JobPosting) => void }
   function submit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     const parsedKeywords = [...new Set(keywords.split(/[,，\n]/u).map((item) => item.trim()).filter(Boolean))];
-    if (sources.length === 0 || parsedKeywords.length === 0) return;
+    if (sources.length === 0) return;
     void collect({ sources, keywords: parsedKeywords, limitPerSource });
   }
 
@@ -95,14 +95,14 @@ export function JobLibrary({ onUseJob }: { onUseJob: (job: JobPosting) => void }
 
       <form className="job-collector-card" onSubmit={submit}>
         <header>
-          <div><span className="eyebrow">OFFICIAL CAREER SITES</span><h2>自动采集岗位</h2><p>在隔离的后台浏览器中访问官方招聘网站，并合并到本地岗位库。</p></div>
+          <div><span className="eyebrow">OFFICIAL CAREER SITES</span><h2>自动采集岗位</h2><p>默认采集字节跳动的日常实习、ByteIntern 技术类岗位；关键词可留空采集全部匹配职位。</p></div>
           <span className="job-last-run">上次采集 {formatTime(lastRun?.finishedAt ?? lastRun?.startedAt)}</span>
         </header>
         <div className="job-collector-controls">
           <fieldset><legend>数据来源</legend><div>{(["alibaba", "bytedance"] as const).map((source) => <button className={sources.includes(source) ? "active" : ""} type="button" key={source} aria-pressed={sources.includes(source)} onClick={() => toggleSource(source)}>{sources.includes(source) && <Check size={13} />}{SOURCE_LABELS[source]}</button>)}</div></fieldset>
-          <label><span>搜索关键词</span><input value={keywords} maxLength={300} onChange={(event) => setKeywords(event.target.value)} placeholder="后端，算法，AI Agent" /></label>
-          <label className="job-limit-control"><span>每个来源上限</span><select value={limitPerSource} onChange={(event) => setLimitPerSource(Number(event.target.value))}><option value={10}>10 条</option><option value={30}>30 条</option><option value={50}>50 条</option><option value={100}>100 条</option></select></label>
-          <button className="interview-primary-button" type="submit" disabled={collecting || sources.length === 0 || !keywords.trim()}>{collecting ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}{collecting ? "正在采集" : "开始采集"}</button>
+          <label><span>搜索关键词（可选）</span><input value={keywords} maxLength={300} onChange={(event) => setKeywords(event.target.value)} placeholder="留空采集全部技术实习，或输入后端、算法、AI Agent" /></label>
+          <label className="job-limit-control"><span>每个来源上限</span><select value={limitPerSource} onChange={(event) => setLimitPerSource(Number(event.target.value))}><option value={10}>10 条</option><option value={30}>30 条</option><option value={50}>50 条</option><option value={100}>100 条</option><option value={200}>200 条</option><option value={500}>500 条</option></select></label>
+          <button className="interview-primary-button" type="submit" disabled={collecting || sources.length === 0}>{collecting ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}{collecting ? "正在采集" : "开始采集"}</button>
         </div>
         {(collecting || progress) && <div className={`job-collector-progress ${progress?.phase === "failed" ? "error" : ""}`}><span>{collecting && <LoaderCircle className="spin" size={13} />}{progress?.message ?? "正在启动采集器…"}</span>{progress?.collected ? <small>已获取 {progress.collected} 条</small> : null}</div>}
         {error && <p className="interview-form-error" role="alert">{error}</p>}
@@ -124,7 +124,7 @@ export function JobLibrary({ onUseJob }: { onUseJob: (job: JobPosting) => void }
         </header>
 
         {loading && !initialized ? <div className="interview-loading"><LoaderCircle className="spin" size={17} />正在读取岗位库…</div> : visibleJobs.length === 0 ? (
-          <div className="interview-empty"><div><BriefcaseBusiness size={22} /></div><strong>{jobs.length === 0 ? "还没有采集岗位" : "没有匹配的岗位"}</strong><p>{jobs.length === 0 ? "选择来源和关键词后启动采集，结果会持久保存在面试业务数据库中。" : "试试更换关键词或数据来源。"}</p></div>
+          <div className="interview-empty"><div><BriefcaseBusiness size={22} /></div><strong>{jobs.length === 0 ? "还没有采集岗位" : "没有匹配的岗位"}</strong><p>{jobs.length === 0 ? "选择来源即可启动采集；关键词可以留空。结果会持久保存在面试业务数据库中。" : "试试更换关键词或数据来源。"}</p></div>
         ) : (
           <div className="job-browser-body">
             <div className="job-list" aria-label="岗位列表" tabIndex={0}>

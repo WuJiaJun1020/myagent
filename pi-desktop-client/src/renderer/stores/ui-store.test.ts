@@ -139,6 +139,14 @@ describe("session composer drafts", () => {
     });
   });
 
+  it("restores the separate interview records page", () => {
+    expect(parsePersistedNavigation({
+      activeModule: "interview",
+      moduleViews: { agent: "activity", interview: "records", "knowledge-studio": "studio" },
+      resourceCenterTab: "online",
+    }).moduleViews.interview).toBe("records");
+  });
+
   it("restores the interview learning entrances as module-local navigation", () => {
     for (const interviewView of ["question-bank", "algorithms"] as const) {
       expect(parsePersistedNavigation({

@@ -6,7 +6,7 @@ import type { PackageCatalogQuery } from "../shared/contracts/package-catalog";
 import type { TerminalDataEvent, TerminalExitEvent } from "../shared/contracts/terminal";
 import {
   INTERVIEW_IPC,
-  type InterviewPreparationProgress,
+  type CandidateTurnProgress,
   type JobCollectionProgress,
 } from "../shared/contracts/interview";
 import { ALGORITHM_PRACTICE_IPC } from "../shared/contracts/algorithm-practice";
@@ -83,12 +83,20 @@ const api: PiDesktopApi = {
   getInterview: (id) => ipcRenderer.invoke(INTERVIEW_IPC.getInterview, id),
   getInterviewSession: (id) => ipcRenderer.invoke(INTERVIEW_IPC.getInterviewSession, id),
   createInterview: (request) => ipcRenderer.invoke(INTERVIEW_IPC.createInterview, request),
-  prepareInterview: (request) => ipcRenderer.invoke(INTERVIEW_IPC.prepareInterview, request),
-  onInterviewPreparationProgress: (listener) => {
-    const handler = (_event: Electron.IpcRendererEvent, progress: InterviewPreparationProgress) => listener(progress);
-    ipcRenderer.on(INTERVIEW_IPC.preparationProgress, handler);
-    return () => ipcRenderer.removeListener(INTERVIEW_IPC.preparationProgress, handler);
+  deleteInterview: (id) => ipcRenderer.invoke(INTERVIEW_IPC.deleteInterview, id),
+    finishInterview: (id) => ipcRenderer.invoke(INTERVIEW_IPC.finishInterview, id),
+    scoreInterview: (request) => ipcRenderer.invoke(INTERVIEW_IPC.scoreInterview, request),
+  sendInterviewChat: (request) => ipcRenderer.invoke(INTERVIEW_IPC.sendChat, request),
+  simulateInterviewCandidateTurn: (request) => ipcRenderer.invoke(INTERVIEW_IPC.simulateCandidateTurn, request),
+  onInterviewCandidateTurnProgress: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: CandidateTurnProgress) => listener(progress);
+    ipcRenderer.on(INTERVIEW_IPC.candidateTurnProgress, handler);
+    return () => ipcRenderer.removeListener(INTERVIEW_IPC.candidateTurnProgress, handler);
   },
+  startInterviewAlgorithmExam: (id) => ipcRenderer.invoke(INTERVIEW_IPC.startAlgorithmExam, id),
+  saveInterviewAlgorithmDraft: (request) => ipcRenderer.invoke(INTERVIEW_IPC.saveAlgorithmDraft, request),
+  submitInterviewAlgorithmCode: (request) => ipcRenderer.invoke(INTERVIEW_IPC.submitAlgorithmCode, request),
+  getInterviewChatModelInfo: () => ipcRenderer.invoke(INTERVIEW_IPC.getChatModelInfo),
   getJobLibrary: () => ipcRenderer.invoke(INTERVIEW_IPC.getJobLibrary),
   collectJobs: (request) => ipcRenderer.invoke(INTERVIEW_IPC.collectJobs, request),
   onJobCollectionProgress: (listener) => {
@@ -125,6 +133,7 @@ const api: PiDesktopApi = {
   getKnowledgeBatch: (id) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.getBatch, id),
   reviewKnowledgeCandidate: (request) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.reviewCandidate, request),
   publishKnowledgeBatch: (id) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.publishBatch, id),
+  importSupportedKnowledgeToInterview: (id) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.importSupportedToInterview, id),
   revealKnowledgeArtifact: (path) => ipcRenderer.invoke(KNOWLEDGE_STUDIO_IPC.revealArtifact, path),
   onKnowledgeGenerationProgress: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, progress: KnowledgeGenerationProgress) => listener(progress);

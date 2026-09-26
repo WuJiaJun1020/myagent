@@ -539,8 +539,11 @@ app.whenReady().then(async () => {
     console.error("初始化共享模型网关失败；不依赖模型的模块仍可使用", error);
     return undefined;
   });
-  mainModuleHost.register(new InterviewMainModule({
+  const interviewModule = new InterviewMainModule({
     dataDirectory: join(app.getPath("userData"), "interview"),
+    algorithmResourceDirectory: app.isPackaged
+      ? join(process.resourcesPath, "algorithm-practice")
+      : join(app.getAppPath(), "resources", "algorithm-practice"),
     questionBankResourceDirectory: resolveBuiltinQuestionBankDirectory({
       appPath: app.getAppPath(),
       resourcesPath: process.resourcesPath,
@@ -549,7 +552,8 @@ app.whenReady().then(async () => {
     ipcMain,
     getWindow: () => mainWindow,
     modelGateway: sharedModelGateway,
-  }));
+  });
+  mainModuleHost.register(interviewModule);
   mainModuleHost.register(new KnowledgeStudioMainModule({
     dataDirectory: join(app.getPath("userData"), "modules", "knowledge-studio"),
     ipcMain,
@@ -569,6 +573,7 @@ app.whenReady().then(async () => {
     },
     revealPath: (path) => shell.showItemInFolder(path),
     captureWebPage: captureWebPageSnapshot,
+    importToInterview: (payload) => interviewModule.importKnowledgeStudioQuestions(payload),
   }));
   mainModuleHost.register(new AlgorithmPracticeMainModule({
     dataDirectory: join(app.getPath("userData"), "algorithm-practice"),

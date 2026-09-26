@@ -2,7 +2,7 @@ import type { IpcMain } from "electron";
 import type { ModelGateway } from "../../platform/shared/ai/model-gateway";
 import type { MainModule } from "../../platform/main/main-module-host";
 import type { ProductModuleId } from "../../platform/shared/product-module";
-import { KNOWLEDGE_STUDIO_IPC, type KnowledgeGenerationProgress } from "../../shared/contracts/knowledge-studio";
+import { KNOWLEDGE_STUDIO_IPC, type KnowledgeGenerationProgress, type KnowledgeInterviewImportCounts, type KnowledgeInterviewImportPayload } from "../../shared/contracts/knowledge-studio";
 import { sendToRenderer, type RendererWindow } from "../send-to-renderer";
 import { KnowledgeGenerationWorkflow } from "./knowledge-model-provider";
 import { KnowledgeStudioService } from "./knowledge-studio-service";
@@ -24,6 +24,7 @@ const CHANNELS = [
   KNOWLEDGE_STUDIO_IPC.getBatch,
   KNOWLEDGE_STUDIO_IPC.reviewCandidate,
   KNOWLEDGE_STUDIO_IPC.publishBatch,
+  KNOWLEDGE_STUDIO_IPC.importSupportedToInterview,
   KNOWLEDGE_STUDIO_IPC.revealArtifact,
 ] as const;
 
@@ -33,6 +34,7 @@ export type KnowledgeStudioServicePort = Pick<KnowledgeStudioService,
   "getSnapshot" | "getModelInfo" | "previewBatch" | "getSource" | "getSourceOriginal" | "importText" | "importFiles" | "importUrl" | "deleteSource"
   | "createBatch" | "retryBatch" | "cancelBatch" | "deleteBatch" | "getBatch" | "reviewCandidate"
   | "publishBatch" | "revealArtifact" | "close"
+  | "importSupportedToInterview"
 >;
 
 export type KnowledgeStudioMainModuleOptions = {
@@ -43,6 +45,7 @@ export type KnowledgeStudioMainModuleOptions = {
   selectFiles: () => Promise<string[]>;
   revealPath: (path: string) => void;
   captureWebPage?: (url: string, targetPath: string) => Promise<void>;
+  importToInterview?: (payload: KnowledgeInterviewImportPayload) => Promise<KnowledgeInterviewImportCounts>;
   createService?: () => KnowledgeStudioServicePort;
 };
 
@@ -67,6 +70,7 @@ export class KnowledgeStudioMainModule implements MainModule {
       selectFiles: this.options.selectFiles,
       revealPath: this.options.revealPath,
       captureWebPage: this.options.captureWebPage,
+      importToInterview: this.options.importToInterview,
     });
     try {
       this.registerIpc();
@@ -116,6 +120,7 @@ export class KnowledgeStudioMainModule implements MainModule {
       handle(KNOWLEDGE_STUDIO_IPC.getBatch, (_event, id: unknown) => service.getBatch(id));
       handle(KNOWLEDGE_STUDIO_IPC.reviewCandidate, (_event, request: unknown) => service.reviewCandidate(request));
       handle(KNOWLEDGE_STUDIO_IPC.publishBatch, (_event, id: unknown) => service.publishBatch(id));
+      handle(KNOWLEDGE_STUDIO_IPC.importSupportedToInterview, (_event, id: unknown) => service.importSupportedToInterview(id));
       handle(KNOWLEDGE_STUDIO_IPC.revealArtifact, (_event, path: unknown) => service.revealArtifact(path));
       this.registered = true;
     } catch (error) {

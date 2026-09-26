@@ -2,12 +2,20 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { closeInterviewTopicFlow } from "../../shared/interview-topic-flow";
 import {
   INTERVIEW_QUESTION_DIFFICULTIES,
   INTERVIEW_QUESTION_KINDS,
+  INTERVIEW_QUESTION_TYPES,
   INTERVIEW_STATUSES,
   type CollectedJobPosting,
   type InterviewCreateRequest,
+  type InterviewCallTrace,
+  type InterviewAlgorithmAttempt,
+  type InterviewAlgorithmExam,
+  type InterviewAlgorithmMode,
+  type InterviewAlgorithmProblem,
+  type InterviewDebugEvent,
   type InterviewDocument,
   type InterviewDocumentKind,
   type InterviewCurrentQuestion,
@@ -17,8 +25,14 @@ import {
   type InterviewQuestionKind,
   type InterviewRecord,
   type InterviewSession,
+  type InterviewTopicFlow,
+  type InterviewScoreReport,
+  type InterviewScoreDimension,
+  type InterviewChatModel,
+  type InterviewChatReasoning,
   type InterviewSnapshot,
   type InterviewStatus,
+  type InterviewTurn,
   type JobCollectionRequest,
   type JobCollectionRun,
   type JobCollectionSourceResult,
@@ -69,6 +83,7 @@ type InterviewRow = {
   status: string;
   current_question_index: number;
   question_count: number;
+  director_enabled: number;
   competencies_json: string;
   created_at: string;
   updated_at: string;
@@ -124,6 +139,17 @@ type InterviewSessionRow = {
   active_question_id: string | null;
   preparation_error_code: string | null;
   preparation_error_message: string | null;
+};
+
+type InterviewAlgorithmRow = {
+  status: InterviewAlgorithmExam["status"];
+  problem_json: string;
+  started_at: string | null;
+  deadline_at: string | null;
+  completed_at: string | null;
+  passed_mode: InterviewAlgorithmMode | null;
+  draft_leetcode: string;
+  draft_acm: string;
 };
 
 type InterviewPlanRow = {
@@ -215,53 +241,13 @@ type QuestionPracticeSnapshotRecord = {
   review: {
     intent: string;
     answerOutline: string[];
+    referenceAnswer?: string;
     rubric: QuestionBankQuestionDetail["rubric"];
     commonMistakes: string[];
     followUps: QuestionBankQuestionDetail["followUps"];
     source: QuestionBankQuestionDetail["source"];
   };
 };
-
-export type InterviewPlanQuestionInput = {
-  ordinal: number;
-  competency: string;
-  kind: InterviewQuestionKind;
-  difficulty: InterviewQuestionDifficulty;
-  prompt: string;
-  rubric: string[];
-};
-
-export type InterviewModelInvocationCompletion = {
-  providerId: string;
-  modelId: string;
-  requestHash: string;
-  responseHash: string;
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-  cachedInputTokens?: number;
-  reasoningTokens?: number;
-  costUsd?: number;
-  durationMs: number;
-};
-
-export type InterviewModelInvocationFailure = {
-  errorCode: string;
-  errorMessage: string;
-  providerId?: string;
-  modelId?: string;
-  requestHash?: string;
-  responseHash?: string;
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-  cachedInputTokens?: number;
-  reasoningTokens?: number;
-  costUsd?: number;
-  durationMs: number;
-};
-
-export type InterviewPreparationClaim = "claimed" | "already_running" | "already_completed";
 
 export const QUESTION_SOURCE_KINDS = ["builtin", "file", "web", "manual", "generated"] as const;
 export type QuestionSourceKind = QuestionBankSourceType;
@@ -356,7 +342,7 @@ export type QuestionBankCatalogImportResult = {
   alreadyImported: number;
 };
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 11;
 
 const QUESTION_BANK_SCHEMA_SQL = `
   CREATE TABLE question_bank_items (
@@ -680,6 +666,7 @@ function mapInterview(row: InterviewRow): InterviewListItem {
     status: asStatus(row.status),
     currentQuestionIndex: row.current_question_index,
     questionCount: row.question_count,
+    directorEnabled: row.director_enabled === 1,
     competencies: parseCompetencies(row.competencies_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -855,12 +842,12 @@ export class InterviewDatabase {
     this.database.close();
   }
 
-  createInterview(request: InterviewCreateRequest): InterviewRecord {
+  createInterview(request: InterviewCreateRequest, algorithmProblem?: InterviewAlgorithmProblem): InterviewRecord {
     const id = randomUUID();
     const now = new Date().toISOString();
     const title = request.title?.trim() || `${request.positionTitle} · ${request.candidateName}`;
     const documents: Array<{ kind: InterviewDocumentKind; title: string; content: string }> = [
-      { kind: "job_description", title: `${request.positionTitle}岗位描述`, content: request.jobDescription },
+      ...(request.jobDescription.trim() ? [{ kind: "job_description" as const, title: `${request.positionTitle}岗位描述`, content: request.jobDescription }] : []),
       { kind: "resume", title: `${request.candidateName}的简历`, content: request.resumeText },
     ];
 
@@ -869,14 +856,15 @@ export class InterviewDatabase {
       this.database.prepare(`
         INSERT INTO interviews (
           id, title, candidate_name, position_title, status, current_question_index,
-          question_count, competencies_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'draft', 0, ?, ?, ?, ?)
+          question_count, director_enabled, competencies_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'draft', 0, ?, ?, ?, ?, ?)
       `).run(
         id,
         title,
         request.candidateName,
         request.positionTitle,
         request.questionCount,
+        request.directorEnabled ? 1 : 0,
         JSON.stringify(request.competencies),
         now,
         now,
@@ -900,6 +888,15 @@ export class InterviewDatabase {
         );
       }
 
+      if (algorithmProblem) {
+        this.database.prepare(`
+          INSERT INTO interview_algorithm_exams (interview_id, status, problem_slug, problem_json,
+            draft_leetcode, draft_acm)
+          VALUES (?, 'pending', ?, ?, ?, ?)
+        `).run(id, algorithmProblem.slug, JSON.stringify(algorithmProblem),
+          algorithmProblem.templates.leetcode, algorithmProblem.templates.acm);
+      }
+
       this.database.exec("COMMIT");
     } catch (error) {
       this.database.exec("ROLLBACK");
@@ -914,7 +911,7 @@ export class InterviewDatabase {
   getInterview(id: string): InterviewRecord | null {
     const row = this.database.prepare(`
       SELECT id, title, candidate_name, position_title, status, current_question_index,
-             question_count, competencies_json, created_at, updated_at
+             question_count, director_enabled, competencies_json, created_at, updated_at
       FROM interviews
       WHERE id = ?
     `).get(id) as InterviewRow | undefined;
@@ -933,7 +930,7 @@ export class InterviewDatabase {
   listInterviews(): InterviewListItem[] {
     const rows = this.database.prepare(`
       SELECT id, title, candidate_name, position_title, status, current_question_index,
-             question_count, competencies_json, created_at, updated_at
+             question_count, director_enabled, competencies_json, created_at, updated_at
       FROM interviews
       ORDER BY updated_at DESC, rowid DESC
     `).all() as unknown as InterviewRow[];
@@ -945,6 +942,205 @@ export class InterviewDatabase {
     const counts = Object.fromEntries(INTERVIEW_STATUSES.map((status) => [status, 0])) as Record<InterviewStatus, number>;
     for (const interview of interviews) counts[interview.status] += 1;
     return { interviews, counts };
+  }
+
+  deleteInterview(id: string): InterviewSnapshot {
+    const result = this.database.prepare("DELETE FROM interviews WHERE id = ?").run(id);
+    if (result.changes !== 1) throw new Error("面试不存在或已删除");
+    return this.getSnapshot();
+  }
+
+  finishInterview(id: string): InterviewSession {
+    const now = new Date().toISOString();
+    const result = this.database.prepare(`
+      UPDATE interviews
+      SET status = 'completed', state_version = state_version + 1, updated_at = ?
+      WHERE id = ? AND status IN ('draft', 'ready', 'interviewing')
+    `).run(now, id);
+    if (result.changes !== 1) throw new Error("面试不存在或已结束，无法再次结束");
+    this.database.prepare(`UPDATE interview_algorithm_exams SET status = 'abandoned', completed_at = ?
+      WHERE interview_id = ? AND status IN ('pending', 'active')`).run(now, id);
+    const session = this.getInterviewSession(id);
+    if (!session) throw new Error("结束面试后无法读取记录");
+    return session;
+  }
+
+  getAlgorithmExam(interviewId: string): InterviewAlgorithmExam | null {
+    const row = this.database.prepare(`SELECT status, problem_json, started_at, deadline_at,
+      completed_at, passed_mode, draft_leetcode, draft_acm
+      FROM interview_algorithm_exams WHERE interview_id = ?`).get(interviewId) as InterviewAlgorithmRow | undefined;
+    if (!row) return null;
+    const attempts = this.database.prepare(`SELECT id, mode, code, verdict, passed, total,
+      duration_ms, submitted_at FROM interview_algorithm_attempts
+      WHERE interview_id = ? ORDER BY submitted_at, rowid`).all(interviewId) as unknown as Array<{
+        id: string; mode: InterviewAlgorithmMode; code: string; verdict: InterviewAlgorithmAttempt["verdict"];
+        passed: number; total: number; duration_ms: number; submitted_at: string;
+      }>;
+    return {
+      status: row.status,
+      problem: JSON.parse(row.problem_json) as InterviewAlgorithmProblem,
+      startedAt: row.started_at,
+      deadlineAt: row.deadline_at,
+      completedAt: row.completed_at,
+      passedMode: row.passed_mode,
+      drafts: { leetcode: row.draft_leetcode, acm: row.draft_acm },
+      attempts: attempts.map((attempt) => ({ id: attempt.id, mode: attempt.mode,
+        code: attempt.code, verdict: attempt.verdict, passed: attempt.passed,
+        total: attempt.total, durationMs: attempt.duration_ms, submittedAt: attempt.submitted_at })),
+    };
+  }
+
+  startAlgorithmExam(interviewId: string): InterviewSession {
+    const now = new Date();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const result = this.database.prepare(`UPDATE interview_algorithm_exams
+        SET status = 'active', started_at = ?, deadline_at = ?
+        WHERE interview_id = ? AND status = 'pending'
+          AND EXISTS (SELECT 1 FROM interviews WHERE id = ? AND status = 'draft')`)
+        .run(now.toISOString(), new Date(now.getTime() + 600_000).toISOString(), interviewId, interviewId);
+      if (result.changes === 1) {
+        this.database.prepare(`UPDATE interviews SET status = 'interviewing', updated_at = ?
+          WHERE id = ?`).run(now.toISOString(), interviewId);
+      }
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    const session = this.getInterviewSession(interviewId);
+    if (!session?.algorithm) throw new Error("面试没有算法考核");
+    return session;
+  }
+
+  expireAlgorithmExam(interviewId: string): boolean {
+    const now = new Date().toISOString();
+    const result = this.database.prepare(`UPDATE interview_algorithm_exams
+      SET status = 'timed_out', completed_at = ?
+      WHERE interview_id = ? AND status = 'active' AND deadline_at <= ?`).run(now, interviewId, now);
+    return result.changes > 0;
+  }
+
+  markAlgorithmUnavailable(interviewId: string): InterviewSession {
+    const now = new Date().toISOString();
+    this.database.prepare(`UPDATE interview_algorithm_exams SET status = 'unavailable', completed_at = ?
+      WHERE interview_id = ? AND status = 'active'`).run(now, interviewId);
+    const session = this.getInterviewSession(interviewId);
+    if (!session) throw new Error("面试不存在");
+    return session;
+  }
+
+  saveAlgorithmDraft(interviewId: string, mode: InterviewAlgorithmMode, code: string): InterviewSession {
+    const column = mode === "leetcode" ? "draft_leetcode" : "draft_acm";
+    const now = new Date().toISOString();
+    const result = this.database.prepare(`UPDATE interview_algorithm_exams SET ${column} = ?
+      WHERE interview_id = ? AND status = 'active' AND deadline_at > ?`).run(code, interviewId, now);
+    if (result.changes !== 1) throw new Error("算法考核已结束，不能保存代码");
+    const session = this.getInterviewSession(interviewId);
+    if (!session) throw new Error("面试不存在");
+    return session;
+  }
+
+  recordAlgorithmAttempt(input: { interviewId: string; operationId: string; mode: InterviewAlgorithmMode;
+    code: string; verdict: InterviewAlgorithmAttempt["verdict"]; passed: number; total: number;
+    durationMs: number; submittedAt: string }): InterviewSession {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const exam = this.database.prepare(`SELECT status, deadline_at FROM interview_algorithm_exams
+        WHERE interview_id = ?`).get(input.interviewId) as { status: string; deadline_at: string | null } | undefined;
+      if (!exam || exam.status !== "active" || !exam.deadline_at || input.submittedAt >= exam.deadline_at) {
+        throw new Error("算法考核已结束，不能提交代码");
+      }
+      this.database.prepare(`INSERT INTO interview_algorithm_attempts
+        (id, interview_id, operation_id, mode, code, verdict, passed, total, duration_ms, submitted_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(randomUUID(), input.interviewId, input.operationId,
+          input.mode, input.code, input.verdict, input.passed, input.total, input.durationMs, input.submittedAt);
+      const column = input.mode === "leetcode" ? "draft_leetcode" : "draft_acm";
+      this.database.prepare(`UPDATE interview_algorithm_exams SET ${column} = ?,
+        status = CASE WHEN ? = 'accepted' THEN 'passed' ELSE status END,
+        passed_mode = CASE WHEN ? = 'accepted' THEN ? ELSE passed_mode END,
+        completed_at = CASE WHEN ? = 'accepted' THEN ? ELSE completed_at END
+        WHERE interview_id = ?`).run(input.code, input.verdict, input.verdict, input.mode,
+          input.verdict, new Date().toISOString(), input.interviewId);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    const session = this.getInterviewSession(input.interviewId);
+    if (!session) throw new Error("面试不存在");
+    return session;
+  }
+
+  appendInterviewLimitEnding(interviewId: string, operationId: string, candidateText: string,
+    candidateSource: "manual" | "agent" = "manual", topicFlow?: InterviewTopicFlow,
+    candidateOutcome?: InterviewTurn["candidateOutcome"], candidateAlreadySaved = false): InterviewSession {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const interview = this.database.prepare(`SELECT status FROM interviews WHERE id = ?`).get(interviewId) as
+        { status: string } | undefined;
+      const count = this.database.prepare(`SELECT COUNT(*) AS count FROM interview_turns
+        WHERE interview_id = ? AND role = 'candidate'`).get(interviewId) as { count: number };
+      if (!interview || interview.status !== "interviewing" || count.count !== (candidateAlreadySaved ? 20 : 19)) {
+        throw new Error("当前面试未到第 20 轮，不能自动结束");
+      }
+      const ordinal = this.database.prepare(`SELECT COALESCE(MAX(ordinal), -1) AS value FROM interview_turns
+        WHERE interview_id = ?`).get(interviewId) as { value: number };
+      const now = new Date().toISOString();
+      const insert = this.database.prepare(`INSERT INTO interview_turns
+        (id, interview_id, ordinal, role, content, decision_json, created_at, operation_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+      if (!candidateAlreadySaved) insert.run(randomUUID(), interviewId, ordinal.value + 1, "candidate", candidateText,
+        JSON.stringify({ source: candidateSource, ...(candidateOutcome ? { candidateOutcome } : {}) }), now, null);
+      insert.run(randomUUID(), interviewId, ordinal.value + (candidateAlreadySaved ? 1 : 2), "interviewer",
+        "感谢你完成今天的面试，我们先到这里。", JSON.stringify({ questionType: "other",
+          ...(topicFlow ? { topicFlow } : {}) }), now, operationId);
+      this.database.prepare(`UPDATE interviews SET status = 'completed', state_version = state_version + 1,
+        updated_at = ? WHERE id = ?`).run(now, interviewId);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    const session = this.getInterviewSession(interviewId);
+    if (!session) throw new Error("面试不存在");
+    return session;
+  }
+
+  appendCandidateTurn(interviewId: string, operationId: string, content: string,
+    candidateOutcome?: InterviewTurn["candidateOutcome"]): InterviewSession {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const row = this.database.prepare(`SELECT status, active_plan_id FROM interviews WHERE id = ?`)
+        .get(interviewId) as { status: string; active_plan_id: string | null } | undefined;
+      if (!row || row.status !== "interviewing") throw new Error("当前面试状态不能保存模拟回答");
+      const existing = this.database.prepare(`SELECT id FROM interview_turns WHERE interview_id = ? AND operation_id = ?`)
+        .get(interviewId, operationId);
+      if (!existing) {
+        const last = this.database.prepare(`SELECT role, ordinal FROM interview_turns
+          WHERE interview_id = ? AND role IN ('interviewer', 'candidate') ORDER BY ordinal DESC LIMIT 1`)
+          .get(interviewId) as { role: string; ordinal: number } | undefined;
+        if (last?.role !== "interviewer") throw new Error("请等待面试官提出问题后再保存模拟回答");
+        const ordinal = this.database.prepare(`SELECT COALESCE(MAX(ordinal), -1) AS value FROM interview_turns
+          WHERE interview_id = ?`).get(interviewId) as { value: number };
+        const now = new Date().toISOString();
+        this.database.prepare(`INSERT INTO interview_turns
+          (id, interview_id, ordinal, role, content, decision_json, created_at, plan_id, operation_id)
+          VALUES (?, ?, ?, 'candidate', ?, ?, ?, ?, ?)`)
+          .run(randomUUID(), interviewId, ordinal.value + 1, content,
+            JSON.stringify({ source: "agent", ...(candidateOutcome ? { candidateOutcome } : {}) }),
+            now, row.active_plan_id, operationId);
+        this.database.prepare(`UPDATE interviews SET state_version = state_version + 1, updated_at = ? WHERE id = ?`)
+          .run(now, interviewId);
+      }
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    const session = this.getInterviewSession(interviewId);
+    if (!session) throw new Error("模拟回答保存后无法读取面试");
+    return session;
   }
 
   getInterviewSession(id: string): InterviewSession | null {
@@ -972,9 +1168,40 @@ export class InterviewDatabase {
     const answered = this.database.prepare(`
       SELECT COUNT(*) AS count
       FROM interview_turns
-      WHERE interview_id = ? AND role = 'candidate' AND question_id IS NOT NULL
+      WHERE interview_id = ? AND role = 'candidate'
     `).get(id) as { count: number };
     const plan = planRow ? mapPlanSummary(planRow) : null;
+    const turnRows = this.database.prepare(`
+      SELECT id, ordinal, role, content, decision_json, created_at
+      FROM interview_turns WHERE interview_id = ? AND role IN ('system', 'interviewer', 'candidate')
+      ORDER BY ordinal ASC
+    `).all(id) as Array<{ id: string; ordinal: number; role: "system" | "interviewer" | "candidate";
+      content: string; decision_json: string | null; created_at: string }>;
+    const turns: InterviewTurn[] = [];
+    const debugEvents: InterviewDebugEvent[] = [];
+    let topicFlow: InterviewTopicFlow | undefined;
+    for (const row of turnRows) {
+      const decision = row.decision_json ? JSON.parse(row.decision_json) as {
+        search?: InterviewTurn["search"]; trace?: InterviewCallTrace; source?: InterviewTurn["source"];
+        candidateOutcome?: InterviewTurn["candidateOutcome"];
+        questionType?: InterviewTurn["questionType"];
+        topicFlow?: InterviewTopicFlow;
+      } : null;
+      if (row.role === "system") {
+        if (decision?.trace) debugEvents.push({ id: row.id, ordinal: row.ordinal,
+          createdAt: row.created_at, trace: decision.trace });
+        continue;
+      }
+      const questionType = decision?.questionType && INTERVIEW_QUESTION_TYPES.includes(decision.questionType)
+        ? decision.questionType : undefined;
+      turns.push({ id: row.id, ordinal: row.ordinal, role: row.role, content: row.content,
+        createdAt: row.created_at, ...(decision?.search ? { search: decision.search } : {}),
+        ...(decision?.source ? { source: decision.source } : {}),
+        ...(questionType ? { questionType } : {}),
+        ...(decision?.candidateOutcome ? { candidateOutcome: decision.candidateOutcome } : {}),
+        ...(decision?.trace ? { trace: decision.trace } : {}) });
+      if (row.role === "interviewer" && decision?.topicFlow?.version === 1) topicFlow = decision.topicFlow;
+    }
     return {
       interview,
       plan,
@@ -983,247 +1210,142 @@ export class InterviewDatabase {
       preparationError: sessionRow.preparation_error_code && sessionRow.preparation_error_message
         ? { code: sessionRow.preparation_error_code, message: sessionRow.preparation_error_message }
         : null,
+      turns,
+      debugEvents,
+      ...(topicFlow ? { topicFlow: interview.status === "completed"
+        ? closeInterviewTopicFlow(topicFlow, "面试结束")! : topicFlow } : {}),
+      algorithm: this.getAlgorithmExam(id),
+      scoreReports: this.getInterviewScoreReports(id),
     };
   }
 
-  claimInterviewPreparation(
-    interviewId: string,
-    operationId: string,
-    promptVersion: string,
-  ): InterviewPreparationClaim {
-    this.database.exec("BEGIN IMMEDIATE");
-    try {
-      const existingInvocation = this.database.prepare(`
-        SELECT status
-        FROM model_invocations
-        WHERE interview_id = ? AND operation_id = ? AND purpose = 'prepare_questions'
-      `).get(interviewId, operationId) as { status: string } | undefined;
-      if (existingInvocation?.status === "succeeded") {
-        this.database.exec("COMMIT");
-        return "already_completed";
-      }
-      if (existingInvocation?.status === "running") {
-        this.database.exec("COMMIT");
-        return "already_running";
-      }
-      if (existingInvocation) throw new Error("该准备操作已经失败，请重新发起");
-
-      const row = this.database.prepare(`
-        SELECT status, active_operation_id
-        FROM interviews
-        WHERE id = ?
-      `).get(interviewId) as { status: string; active_operation_id: string | null } | undefined;
-      if (!row) throw new Error("面试不存在");
-      if (row.status === "preparing") {
-        if (row.active_operation_id === operationId) {
-          this.database.exec("COMMIT");
-          return "already_running";
-        }
-        throw new Error("该面试正在准备中");
-      }
-      if (row.status !== "draft" && row.status !== "ready") {
-        throw new Error("当前状态不能重新准备面试");
-      }
-
-      const now = new Date().toISOString();
-      this.database.prepare(`
-        INSERT INTO model_invocations (
-          id, interview_id, operation_id, purpose, status, prompt_version,
-          request_hash, response_hash, started_at
-        ) VALUES (?, ?, ?, 'prepare_questions', 'running', ?, '', '', ?)
-      `).run(randomUUID(), interviewId, operationId, promptVersion, now);
-      this.database.prepare(`
-        UPDATE interviews
-        SET status = 'preparing', active_operation_id = ?,
-            preparation_error_code = NULL, preparation_error_message = NULL,
-            state_version = state_version + 1, updated_at = ?
-        WHERE id = ?
-      `).run(operationId, now, interviewId);
-      this.database.exec("COMMIT");
-      return "claimed";
-    } catch (error) {
-      this.database.exec("ROLLBACK");
-      throw error;
-    }
+  getInterviewScoreReports(interviewId: string): InterviewScoreReport[] {
+    const rows = this.database.prepare(`SELECT id, version, status, dimensions_json, total, covered_weight,
+      model_json, reasoning, prompt, raw_output, error, created_at
+      FROM interview_score_reports WHERE interview_id = ? ORDER BY version DESC`).all(interviewId) as Array<{
+      id: string; version: number; status: "succeeded" | "failed"; dimensions_json: string;
+      total: number | null; covered_weight: number; model_json: string; reasoning: InterviewChatReasoning;
+      prompt: string; raw_output: string | null; error: string | null; created_at: string;
+    }>;
+    return rows.map((row) => ({ id: row.id, interviewId, version: row.version, status: row.status,
+      dimensions: JSON.parse(row.dimensions_json) as InterviewScoreDimension[], total: row.total,
+      coveredWeight: row.covered_weight, model: JSON.parse(row.model_json) as InterviewChatModel,
+      reasoning: row.reasoning, prompt: row.prompt, createdAt: row.created_at,
+      ...(row.raw_output ? { rawOutput: row.raw_output } : {}), ...(row.error ? { error: row.error } : {}) }));
   }
 
-  completeInterviewPreparation(input: {
+  saveInterviewScoreReport(input: Omit<InterviewScoreReport, "id" | "version" | "createdAt">): InterviewScoreReport {
+    const interview = this.getInterview(input.interviewId);
+    if (!interview || interview.status !== "completed") throw new Error("只能为已结束的面试保存评分");
+    const id = randomUUID();
+    const createdAt = new Date().toISOString();
+    const latest = this.database.prepare(`SELECT COALESCE(MAX(version), 0) AS version
+      FROM interview_score_reports WHERE interview_id = ?`).get(input.interviewId) as { version: number };
+    const version = latest.version + 1;
+    this.database.prepare(`INSERT INTO interview_score_reports (id, interview_id, version, status,
+      dimensions_json, total, covered_weight, model_json, reasoning, prompt, raw_output, error, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, input.interviewId, version, input.status,
+      JSON.stringify(input.dimensions), input.total, input.coveredWeight, JSON.stringify(input.model),
+      input.reasoning, input.prompt, input.rawOutput ?? null, input.error ?? null, createdAt);
+    return { ...input, id, version, createdAt };
+  }
+
+  appendInterviewExchange(input: {
     interviewId: string;
     operationId: string;
-    promptVersion: string;
-    competencies: string[];
-    jobDescriptionHash: string;
-    resumeHash: string;
-    questions: InterviewPlanQuestionInput[];
-    invocation: InterviewModelInvocationCompletion;
+    candidateText?: string;
+    candidateSource?: "manual" | "agent";
+    candidateOutcome?: InterviewTurn["candidateOutcome"];
+    interviewerText: string;
+    questionType?: InterviewTurn["questionType"];
+    answeredQuestionType?: InterviewTurn["questionType"];
+    search?: InterviewTurn["search"];
+    trace?: InterviewCallTrace;
+    complete?: boolean;
+    debugTraces?: InterviewCallTrace[];
+    topicFlow?: InterviewTopicFlow;
   }): InterviewSession {
     this.database.exec("BEGIN IMMEDIATE");
     try {
-      const interview = this.database.prepare(`
-        SELECT status, active_operation_id, question_count, competencies_json
-        FROM interviews
-        WHERE id = ?
-      `).get(input.interviewId) as {
-        status: string;
-        active_operation_id: string | null;
-        question_count: number;
-        competencies_json: string;
-      } | undefined;
-      if (!interview) throw new Error("面试不存在");
-      if (interview.status !== "preparing" || interview.active_operation_id !== input.operationId) {
-        throw new Error("准备操作已失效，结果未保存");
+      const row = this.database.prepare(`SELECT status, active_plan_id FROM interviews WHERE id = ?`)
+        .get(input.interviewId) as { status: string; active_plan_id: string | null } | undefined;
+      if (!row || (row.status !== "draft" && row.status !== "ready" && row.status !== "interviewing")) {
+        throw new Error("当前面试状态不能进行对话");
       }
-      const expectedCompetencies = parseCompetencies(interview.competencies_json);
-      if (input.questions.length !== interview.question_count) throw new Error("面试题目数量与草稿配置不一致");
-      if (JSON.stringify(input.competencies) !== JSON.stringify(expectedCompetencies)) {
-        throw new Error("面试能力维度与草稿配置不一致");
+      const existing = this.database.prepare(`SELECT id FROM interview_turns WHERE interview_id = ? AND operation_id = ?`)
+        .get(input.interviewId, input.operationId);
+      if (!existing) {
+        if (input.answeredQuestionType) {
+          const previous = this.database.prepare(`SELECT id, decision_json FROM interview_turns
+            WHERE interview_id = ? AND role = 'interviewer' ORDER BY ordinal DESC LIMIT 1`)
+            .get(input.interviewId) as { id: string; decision_json: string | null } | undefined;
+          if (previous) {
+            const decision = previous.decision_json ? JSON.parse(previous.decision_json) as Record<string, unknown> : {};
+            this.database.prepare(`UPDATE interview_turns SET decision_json = ? WHERE id = ?`)
+              .run(JSON.stringify({ ...decision, questionType: input.answeredQuestionType }), previous.id);
+          }
+        }
+        const count = this.database.prepare(`SELECT COALESCE(MAX(ordinal), -1) AS ordinal FROM interview_turns WHERE interview_id = ?`)
+          .get(input.interviewId) as { ordinal: number };
+        let ordinal = count.ordinal + 1;
+        const now = new Date().toISOString();
+        const insert = this.database.prepare(`
+          INSERT INTO interview_turns (id, interview_id, ordinal, role, content, decision_json, created_at,
+            plan_id, operation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        if (input.candidateText) {
+          insert.run(randomUUID(), input.interviewId, ordinal++, "candidate", input.candidateText,
+            JSON.stringify({ source: input.candidateSource ?? "manual",
+              ...(input.candidateOutcome ? { candidateOutcome: input.candidateOutcome } : {}) }),
+            now, row.active_plan_id, null);
+        }
+        for (const trace of input.debugTraces ?? []) {
+          insert.run(randomUUID(), input.interviewId, ordinal++, "system",
+            trace.outputText ?? trace.error?.message ?? "模型调用未返回内容",
+            JSON.stringify({ trace }), now, row.active_plan_id, trace.operationId);
+        }
+        insert.run(randomUUID(), input.interviewId, ordinal, "interviewer", input.interviewerText,
+          input.search || input.trace || input.topicFlow || input.questionType
+            ? JSON.stringify({ ...(input.search ? { search: input.search } : {}),
+              ...(input.trace ? { trace: input.trace } : {}), ...(input.topicFlow ? { topicFlow: input.topicFlow } : {}),
+              ...(input.questionType ? { questionType: input.questionType } : {}) }) : null,
+          now, row.active_plan_id, input.operationId);
+        this.database.prepare(`UPDATE interviews SET status = ?, state_version = state_version + 1,
+          updated_at = ? WHERE id = ?`).run(input.complete ? "completed" : "interviewing", now, input.interviewId);
       }
-      if (input.questions.some((question, index) => question.ordinal !== index)) {
-        throw new Error("面试题目顺序无效");
-      }
-
-      const invocationRow = this.database.prepare(`
-        SELECT id
-        FROM model_invocations
-        WHERE interview_id = ? AND operation_id = ? AND purpose = 'prepare_questions' AND status = 'running'
-      `).get(input.interviewId, input.operationId) as { id: string } | undefined;
-      if (!invocationRow) throw new Error("找不到正在执行的模型调用");
-
-      const nextVersionRow = this.database.prepare(`
-        SELECT COALESCE(MAX(version), 0) + 1 AS version
-        FROM interview_plans
-        WHERE interview_id = ?
-      `).get(input.interviewId) as { version: number };
-      const planId = randomUUID();
-      const now = new Date().toISOString();
-      this.database.prepare(`
-        UPDATE model_invocations
-        SET status = 'succeeded', provider_id = ?, model_id = ?, request_hash = ?, response_hash = ?,
-            input_tokens = ?, output_tokens = ?, total_tokens = ?, cached_input_tokens = ?,
-            reasoning_tokens = ?, cost_usd = ?, duration_ms = ?, finished_at = ?
-        WHERE id = ?
-      `).run(
-        input.invocation.providerId,
-        input.invocation.modelId,
-        input.invocation.requestHash,
-        input.invocation.responseHash,
-        input.invocation.inputTokens ?? null,
-        input.invocation.outputTokens ?? null,
-        input.invocation.totalTokens ?? null,
-        input.invocation.cachedInputTokens ?? null,
-        input.invocation.reasoningTokens ?? null,
-        input.invocation.costUsd ?? null,
-        input.invocation.durationMs,
-        now,
-        invocationRow.id,
-      );
-      this.database.prepare(`
-        INSERT INTO interview_plans (
-          id, interview_id, version, operation_id, prompt_version, model_invocation_id,
-          question_count, competencies_json, job_description_hash, resume_hash, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        planId,
-        input.interviewId,
-        nextVersionRow.version,
-        input.operationId,
-        input.promptVersion,
-        invocationRow.id,
-        input.questions.length,
-        JSON.stringify(input.competencies),
-        input.jobDescriptionHash,
-        input.resumeHash,
-        now,
-      );
-      const insertQuestion = this.database.prepare(`
-        INSERT INTO interview_questions (
-          id, interview_id, plan_id, ordinal, competency, kind, difficulty, prompt, rubric_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      for (const question of input.questions) {
-        insertQuestion.run(
-          randomUUID(),
-          input.interviewId,
-          planId,
-          question.ordinal,
-          question.competency,
-          question.kind,
-          question.difficulty,
-          question.prompt,
-          JSON.stringify(question.rubric),
-          now,
-        );
-      }
-      this.database.prepare(`
-        UPDATE interviews
-        SET status = 'ready', active_plan_id = ?, active_question_id = NULL,
-            active_operation_id = NULL, current_question_index = 0,
-            preparation_error_code = NULL, preparation_error_message = NULL,
-            state_version = state_version + 1, updated_at = ?
-        WHERE id = ?
-      `).run(planId, now, input.interviewId);
       this.database.exec("COMMIT");
     } catch (error) {
       this.database.exec("ROLLBACK");
       throw error;
     }
     const session = this.getInterviewSession(input.interviewId);
-    if (!session) throw new Error("面试计划保存后无法读取");
+    if (!session) throw new Error("面试对话保存后无法读取");
     return session;
   }
 
-  failInterviewPreparation(
-    interviewId: string,
-    operationId: string,
-    failure: InterviewModelInvocationFailure,
-  ): InterviewSession {
+  appendInterviewDebugFailure(interviewId: string, trace: InterviewCallTrace): InterviewSession {
+    return this.appendInterviewDebugTrace(interviewId, trace);
+  }
+
+  appendInterviewDebugTrace(interviewId: string, trace: InterviewCallTrace): InterviewSession {
     this.database.exec("BEGIN IMMEDIATE");
     try {
-      const row = this.database.prepare(`
-        SELECT status, active_operation_id, active_plan_id
-        FROM interviews
-        WHERE id = ?
-      `).get(interviewId) as {
-        status: string;
-        active_operation_id: string | null;
-        active_plan_id: string | null;
-      } | undefined;
+      const row = this.database.prepare(`SELECT active_plan_id FROM interviews WHERE id = ?`)
+        .get(interviewId) as { active_plan_id: string | null } | undefined;
       if (!row) throw new Error("面试不存在");
-      if (row.status === "preparing" && row.active_operation_id === operationId) {
+      const existing = this.database.prepare(`SELECT id FROM interview_turns WHERE interview_id = ? AND operation_id = ?`)
+        .get(interviewId, trace.operationId);
+      if (!existing) {
+        const count = this.database.prepare(`SELECT COALESCE(MAX(ordinal), -1) AS ordinal FROM interview_turns WHERE interview_id = ?`)
+          .get(interviewId) as { ordinal: number };
         const now = new Date().toISOString();
         this.database.prepare(`
-          UPDATE model_invocations
-          SET status = 'failed', provider_id = ?, model_id = ?,
-              request_hash = COALESCE(?, request_hash), response_hash = COALESCE(?, response_hash),
-              input_tokens = ?, output_tokens = ?, total_tokens = ?, cached_input_tokens = ?,
-              reasoning_tokens = ?, cost_usd = ?,
-              error_code = ?, error_message = ?, duration_ms = ?, finished_at = ?
-          WHERE interview_id = ? AND operation_id = ? AND purpose = 'prepare_questions' AND status = 'running'
-        `).run(
-          failure.providerId ?? null,
-          failure.modelId ?? null,
-          failure.requestHash ?? null,
-          failure.responseHash ?? null,
-          failure.inputTokens ?? null,
-          failure.outputTokens ?? null,
-          failure.totalTokens ?? null,
-          failure.cachedInputTokens ?? null,
-          failure.reasoningTokens ?? null,
-          failure.costUsd ?? null,
-          failure.errorCode,
-          failure.errorMessage,
-          failure.durationMs,
-          now,
-          interviewId,
-          operationId,
-        );
-        this.database.prepare(`
-          UPDATE interviews
-          SET status = ?, active_operation_id = NULL,
-              preparation_error_code = ?, preparation_error_message = ?,
-              state_version = state_version + 1, updated_at = ?
-          WHERE id = ?
-        `).run(row.active_plan_id ? "ready" : "draft", failure.errorCode, failure.errorMessage, now, interviewId);
+          INSERT INTO interview_turns (id, interview_id, ordinal, role, content, decision_json, created_at,
+            plan_id, operation_id) VALUES (?, ?, ?, 'system', ?, ?, ?, ?, ?)
+        `).run(randomUUID(), interviewId, count.ordinal + 1,
+          trace.outputText ?? trace.error?.message ?? "模型调用未返回内容",
+          JSON.stringify({ trace }), now, row.active_plan_id, trace.operationId);
+        this.database.prepare(`UPDATE interviews SET updated_at = ? WHERE id = ?`).run(now, interviewId);
       }
       this.database.exec("COMMIT");
     } catch (error) {
@@ -1231,11 +1353,11 @@ export class InterviewDatabase {
       throw error;
     }
     const session = this.getInterviewSession(interviewId);
-    if (!session) throw new Error("面试准备失败后无法读取");
+    if (!session) throw new Error("调试记录保存后无法读取面试");
     return session;
   }
 
-  getJobLibrary(limit = 1_000): JobLibrarySnapshot {
+  getJobLibrary(limit = 5_000): JobLibrarySnapshot {
     const safeLimit = Math.max(1, Math.min(5_000, Math.trunc(limit)));
     const rows = this.database.prepare(`
       SELECT id, source, source_job_id, source_code, company, title, city, job_type,
@@ -1263,6 +1385,17 @@ export class InterviewDatabase {
       LIMIT 1
     `).get() as JobCollectionRunRow | undefined;
     return { jobs: rows.map(mapJobPosting), total, bySource, lastRun: runRow ? mapCollectionRun(runRow) : null };
+  }
+
+  getJobPosting(id: string): JobPosting | null {
+    const row = this.database.prepare(`
+      SELECT id, source, source_job_id, source_code, company, title, city, job_type,
+             category, batch, department, description, responsibilities_json,
+             requirements_json, raw_text, source_url, content_hash, collected_at,
+             first_seen_at, last_seen_at
+      FROM job_postings WHERE id = ?
+    `).get(id) as JobPostingRow | undefined;
+    return row ? mapJobPosting(row) : null;
   }
 
   startJobCollection(request: JobCollectionRequest): JobCollectionRun {
@@ -2205,6 +2338,13 @@ export class InterviewDatabase {
       updatedAt: row.updated_at,
       intent: typeof metadata.intent === "string" ? metadata.intent : "",
       answerOutline: parseStringArray(row.answer_outline_json),
+      ...(typeof metadata.referenceAnswer === "string" && metadata.referenceAnswer.trim()
+        ? { referenceAnswer: metadata.referenceAnswer } : {}),
+      evidence: Array.isArray(metadata.evidence) ? metadata.evidence.filter((item): item is {
+        sourceId: string; sourceTitle: string; segmentId: string; quote: string;
+      } => Boolean(item && typeof item === "object"
+        && typeof item.sourceId === "string" && typeof item.sourceTitle === "string"
+        && typeof item.segmentId === "string" && typeof item.quote === "string")) : [],
       commonMistakes: parseStringArray(row.common_mistakes_json),
       rubric: rubric.map((item) => ({
         id: item.rubric_key,
@@ -2934,6 +3074,7 @@ export class InterviewDatabase {
       review: {
         intent: detail.intent,
         answerOutline: [...detail.answerOutline],
+        ...(detail.referenceAnswer ? { referenceAnswer: detail.referenceAnswer } : {}),
         rubric: structuredClone(detail.rubric),
         commonMistakes: [...detail.commonMistakes],
         followUps: structuredClone(detail.followUps),
@@ -3038,6 +3179,7 @@ export class InterviewDatabase {
           status TEXT NOT NULL CHECK (status IN ('draft', 'preparing', 'ready', 'interviewing', 'generating_report', 'completed')),
           current_question_index INTEGER NOT NULL DEFAULT 0 CHECK (current_question_index >= 0),
           question_count INTEGER NOT NULL CHECK (question_count BETWEEN 1 AND 30),
+          director_enabled INTEGER NOT NULL DEFAULT 0 CHECK (director_enabled IN (0, 1)),
           competencies_json TEXT NOT NULL,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
@@ -3354,6 +3496,122 @@ export class InterviewDatabase {
     if (currentVersion < 5) this.migrateQuestionBankSchemaToV5();
     if (currentVersion < 6) this.migrateQuestionPracticeSchemaToV6();
     if (currentVersion < 7) this.migrateQuestionPracticeTimingSchemaToV7();
+    if (currentVersion < 8) this.migrateInterviewAlgorithmSchemaToV8();
+    if (currentVersion < 9) this.migrateJobCollectionLimitToV9();
+    if (currentVersion < 10) {
+      this.database.exec("BEGIN IMMEDIATE");
+      try {
+        if (!this.hasTableColumn("interviews", "director_enabled")) {
+          this.database.exec("ALTER TABLE interviews ADD COLUMN director_enabled INTEGER NOT NULL DEFAULT 0 CHECK (director_enabled IN (0, 1))");
+        }
+        this.database.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+          .run(10, new Date().toISOString());
+        this.database.exec("COMMIT");
+      } catch (error) {
+        this.database.exec("ROLLBACK");
+        throw error;
+      }
+    }
+    if (currentVersion < 11) {
+      this.database.exec("BEGIN IMMEDIATE");
+      try {
+        this.database.exec(`CREATE TABLE interview_score_reports (
+          id TEXT PRIMARY KEY,
+          interview_id TEXT NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
+          version INTEGER NOT NULL CHECK (version > 0),
+          status TEXT NOT NULL CHECK (status IN ('succeeded', 'failed')),
+          dimensions_json TEXT NOT NULL,
+          total INTEGER,
+          covered_weight INTEGER NOT NULL,
+          model_json TEXT NOT NULL,
+          reasoning TEXT NOT NULL,
+          prompt TEXT NOT NULL,
+          raw_output TEXT,
+          error TEXT,
+          created_at TEXT NOT NULL,
+          UNIQUE(interview_id, version)
+        ) STRICT;
+        CREATE INDEX interview_score_reports_interview_idx
+          ON interview_score_reports(interview_id, version DESC);`);
+        this.database.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+          .run(11, new Date().toISOString());
+        this.database.exec("COMMIT");
+      } catch (error) {
+        this.database.exec("ROLLBACK");
+        throw error;
+      }
+    }
+  }
+
+  private migrateJobCollectionLimitToV9(): void {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.exec(`
+        CREATE TABLE job_collection_runs_v9 (
+          id TEXT PRIMARY KEY,
+          status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'partial', 'failed')),
+          sources_json TEXT NOT NULL,
+          keywords_json TEXT NOT NULL,
+          limit_per_source INTEGER NOT NULL CHECK (limit_per_source BETWEEN 1 AND 500),
+          results_json TEXT NOT NULL DEFAULT '[]',
+          started_at TEXT NOT NULL,
+          finished_at TEXT
+        ) STRICT;
+        INSERT INTO job_collection_runs_v9
+          (id, status, sources_json, keywords_json, limit_per_source, results_json, started_at, finished_at)
+        SELECT id, status, sources_json, keywords_json, limit_per_source, results_json, started_at, finished_at
+        FROM job_collection_runs;
+        DROP TABLE job_collection_runs;
+        ALTER TABLE job_collection_runs_v9 RENAME TO job_collection_runs;
+        CREATE INDEX job_collection_runs_started_idx ON job_collection_runs(started_at DESC);
+      `);
+      this.database.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+        .run(9, new Date().toISOString());
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  private migrateInterviewAlgorithmSchemaToV8(): void {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.exec(`
+        CREATE TABLE interview_algorithm_exams (
+          interview_id TEXT PRIMARY KEY REFERENCES interviews(id) ON DELETE CASCADE,
+          status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'passed', 'timed_out', 'unavailable', 'abandoned')),
+          problem_slug TEXT NOT NULL,
+          problem_json TEXT NOT NULL,
+          started_at TEXT,
+          deadline_at TEXT,
+          completed_at TEXT,
+          passed_mode TEXT CHECK (passed_mode IS NULL OR passed_mode IN ('leetcode', 'acm')),
+          draft_leetcode TEXT NOT NULL,
+          draft_acm TEXT NOT NULL
+        ) STRICT;
+        CREATE TABLE interview_algorithm_attempts (
+          id TEXT PRIMARY KEY,
+          interview_id TEXT NOT NULL REFERENCES interview_algorithm_exams(interview_id) ON DELETE CASCADE,
+          operation_id TEXT NOT NULL UNIQUE,
+          mode TEXT NOT NULL CHECK (mode IN ('leetcode', 'acm')),
+          code TEXT NOT NULL,
+          verdict TEXT NOT NULL,
+          passed INTEGER NOT NULL,
+          total INTEGER NOT NULL,
+          duration_ms REAL NOT NULL,
+          submitted_at TEXT NOT NULL
+        ) STRICT;
+        CREATE INDEX interview_algorithm_attempts_interview_idx
+          ON interview_algorithm_attempts(interview_id, submitted_at);
+      `);
+      this.database.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)")
+        .run(8, new Date().toISOString());
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   private hasTableColumn(table: string, column: string): boolean {

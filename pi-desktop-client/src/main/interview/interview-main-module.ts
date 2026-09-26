@@ -3,7 +3,7 @@ import type { ProductModuleId } from "../../platform/shared/product-module";
 import type { ModelGateway } from "../../platform/shared/ai/model-gateway";
 import {
   INTERVIEW_IPC,
-  type InterviewPreparationProgress,
+  type CandidateTurnProgress,
   type JobCollectionProgress,
 } from "../../shared/contracts/interview";
 import { QUESTION_BANK_IPC } from "../../shared/contracts/interview-question-bank";
@@ -11,15 +11,27 @@ import { QUESTION_PRACTICE_IPC } from "../../shared/contracts/interview-question
 import type { MainModule } from "../../platform/main/main-module-host";
 import { sendToRenderer, type RendererWindow } from "../send-to-renderer";
 import { InterviewService } from "./interview-service";
-import { GatewayInterviewModelProvider } from "./interview-model-provider";
+import { InterviewChatAgent } from "./interview-chat-agent";
+import { InterviewDirectorAgent } from "./interview-director-agent";
+import { InterviewScoreAgent } from "./interview-score-agent";
+import { LocalInterviewAlgorithmExecutor } from "./interview-algorithm-exam";
 import { ElectronJobCollector } from "./job-collector";
+import type { KnowledgeInterviewImportCounts, KnowledgeInterviewImportPayload } from "../../shared/contracts/knowledge-studio";
 
 const INTERVIEW_IPC_CHANNELS = [
   INTERVIEW_IPC.getSnapshot,
   INTERVIEW_IPC.getInterview,
   INTERVIEW_IPC.getInterviewSession,
   INTERVIEW_IPC.createInterview,
-  INTERVIEW_IPC.prepareInterview,
+  INTERVIEW_IPC.deleteInterview,
+  INTERVIEW_IPC.finishInterview,
+  INTERVIEW_IPC.scoreInterview,
+  INTERVIEW_IPC.sendChat,
+  INTERVIEW_IPC.simulateCandidateTurn,
+  INTERVIEW_IPC.startAlgorithmExam,
+  INTERVIEW_IPC.saveAlgorithmDraft,
+  INTERVIEW_IPC.submitAlgorithmCode,
+  INTERVIEW_IPC.getChatModelInfo,
   INTERVIEW_IPC.getJobLibrary,
   INTERVIEW_IPC.collectJobs,
   QUESTION_BANK_IPC.getSnapshot,
@@ -43,10 +55,12 @@ export type InterviewIpcMain = Pick<IpcMain, "handle" | "removeHandler">;
 
 export type InterviewServicePort = Pick<
   InterviewService,
-  "getSnapshot" | "getInterview" | "getInterviewSession" | "createInterview" | "prepareInterview"
+  "getSnapshot" | "getInterview" | "getInterviewSession" | "createInterview" | "deleteInterview" | "finishInterview" | "scoreInterview" | "sendChat" | "simulateCandidateTurn"
+  | "startAlgorithmExam" | "saveAlgorithmDraft" | "submitAlgorithmCode"
   | "getJobLibrary" | "collectJobs"
   | "getQuestionBankSnapshot" | "listQuestionBankQuestions" | "getQuestionBankQuestion"
   | "setQuestionBankFavorite"
+  | "importKnowledgeStudioQuestions"
   | "getQuestionPracticeOverview" | "startQuestionPractice" | "getQuestionPracticeSession"
   | "saveQuestionPracticeDraft" | "submitQuestionPracticeAnswer" | "completeQuestionPracticeReview"
   | "skipQuestionPracticeItem" | "abandonQuestionPracticeSession" | "listQuestionPracticeHistory"
@@ -56,6 +70,7 @@ export type InterviewServicePort = Pick<
 export type InterviewMainModuleOptions = {
   dataDirectory: string;
   questionBankResourceDirectory: string;
+  algorithmResourceDirectory?: string;
   ipcMain: InterviewIpcMain;
   getWindow: () => RendererWindow | null;
   modelGateway?: ModelGateway;
@@ -94,8 +109,12 @@ export class InterviewMainModule implements MainModule {
       dataDirectory,
       undefined,
       new ElectronJobCollector(),
-      this.options.modelGateway ? new GatewayInterviewModelProvider(this.options.modelGateway) : undefined,
       questionBankResourceDirectory,
+      this.options.modelGateway ? new InterviewChatAgent(this.options.modelGateway) : undefined,
+      this.options.algorithmResourceDirectory
+        ? new LocalInterviewAlgorithmExecutor(this.options.algorithmResourceDirectory) : undefined,
+      this.options.modelGateway ? new InterviewDirectorAgent(this.options.modelGateway) : undefined,
+      this.options.modelGateway ? new InterviewScoreAgent(this.options.modelGateway) : undefined,
     ));
     this.service = createService(this.options.dataDirectory, this.options.questionBankResourceDirectory);
 
@@ -111,6 +130,11 @@ export class InterviewMainModule implements MainModule {
       }
       throw error;
     }
+  }
+
+  async importKnowledgeStudioQuestions(payload: KnowledgeInterviewImportPayload): Promise<KnowledgeInterviewImportCounts> {
+    if (!this.service) throw new Error("智能面试模块尚未启动");
+    return this.service.importKnowledgeStudioQuestions(payload);
   }
 
   registerIpc(): void {
@@ -129,10 +153,18 @@ export class InterviewMainModule implements MainModule {
       handle(INTERVIEW_IPC.getInterview, (_event, id: unknown) => service.getInterview(id));
       handle(INTERVIEW_IPC.getInterviewSession, (_event, id: unknown) => service.getInterviewSession(id));
       handle(INTERVIEW_IPC.createInterview, (_event, request: unknown) => service.createInterview(request));
-      handle(INTERVIEW_IPC.prepareInterview, (_event, request: unknown) => service.prepareInterview(
-        request,
-        (progress) => this.sendPreparationProgress(progress),
-      ));
+      handle(INTERVIEW_IPC.deleteInterview, (_event, id: unknown) => service.deleteInterview(id));
+      handle(INTERVIEW_IPC.finishInterview, (_event, id: unknown) => service.finishInterview(id));
+      handle(INTERVIEW_IPC.scoreInterview, (_event, request: unknown) => service.scoreInterview(request));
+      handle(INTERVIEW_IPC.sendChat, (_event, request: unknown) => service.sendChat(request));
+      handle(INTERVIEW_IPC.simulateCandidateTurn, (_event, request: unknown) => service.simulateCandidateTurn(
+        request, (progress) => this.sendCandidateTurnProgress(progress)));
+      handle(INTERVIEW_IPC.startAlgorithmExam, (_event, id: unknown) => service.startAlgorithmExam(id));
+      handle(INTERVIEW_IPC.saveAlgorithmDraft, (_event, request: unknown) => service.saveAlgorithmDraft(request));
+      handle(INTERVIEW_IPC.submitAlgorithmCode, (_event, request: unknown) => service.submitAlgorithmCode(request));
+      handle(INTERVIEW_IPC.getChatModelInfo, async () => ({
+        availableModels: await this.options.modelGateway?.getAvailableModels?.() ?? [],
+      }));
       handle(INTERVIEW_IPC.getJobLibrary, () => service.getJobLibrary());
       handle(INTERVIEW_IPC.collectJobs, (_event, request: unknown) => service.collectJobs(
         request,
@@ -178,7 +210,8 @@ export class InterviewMainModule implements MainModule {
     sendToRenderer(this.options.getWindow(), INTERVIEW_IPC.jobCollectionProgress, progress);
   }
 
-  private sendPreparationProgress(progress: InterviewPreparationProgress): void {
-    sendToRenderer(this.options.getWindow(), INTERVIEW_IPC.preparationProgress, progress);
+
+  private sendCandidateTurnProgress(progress: CandidateTurnProgress): void {
+    sendToRenderer(this.options.getWindow(), INTERVIEW_IPC.candidateTurnProgress, progress);
   }
 }

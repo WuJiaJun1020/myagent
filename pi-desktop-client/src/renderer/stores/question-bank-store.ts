@@ -129,7 +129,7 @@ export const useQuestionBankStore = create<QuestionBankStore>((set, get) => ({
   favoriteError: null,
 
   initialize: async (force = false) => {
-    if (get().loading || (get().initialized && get().snapshot && !force)) return;
+    if (!force && (get().loading || (get().initialized && get().snapshot))) return;
     const requestSequence = ++listLoadSequence;
     const snapshotRequestSequence = ++snapshotLoadSequence;
     const filters = get().filters;
@@ -178,8 +178,8 @@ export const useQuestionBankStore = create<QuestionBankStore>((set, get) => ({
         selectedId,
         ...(!selectedId ? { detail: null, detailLoading: false, detailError: null } : {}),
       });
-      if (selectedId && get().detail?.id !== selectedId) {
-        await get().selectQuestion(selectedId);
+      if (selectedId && (force || get().detail?.id !== selectedId)) {
+        await get().selectQuestion(selectedId, force);
       }
     } catch (error) {
       if (requestSequence === listLoadSequence) {

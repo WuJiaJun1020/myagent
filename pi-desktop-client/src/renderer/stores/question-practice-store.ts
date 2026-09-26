@@ -4,7 +4,6 @@ import type {
   QuestionPracticeHistoryItem,
   QuestionPracticeOverview,
   QuestionPracticeSelection,
-  QuestionPracticeSelfRating,
   QuestionPracticeSession,
 } from "../../shared/contracts/interview-question-practice";
 import { questionPracticeGateway } from "../services/question-practice-gateway";

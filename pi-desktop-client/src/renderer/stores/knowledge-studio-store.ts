@@ -6,6 +6,7 @@ import type {
   KnowledgeGenerationProgress,
   KnowledgeImportTextRequest,
   KnowledgeImportUrlRequest,
+  KnowledgeInterviewImportResult,
   KnowledgeReviewCandidateRequest,
   KnowledgeSourceDetail,
   KnowledgeStudioModelInfo,
@@ -43,6 +44,7 @@ type KnowledgeStudioStore = {
   deleteBatch(id: string): Promise<void>;
   reviewCandidate(request: KnowledgeReviewCandidateRequest): Promise<void>;
   publishBatch(id: string): Promise<void>;
+  importSupportedToInterview(id: string): Promise<KnowledgeInterviewImportResult | null>;
   revealArtifact(path: string): Promise<void>;
   applyProgress(progress: KnowledgeGenerationProgress): void;
   clearError(): void;
@@ -219,6 +221,20 @@ export const useKnowledgeStudioStore = create<KnowledgeStudioStore>((set, get) =
       await get().initialize(true);
     } catch (error) {
       set({ busy: false, error: message(error) });
+    }
+  },
+  importSupportedToInterview: async (id) => {
+    set({ busy: true, error: null, importNotice: null });
+    try {
+      const result = await knowledgeStudioGateway.importSupportedToInterview(id);
+      const summary = result.alreadyImported
+        ? `${result.eligibleCount} 道证据支持题此前已导入，面试题库没有产生重复项`
+        : `已同步到智能面试题库：新增 ${result.inserted} 道、更新 ${result.updated} 道、未变化 ${result.unchanged} 道${result.skippedCount ? `；跳过 ${result.skippedCount} 道未满足条件的题` : ""}`;
+      set({ busy: false, importNotice: summary });
+      return result;
+    } catch (error) {
+      set({ busy: false, error: message(error) });
+      return null;
     }
   },
   revealArtifact: async (path) => {

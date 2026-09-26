@@ -36,6 +36,10 @@ describe("shared AI gateway contracts", () => {
       ...metadata("reading", "explain_chapter"),
       budget: { timeoutMs: 1_000, maxCostUsd: -1 },
     })).toThrow("budget.maxCostUsd");
+    expect(() => assertAiRequestMetadata({ ...metadata("interview", "interview_chat"),
+      cacheSessionId: "interview:interviewer:stable" })).not.toThrow();
+    expect(() => assertAiRequestMetadata({ ...metadata("interview", "interview_chat"),
+      cacheSessionId: "contains a space" })).toThrow("cacheSessionId");
   });
 
   it("records model calls with module-owned metadata but no shared conversation state", async () => {

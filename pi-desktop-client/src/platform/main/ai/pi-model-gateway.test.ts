@@ -119,6 +119,85 @@ afterEach(() => {
 });
 
 describe("PiModelGateway", () => {
+  it("records a local deadline during settings loading without claiming a provider call", async () => {
+    vi.useFakeTimers();
+    const harness = runtimeWithResponse();
+    let finishReload!: () => void;
+    const observer = vi.fn();
+    const gateway = new PiModelGateway(harness.runtime, settings({ reload: () => new Promise<void>((resolve) => {
+      finishReload = resolve;
+    }) }), { createRequestId: () => "before-response" });
+    const pending = gateway.generate(request({}, { timeoutMs: 50 }), { onCallDiagnostics: observer });
+    await vi.advanceTimersByTimeAsync(50);
+    expect(await pending).toMatchObject({ ok: false, error: { code: "timeout", diagnosticCode: "LOCAL_DEADLINE" } });
+    expect(observer.mock.lastCall?.[0]).toMatchObject({ requestId: "before-response", phase: "settings",
+      outcome: "failed", timeoutSource: "local_deadline", elapsedMs: 50, runtimeResponseReceived: false });
+    expect(harness.runtime.completeSimple).not.toHaveBeenCalled();
+    const count = observer.mock.calls.length;
+    finishReload();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(observer).toHaveBeenCalledTimes(count);
+    expect(harness.runtime.completeSimple).not.toHaveBeenCalled();
+  });
+
+  it("records effective runtime parameters on deadline and keeps snapshots independent", async () => {
+    vi.useFakeTimers();
+    const harness = runtimeWithResponse();
+    vi.mocked(harness.runtime.completeSimple).mockImplementation(() => new Promise(() => undefined));
+    const observer = vi.fn();
+    const pending = new PiModelGateway(harness.runtime, settings()).generate(request({}, { timeoutMs: 50 }),
+      { onCallDiagnostics: observer });
+    await vi.advanceTimersByTimeAsync(50);
+    expect(await pending).toMatchObject({ ok: false, error: { diagnosticCode: "LOCAL_DEADLINE" } });
+    const last = observer.mock.lastCall?.[0];
+    expect(last).toMatchObject({ phase: "runtime_call", elapsedMs: 50, timeoutSource: "local_deadline",
+      runtimeResponseReceived: false, totalTimeoutMs: 50, runtimeTimeoutMs: 50, providerMaxRetries: 1,
+      websocketConnectTimeoutMs: 2000, maxRetryDelayMs: 500, estimatedInputTokens: expect.any(Number) });
+    expect(observer.mock.calls[0][0].timeline).toHaveLength(1);
+    expect(last.timeline.at(-1).phase).toBe("runtime_call");
+  });
+
+  it.each([
+    [Object.assign(new Error("upstream timeout sk-private"), { status: 504 }), "UPSTREAM_TIMEOUT", "timeout"],
+    [Object.assign(new Error("private"), { code: "UND_ERR_HEADERS_TIMEOUT" }), "HEADER_TIMEOUT", "timeout"],
+    [Object.assign(new Error("private"), { code: "UND_ERR_CONNECT_TIMEOUT" }), "CONNECT_TIMEOUT", "timeout"],
+    [Object.assign(new Error("private"), { code: "UND_ERR_BODY_TIMEOUT" }), "BODY_TIMEOUT", "timeout"],
+    [Object.assign(new Error("private"), { code: "CERT_HAS_EXPIRED" }), "TLS_FAILURE", "provider_unavailable"],
+  ])("preserves safe transport evidence for %s", async (error, diagnosticCode, code) => {
+    const harness = runtimeWithResponse();
+    vi.mocked(harness.runtime.completeSimple).mockRejectedValueOnce(error);
+    const observer = vi.fn();
+    const result = await new PiModelGateway(harness.runtime, settings()).generate(request(), { onCallDiagnostics: observer });
+    expect(result).toMatchObject({ ok: false, error: { code, diagnosticCode } });
+    expect(observer.mock.lastCall?.[0]).toMatchObject({ phase: "runtime_call", outcome: "failed",
+      ...(code === "timeout" ? { timeoutSource: "upstream" } : {}), runtimeResponseReceived: false });
+    expect(JSON.stringify([result, observer.mock.calls])).not.toContain("private");
+  });
+
+  it("records response validation failures and isolates lifecycle observers", async () => {
+    const harness = runtimeWithResponse();
+    const observer = vi.fn();
+    const result = await new PiModelGateway(harness.runtime, settings()).generate(
+      request({ responseFormat: { type: "json" } }), { onCallDiagnostics: observer });
+    expect(result).toMatchObject({ ok: false, error: { validationStage: "json_syntax" } });
+    expect(observer.mock.lastCall?.[0]).toMatchObject({ phase: "response_validation", outcome: "failed", runtimeResponseReceived: true });
+    await expect(new PiModelGateway(harness.runtime, settings()).generate(request(), {
+      onCallDiagnostics: () => { throw new Error("observer failure"); },
+    })).resolves.toMatchObject({ ok: true });
+  });
+
+  it("does not classify caller cancellation as a deadline", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const observer = vi.fn();
+    const harness = runtimeWithResponse();
+    expect(await new PiModelGateway(harness.runtime, settings()).generate(request(), {
+      signal: controller.signal, onCallDiagnostics: observer,
+    })).toMatchObject({ ok: false, error: { code: "cancelled" } });
+    expect(observer.mock.lastCall?.[0].timeoutSource).toBeUndefined();
+    expect(harness.runtime.completeSimple).not.toHaveBeenCalled();
+  });
+
   it("preserves provider-visible thinking when the runtime returns it", async () => {
     const harness = runtimeWithResponse(response({ content: [
       { type: "thinking", thinking: "先核对资料。" },
@@ -185,6 +264,7 @@ describe("PiModelGateway", () => {
           outputTokens: 3,
           totalTokens: 15,
           cachedInputTokens: 2,
+          cachedWriteTokens: 0,
           reasoningTokens: 1,
           costUsd: 0.031,
           durationMs: 50,
@@ -208,6 +288,17 @@ describe("PiModelGateway", () => {
       samplingParams: { top_p: 0.9, stop: ["<END>"] },
     });
     expect(harness.options()?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("passes a stable cache session ID to Pi independently of the request trace ID", async () => {
+    const harness = runtimeWithResponse();
+    const gateway = new PiModelGateway(harness.runtime, settings());
+    const first = request({ metadata: { ...request().metadata, traceId: "round-1",
+      cacheSessionId: "interview:interviewer:stable" } });
+    expect((await gateway.generate(first)).ok).toBe(true);
+    expect(harness.options()?.sessionId).toBe("interview:interviewer:stable");
+    expect((await gateway.generate({ ...first, metadata: { ...first.metadata, traceId: "round-2" } })).ok).toBe(true);
+    expect(harness.options()?.sessionId).toBe("interview:interviewer:stable");
   });
 
   it("honors an explicit model selector instead of the settings default", async () => {

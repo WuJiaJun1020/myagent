@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { InterviewPreparationProgress, JobCollectionProgress } from "../../shared/contracts/interview";
+import { RecordingModelGateway } from "../../platform/shared/ai/testing";
+import type { JobCollectionProgress } from "../../shared/contracts/interview";
 import type { RendererWindow } from "../send-to-renderer";
 import {
   InterviewMainModule,
@@ -33,15 +34,15 @@ function createService(): InterviewServicePort {
     getInterview: vi.fn(() => null),
     getInterviewSession: vi.fn(() => null),
     createInterview: vi.fn((request: unknown) => request as never),
-    prepareInterview: vi.fn(async (_request: unknown, onProgress: (progress: InterviewPreparationProgress) => void) => {
-      onProgress({
-        interviewId: "interview-1",
-        operationId: "operation-1",
-        phase: "calling_model",
-        message: "preparing",
-      });
-      return {} as never;
-    }),
+    deleteInterview: vi.fn(async () => ({ interviews: [], counts: { draft: 0, preparing: 0, ready: 0,
+      interviewing: 0, generating_report: 0, completed: 0 } })),
+    finishInterview: vi.fn(() => ({} as never)),
+    scoreInterview: vi.fn(async () => ({} as never)),
+    sendChat: vi.fn(async () => ({} as never)),
+    simulateCandidateTurn: vi.fn(async () => ({} as never)),
+    startAlgorithmExam: vi.fn(async () => ({} as never)),
+    saveAlgorithmDraft: vi.fn(() => ({} as never)),
+    submitAlgorithmCode: vi.fn(async () => ({} as never)),
     getJobLibrary: vi.fn(() => ({ jobs: [], total: 0, bySource: { alibaba: 0, bytedance: 0 }, lastRun: null })),
     collectJobs: vi.fn(async (_request: unknown, onProgress: (progress: JobCollectionProgress) => void) => {
       onProgress({ runId: "run-1", source: "alibaba", phase: "searching", message: "collecting", collected: 1 });
@@ -59,6 +60,7 @@ function createService(): InterviewServicePort {
     listQuestionBankQuestions: vi.fn(async () => ({ items: [], total: 0, offset: 0, limit: 30, hasMore: false })),
     getQuestionBankQuestion: vi.fn(async () => null),
     setQuestionBankFavorite: vi.fn(async () => ({ questionId: "question-1", favorite: true, favorites: 1 })),
+    importKnowledgeStudioQuestions: vi.fn(async () => ({ inserted: 1, updated: 0, unchanged: 0, alreadyImported: false })),
     getQuestionPracticeOverview: vi.fn(async () => ({
       completedSessions: 0,
       practicedQuestions: 0,
@@ -88,6 +90,22 @@ function createService(): InterviewServicePort {
 }
 
 describe("InterviewMainModule", () => {
+  it("exposes the existing Pi gateway model catalog to the interview UI", async () => {
+    const { ipcMain, handlers } = createIpcMain();
+    const gateway = Object.assign(new RecordingModelGateway(), {
+      getAvailableModels: vi.fn(async () => [{ providerId: "openai-codex", modelId: "gpt-6-luna",
+        name: "GPT-6 Luna", reasoningLevels: ["medium" as const], contextWindowTokens: 272_000 }]),
+    });
+    const module = new InterviewMainModule({ dataDirectory: "C:/app-data/interview",
+      questionBankResourceDirectory: "C:/app/resources/interview-question-bank",
+      ipcMain, getWindow: () => null, modelGateway: gateway, createService: () => createService() });
+    await module.start();
+    expect(await handlers.get("interview:get-chat-model-info")?.({})).toEqual({ availableModels: [{
+      providerId: "openai-codex", modelId: "gpt-6-luna", name: "GPT-6 Luna", reasoningLevels: ["medium"],
+      contextWindowTokens: 272_000,
+    }] });
+    await module.dispose();
+  });
   it("owns service construction, IPC forwarding and progress delivery", async () => {
     const { ipcMain, handlers } = createIpcMain();
     const service = createService();
@@ -111,8 +129,13 @@ describe("InterviewMainModule", () => {
       "C:/app-data/interview",
       "C:/app/resources/interview-question-bank",
     );
-    expect(handlers.size).toBe(20);
+    expect(handlers.size).toBe(28);
     expect([...handlers.keys()]).toEqual(expect.arrayContaining([
+      "interview:delete",
+      "interview:finish",
+      "interview:algorithm-start",
+      "interview:algorithm-save-draft",
+      "interview:algorithm-submit",
       "interview:question-practice:get-overview",
       "interview:question-practice:start-session",
       "interview:question-practice:get-session",
@@ -127,6 +150,11 @@ describe("InterviewMainModule", () => {
       interviews: [],
       counts: { draft: 0, preparing: 0, ready: 0, interviewing: 0, generating_report: 0, completed: 0 },
     });
+    expect(await handlers.get("interview:get-chat-model-info")?.({})).toEqual({ availableModels: [] });
+    await handlers.get("interview:delete")?.({}, "interview-1");
+    expect(service.deleteInterview).toHaveBeenCalledWith("interview-1");
+    await handlers.get("interview:finish")?.({}, "interview-1");
+    expect(service.finishInterview).toHaveBeenCalledWith("interview-1");
 
     const request = { sources: ["alibaba"], keywords: ["AI"], limitPerSource: 10 };
     await handlers.get("interview:collect-jobs")?.({}, request);
@@ -137,16 +165,6 @@ describe("InterviewMainModule", () => {
       phase: "searching",
       message: "collecting",
       collected: 1,
-    });
-
-    const prepareRequest = { interviewId: "interview-1", operationId: "operation-1", privacyConfirmed: true };
-    await handlers.get("interview:prepare")?.({}, prepareRequest);
-    expect(service.prepareInterview).toHaveBeenCalledWith(prepareRequest, expect.any(Function));
-    expect(send).toHaveBeenCalledWith("interview:preparation-progress", {
-      interviewId: "interview-1",
-      operationId: "operation-1",
-      phase: "calling_model",
-      message: "preparing",
     });
 
     const questionQuery = { search: "Python", limit: 20 };
@@ -195,14 +213,14 @@ describe("InterviewMainModule", () => {
     module.registerIpc();
 
     expect(createServiceFactory).toHaveBeenCalledTimes(1);
-    expect(ipcMain.handle).toHaveBeenCalledTimes(20);
-    expect(handlers.size).toBe(20);
+    expect(ipcMain.handle).toHaveBeenCalledTimes(28);
+    expect(handlers.size).toBe(28);
 
     await module.dispose();
     await module.dispose();
 
     expect(service.close).toHaveBeenCalledTimes(1);
-    expect(ipcMain.removeHandler).toHaveBeenCalledTimes(20);
+    expect(ipcMain.removeHandler).toHaveBeenCalledTimes(28);
     expect(handlers.size).toBe(0);
   });
 

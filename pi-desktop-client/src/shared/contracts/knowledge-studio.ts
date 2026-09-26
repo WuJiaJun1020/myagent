@@ -119,6 +119,7 @@ export const KNOWLEDGE_STUDIO_IPC = {
   getBatch: "knowledge-studio:get-batch",
   reviewCandidate: "knowledge-studio:review-candidate",
   publishBatch: "knowledge-studio:publish-batch",
+  importSupportedToInterview: "knowledge-studio:import-supported-to-interview",
   revealArtifact: "knowledge-studio:reveal-artifact",
   generationProgress: "knowledge-studio:generation-progress",
 } as const;
@@ -457,4 +458,27 @@ export type QuestionPackArtifactV1 = {
     rejected: number;
     humanApproved: number;
   };
+};
+
+/** Internal bridge for testing supported Knowledge Studio questions in the interview bank. */
+export type KnowledgeInterviewImportPayload = {
+  batchId: string;
+  title: string;
+  targetRole: string;
+  sources: Array<Pick<KnowledgeSourceSummary, "id" | "title" | "kind" | "format" | "contentHash" | "sourceUrl">>;
+  questions: Array<Pick<KnowledgeQuestionCandidate,
+    "id" | "ordinal" | "kind" | "difficulty" | "competency" | "question" | "answer"
+    | "rubric" | "pitfalls" | "followUps" | "evidence">>;
+};
+
+export type KnowledgeInterviewImportCounts = {
+  inserted: number;
+  updated: number;
+  unchanged: number;
+  alreadyImported: boolean;
+};
+
+export type KnowledgeInterviewImportResult = KnowledgeInterviewImportCounts & {
+  eligibleCount: number;
+  skippedCount: number;
 };

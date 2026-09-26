@@ -19,6 +19,9 @@ import {
   usesFixedReasoningSampling,
   type AiAvailableModel,
   type ModelFinishReason,
+  type ModelCallOptions,
+  type ModelCallDiagnostics,
+  type ModelCallPhase,
   type ModelGateway,
   type ModelRequest,
   type ModelReasoningLevel,
@@ -596,6 +599,7 @@ function requestOptions(request: ModelRequest, model: PiModel, settings: PiModel
   return {
     signal,
     timeoutMs,
+    ...(request.metadata.cacheSessionId === undefined ? {} : { sessionId: request.metadata.cacheSessionId }),
     ...(retry?.maxRetries === undefined ? {} : { maxRetries: retry.maxRetries }),
     ...(retry?.maxRetryDelayMs === undefined ? {} : { maxRetryDelayMs: retry.maxRetryDelayMs }),
     ...(settings.getWebSocketConnectTimeoutMs?.() === undefined
@@ -631,6 +635,7 @@ function mapUsage(message: PiAssistantMessage, durationMs: number): AiUsage {
     outputTokens: message.usage.output,
     totalTokens: message.usage.totalTokens,
     cachedInputTokens: message.usage.cacheRead,
+    cachedWriteTokens: message.usage.cacheWrite,
     costUsd: message.usage.cost.total,
     durationMs,
   };
@@ -683,7 +688,7 @@ function retryAfterMs(chain: readonly ErrorLike[]): number | undefined {
 function safeFailure(
   code: AiGatewayErrorCode,
   providerId?: string,
-  details: Partial<Pick<AiGatewayError, "statusCode" | "retryAfterMs" | "diagnosticCode" | "validationIssues">> = {},
+  details: Partial<Pick<AiGatewayError, "statusCode" | "retryAfterMs" | "diagnosticCode" | "validationIssues" | "validationStage">> = {},
 ): AiGatewayError {
   const descriptions: Record<AiGatewayErrorCode, { message: string; retryable: boolean }> = {
     invalid_request: { message: "The AI request is invalid", retryable: false },
@@ -713,6 +718,9 @@ function transportDiagnostic(detail: string): AiGatewayDiagnosticCode | undefine
   if (/\bECONNREFUSED\b/iu.test(detail)) return "CONNECTION_REFUSED";
   if (/\bECONNRESET\b/iu.test(detail)) return "CONNECTION_RESET";
   if (/headers? timed out|UND_ERR_HEADERS_TIMEOUT/iu.test(detail)) return "HEADER_TIMEOUT";
+  if (/UND_ERR_CONNECT_TIMEOUT|connect(?:ion)? timed out/iu.test(detail)) return "CONNECT_TIMEOUT";
+  if (/UND_ERR_BODY_TIMEOUT|body timed out/iu.test(detail)) return "BODY_TIMEOUT";
+  if (/CERT_HAS_EXPIRED|DEPTH_ZERO_SELF_SIGNED_CERT|UNABLE_TO_VERIFY_LEAF_SIGNATURE|ERR_TLS_CERT_ALTNAME_INVALID/iu.test(detail)) return "TLS_FAILURE";
   if (/websocket/iu.test(detail)) return "WEBSOCKET_FAILURE";
   if (/fetch failed/iu.test(detail)) return "FETCH_FAILED";
   return undefined;
@@ -720,7 +728,8 @@ function transportDiagnostic(detail: string): AiGatewayDiagnosticCode | undefine
 
 function mapError(error: unknown, providerId: string | undefined, scope?: CallScope): AiGatewayError {
   const scopeCode = scope?.failureCode;
-  if (scopeCode) return safeFailure(scopeCode, providerId);
+  if (scopeCode) return safeFailure(scopeCode, providerId,
+    scopeCode === "timeout" ? { diagnosticCode: "LOCAL_DEADLINE" } : {});
   if (error instanceof SafeRequestError) return safeFailure(error.gatewayCode, providerId);
   const chain = errorChain(error);
   const statusCode = chain.map(numericStatus).find((status) => status !== undefined);
@@ -745,7 +754,7 @@ function mapError(error: unknown, providerId: string | undefined, scope?: CallSc
   if (statusCode === 401) return safeFailure("authentication_failed", providerId, responseDetails);
   if (statusCode === 403) return safeFailure("permission_denied", providerId, responseDetails);
   if (statusCode === 408 || statusCode === 504 || /\bETIMEDOUT\b|timeout|timed out/iu.test(detail)) {
-    return safeFailure("timeout", providerId, responseDetails);
+    return safeFailure("timeout", providerId, { ...responseDetails, diagnosticCode: diagnosticCode ?? "UPSTREAM_TIMEOUT" });
   }
   if (statusCode === 429) {
     return safeFailure(
@@ -778,7 +787,7 @@ function mapError(error: unknown, providerId: string | undefined, scope?: CallSc
     return safeFailure("rate_limited", providerId, responseDetails);
   }
   if (/AbortError|ABORT_ERR/iu.test(`${names} ${codes}`)) return safeFailure("cancelled", providerId);
-  if (/ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|network|fetch failed|socket|service unavailable/iu.test(detail)) {
+  if (diagnosticCode || /ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|network|fetch failed|socket|service unavailable/iu.test(detail)) {
     return safeFailure("provider_unavailable", providerId, responseDetails);
   }
   if (/\b(model_validation)\b/iu.test(codes)) return safeFailure("invalid_request", providerId, responseDetails);
@@ -794,12 +803,15 @@ function validateJsonResponse(request: ModelRequest, text: string): void {
   try {
     value = JSON.parse(text);
   } catch {
-    throw new SafeGatewayFailure(safeFailure("invalid_provider_response", undefined, { validationIssues: ["$: 不是合法 JSON"] }));
+    throw new SafeGatewayFailure(safeFailure("invalid_provider_response", undefined, {
+      validationStage: "json_syntax", validationIssues: ["$: 不是合法 JSON"],
+    }));
   }
   if (request.responseFormat.jsonSchema !== undefined
     && !matchesSchema(value, request.responseFormat.jsonSchema)) {
     throw new SafeGatewayFailure(safeFailure("invalid_provider_response", undefined, {
       validationIssues: schemaMismatchPaths(value, request.responseFormat.jsonSchema),
+      validationStage: "json_schema",
     }));
   }
 }
@@ -863,40 +875,88 @@ export class PiModelGateway implements ModelGateway {
     }])).values()].sort((a, b) => `${a.providerId}/${a.name}`.localeCompare(`${b.providerId}/${b.name}`));
   }
 
-  async generate(request: ModelRequest, options: AiCallOptions = {}): Promise<AiGatewayResult<ModelResponse>> {
+  async generate(request: ModelRequest, options: ModelCallOptions = {}): Promise<AiGatewayResult<ModelResponse>> {
     const startedAt = this.now();
+    const requestId = this.createRequestId();
+    const diagnostics: ModelCallDiagnostics = { requestId, phase: "request_validation", elapsedMs: 0,
+      timeline: [{ phase: "request_validation", elapsedMs: 0 }], runtimeResponseReceived: false };
+    let diagnosticsClosed = false;
+    const report = (phase?: ModelCallPhase) => {
+      if (!options.onCallDiagnostics || diagnosticsClosed) return;
+      diagnostics.elapsedMs = Math.max(0, this.now() - startedAt);
+      if (phase && phase !== diagnostics.phase) {
+        diagnostics.phase = phase;
+        diagnostics.timeline.push({ phase, elapsedMs: diagnostics.elapsedMs });
+      }
+      try {
+        options.onCallDiagnostics({ ...diagnostics,
+          ...(diagnostics.model ? { model: { ...diagnostics.model } } : {}),
+          timeline: diagnostics.timeline.map((entry) => ({ ...entry })) });
+      } catch { /* Diagnostics must not affect the request. */ }
+    };
+    const fail = (error: AiGatewayError) => {
+      diagnostics.outcome = "failed";
+      if (error.code === "timeout") diagnostics.timeoutSource =
+        error.diagnosticCode === "LOCAL_DEADLINE" ? "local_deadline" : "upstream";
+      return aiFailure(error);
+    };
     let scope: CallScope | undefined;
     let providerId: string | undefined;
     try {
+      report();
       validateRequest(request);
+      diagnostics.totalTimeoutMs = request.metadata.budget.timeoutMs;
       scope = new CallScope(request.metadata.budget.timeoutMs, options.signal);
-      const resolved = await scope.race(this.resolveRequest(request, scope.signal));
+      const resolved = await scope.race(this.resolveRequest(request, scope.signal, report));
       providerId = resolved.providerId;
+      Object.assign(diagnostics, {
+        model: { providerId: resolved.providerId, modelId: resolved.modelId },
+        runtimeTimeoutMs: resolved.options.timeoutMs,
+        websocketConnectTimeoutMs: resolved.options.websocketConnectTimeoutMs,
+        providerMaxRetries: resolved.options.maxRetries, maxRetryDelayMs: resolved.options.maxRetryDelayMs,
+        estimatedInputTokens: estimateContextTokens(resolved.context),
+        inputTextCharacters: inputTextCharacters(resolved.context), maxOutputTokens: resolved.options.maxTokens,
+      });
+      report("runtime_call");
       const message = await scope.race(Promise.resolve().then(
         () => this.runtime.completeSimple(resolved.model, resolved.context, resolved.options),
       ));
+      diagnostics.runtimeResponseReceived = true;
+      const response = responseFromPi(requestId, resolved, message, this.now() - startedAt);
+      if (options.onResponseDiagnostics) {
+        try {
+          options.onResponseDiagnostics({ requestId: response.requestId, model: { ...response.model },
+            text: response.text, finishReason: response.finishReason, usage: { ...response.usage },
+            providerStopReason: message.stopReason });
+        } catch {
+          // Observability must not change acceptance, retries, or the provider result.
+        }
+      }
       if (message.stopReason === "error" || message.stopReason === "aborted") {
-        return aiFailure(mapError({
+        return fail(mapError({
           name: message.stopReason === "aborted" ? "AbortError" : "PiProviderError",
           message: message.errorMessage,
         }, providerId, scope));
       }
-      const response = responseFromPi(this.createRequestId(), resolved, message, this.now() - startedAt);
+      report("response_validation");
       validateJsonResponse(request, response.text);
       assertActualBudget(request, response.usage);
+      diagnostics.outcome = "succeeded";
       return aiSuccess(response);
     } catch (error) {
       if (error instanceof SafeGatewayFailure) {
-        return aiFailure({ ...error.gatewayError, ...(providerId ? { providerId } : {}) });
+        return fail({ ...error.gatewayError, ...(providerId ? { providerId } : {}) });
       }
-      if (error instanceof SafeRequestError) return aiFailure(mapError(error, providerId, scope));
+      if (error instanceof SafeRequestError) return fail(mapError(error, providerId, scope));
       try {
         assertAiRequestMetadata(request?.metadata);
       } catch (validationError) {
-        return invalidAiRequest(validationError);
+        return fail(invalidAiRequest(validationError).error);
       }
-      return aiFailure(mapError(error, providerId, scope));
+      return fail(mapError(error, providerId, scope));
     } finally {
+      report();
+      diagnosticsClosed = true;
       scope?.dispose();
     }
   }
@@ -980,9 +1040,13 @@ export class PiModelGateway implements ModelGateway {
     }
   }
 
-  private async resolveRequest(request: ModelRequest, signal: AbortSignal): Promise<ResolvedRequest> {
+  private async resolveRequest(request: ModelRequest, signal: AbortSignal,
+    report?: (phase: ModelCallPhase) => void): Promise<ResolvedRequest> {
+    signal.throwIfAborted();
+    report?.("settings");
     await this.reloadSettings();
     signal.throwIfAborted();
+    report?.("model_resolution");
     const defaultProvider = safeRoutingValue(this.settings.getDefaultProvider(), "default provider");
     const defaultModel = safeRoutingValue(this.settings.getDefaultModel(), "default model");
     const providerId = safeRoutingValue(request.model?.providerId, "model.providerId") ?? defaultProvider;
@@ -993,11 +1057,13 @@ export class PiModelGateway implements ModelGateway {
     }
     let model = this.runtime.getModel(providerId, modelId);
     if (!model && this.runtime.refresh) {
+      report?.("runtime_refresh");
       await this.runtime.refresh({ allowNetwork: false, providers: [providerId], signal });
       signal.throwIfAborted();
       model = this.runtime.getModel(providerId, modelId);
     }
     if (!model) throw new SafeGatewayFailure(safeFailure("not_configured", providerId));
+    report?.("request_preparation");
     if (request.reasoning && !supportedReasoningLevels(model).includes(request.reasoning)) {
       throw new SafeRequestError("invalid_request", `model ${providerId}/${modelId} does not support reasoning level ${request.reasoning}`);
     }

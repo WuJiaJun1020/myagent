@@ -63,7 +63,7 @@ function isAgentView(value: unknown): value is AgentView {
 }
 
 function isInterviewView(value: unknown): value is InterviewView {
-  return value === "dashboard" || value === "jobs" || value === "question-bank"
+  return value === "dashboard" || value === "records" || value === "jobs" || value === "question-bank"
     || value === "algorithms" || value === "session";
 }
 

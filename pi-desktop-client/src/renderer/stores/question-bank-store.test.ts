@@ -111,6 +111,23 @@ describe("question bank store", () => {
     });
   });
 
+  it("refreshes the selected question detail after an external bank import", async () => {
+    vi.spyOn(questionBankGateway, "getSnapshot").mockResolvedValue(SNAPSHOT);
+    vi.spyOn(questionBankGateway, "listQuestions").mockResolvedValue(page([summary("q1")]));
+    const getQuestion = vi.spyOn(questionBankGateway, "getQuestion")
+      .mockResolvedValueOnce(detail("q1"))
+      .mockResolvedValueOnce({ ...detail("q1"), version: 2, referenceAnswer: "来自知识工坊的新版答案" });
+
+    await useQuestionBankStore.getState().initialize();
+    await useQuestionBankStore.getState().initialize(true);
+
+    expect(getQuestion).toHaveBeenCalledTimes(2);
+    expect(useQuestionBankStore.getState().detail).toMatchObject({
+      version: 2,
+      referenceAnswer: "来自知识工坊的新版答案",
+    });
+  });
+
   it("ignores a stale filtered list response", async () => {
     const slow = deferred<QuestionBankListResult>();
     const fast = deferred<QuestionBankListResult>();

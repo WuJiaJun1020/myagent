@@ -10,6 +10,40 @@ import { EdgeCdpSession } from "./edge-cdp-session";
 
 const ALIBABA_URL = "https://campus-talent.alibaba.com/campus/position";
 const BYTEDANCE_URL = "https://jobs.bytedance.com/campus/position";
+// Filter copied from the campus site's 技术/研发 + 日常实习/ByteIntern selection.
+const BYTEDANCE_TECH_CATEGORIES = [
+  "6704215862603155720", "6704215956018694411", "6704215862557018372", "6704215957146962184",
+  "6704215886108035339", "6704215897130666254", "6704219534724696331", "6704216109274368264",
+  "6704215888985327886", "6938376045242353957", "6704215958816295181", "6704215963966900491",
+  "6704216296701036811", "6704217321877014787", "6704216635923761412",
+];
+const BYTEDANCE_INTERNSHIP_PROJECTS = ["7194661644654577981", "7194661126919358757"];
+const BYTEDANCE_PAGE_SIZE = 10;
+
+export function byteDanceInternshipPageUrl(keyword: string, page: number): string {
+  const url = new URL(BYTEDANCE_URL);
+  for (const [key, value] of Object.entries({
+    keywords: keyword,
+    category: BYTEDANCE_TECH_CATEGORIES.join(","),
+    location: "",
+    project: BYTEDANCE_INTERNSHIP_PROJECTS.join(","),
+    type: "",
+    job_hot_flag: "",
+    current: String(page),
+    limit: String(BYTEDANCE_PAGE_SIZE),
+    functionCategory: "",
+    tag: "",
+  })) url.searchParams.set(key, value);
+  return url.toString();
+}
+
+export function byteDanceSearchItems(value: unknown): unknown[] | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const data = (value as { data?: unknown }).data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const items = (data as { job_post_list?: unknown }).job_post_list;
+  return Array.isArray(items) ? items : null;
+}
 
 export type JobCollectorSourceOutput = {
   source: JobSource;
@@ -27,6 +61,8 @@ export interface InterviewJobCollector {
   ): Promise<JobCollectorSourceOutput[]>;
   close(): Promise<void> | void;
 }
+
+export type ByteDanceBrowser = Pick<EdgeCdpSession, "call" | "on" | "dispose" | "terminate">;
 
 function abortError(signal: AbortSignal): unknown {
   return signal.reason ?? new Error("岗位采集已取消");
@@ -217,7 +253,9 @@ function createCollectorWindow(url: string): BrowserWindow {
 
 export class ElectronJobCollector implements InterviewJobCollector {
   private activeWindow: BrowserWindow | null = null;
-  private activeEdgeSession: EdgeCdpSession | null = null;
+  private activeEdgeSession: ByteDanceBrowser | null = null;
+
+  constructor(private readonly launchByteDanceBrowser: () => Promise<ByteDanceBrowser> = () => EdgeCdpSession.launch()) {}
 
   async collect(
     request: JobCollectionRequest,
@@ -228,10 +266,10 @@ export class ElectronJobCollector implements InterviewJobCollector {
     for (const source of request.sources) {
       throwIfAborted(signal);
       try {
-        const jobs = source === "alibaba"
-          ? await this.collectAlibaba(request, onProgress, signal)
+        const output = source === "alibaba"
+          ? { source, jobs: await this.collectAlibaba(request, onProgress, signal) }
           : await this.collectByteDance(request, onProgress, signal);
-        outputs.push({ source, jobs });
+        outputs.push(output);
       } catch (error) {
         if (signal?.aborted) throw abortError(signal);
         const message = error instanceof Error ? error.message : String(error);
@@ -282,9 +320,9 @@ export class ElectronJobCollector implements InterviewJobCollector {
 
     const jobs: CollectedJobPosting[] = [];
     for (const batchId of batchIds) {
-      for (const keyword of request.keywords) {
+      for (const keyword of request.keywords.length > 0 ? request.keywords : [""]) {
         let pageIndex = 1;
-        while (jobs.length < request.limitPerSource) {
+        while (deduplicate(jobs, request.limitPerSource).length < request.limitPerSource) {
           throwIfAborted(signal);
           onProgress({ source: "alibaba", phase: "searching", message: `阿里巴巴：正在采集“${keyword}”第 ${pageIndex} 页`, collected: deduplicate(jobs, request.limitPerSource).length });
           const payload = {
@@ -328,18 +366,63 @@ export class ElectronJobCollector implements InterviewJobCollector {
     request: JobCollectionRequest,
     onProgress: JobCollectorProgressListener,
     signal?: AbortSignal,
-  ): Promise<CollectedJobPosting[]> {
+  ): Promise<JobCollectorSourceOutput> {
     throwIfAborted(signal);
-    onProgress({ source: "bytedance", phase: "opening", message: "正在访问字节跳动校园招聘官网…", collected: 0 });
-    const edge = await EdgeCdpSession.launch();
+    onProgress({ source: "bytedance", phase: "opening", message: "正在访问字节跳动日常实习 / ByteIntern 技术类岗位…", collected: 0 });
+    const edge = await this.launchByteDanceBrowser();
     if (signal?.aborted) {
       await edge.dispose();
       throw abortError(signal);
     }
     this.activeEdgeSession = edge;
     const jobs: CollectedJobPosting[] = [];
+    let partialError: string | undefined;
+    try {
+      for (const keyword of request.keywords.length > 0 ? request.keywords : [""]) {
+        throwIfAborted(signal);
+        if (deduplicate(jobs, request.limitPerSource).length >= request.limitPerSource) break;
+        let stalePages = 0;
+        for (let page = 1; deduplicate(jobs, request.limitPerSource).length < request.limitPerSource; page += 1) {
+          throwIfAborted(signal);
+          const previousCount = deduplicate(jobs, request.limitPerSource).length;
+          onProgress({ source: "bytedance", phase: "searching",
+            message: `字节跳动：${keyword ? `“${keyword}”` : "全部技术实习"}第 ${page} 页（${previousCount}/${request.limitPerSource}）`,
+            collected: previousCount });
+          const items = await this.readByteDancePage(edge, keyword, page, signal);
+          if (items.length === 0) break;
+          for (const item of items) {
+            const job = normalizeByteDanceJob(item);
+            if (job) jobs.push(job);
+          }
+          stalePages = deduplicate(jobs, request.limitPerSource).length === previousCount ? stalePages + 1 : 0;
+          if (items.length < BYTEDANCE_PAGE_SIZE || stalePages >= 2) break;
+          await delay(700, signal);
+        }
+      }
+    } catch (error) {
+      if (signal?.aborted || jobs.length === 0) throw error;
+      partialError = error instanceof Error ? error.message : String(error);
+    } finally {
+      await edge.dispose();
+      if (this.activeEdgeSession === edge) this.activeEdgeSession = null;
+    }
+
+    const result = deduplicate(jobs, request.limitPerSource);
+    if (result.length === 0) throw new Error("未捕获到字节跳动岗位数据，官网可能已改版或触发了验证。");
+    onProgress({ source: "bytedance", phase: "completed",
+      message: partialError ? `字节跳动后续页面中断，保留已获取的 ${result.length} 个岗位` : `字节跳动采集完成，获取 ${result.length} 个岗位`,
+      collected: result.length });
+    return { source: "bytedance", jobs: result, ...(partialError ? { error: partialError } : {}) };
+  }
+
+  private async readByteDancePage(
+    edge: ByteDanceBrowser,
+    keyword: string,
+    page: number,
+    signal?: AbortSignal,
+  ): Promise<unknown[]> {
     const matchingRequests = new Set<string>();
-    const pending = new Set<Promise<void>>();
+    let items: unknown[] | null = null;
     const stopResponseListener = edge.on("Network.responseReceived", (params) => {
       const response = params.response as { url?: string } | undefined;
       if (response?.url?.includes("/api/v1/search/job/posts")) matchingRequests.add(String(params.requestId));
@@ -347,79 +430,27 @@ export class ElectronJobCollector implements InterviewJobCollector {
     const stopFinishedListener = edge.on("Network.loadingFinished", (params) => {
       const requestId = String(params.requestId);
       if (!matchingRequests.delete(requestId)) return;
-      const task = edge.call<{ body?: string; base64Encoded?: boolean }>("Network.getResponseBody", { requestId })
+      void edge.call<{ body?: string; base64Encoded?: boolean }>("Network.getResponseBody", { requestId })
         .then((response) => {
-          if (!response.body) return;
+          if (!response.body || items !== null) return;
           const text = response.base64Encoded ? Buffer.from(response.body, "base64").toString("utf8") : response.body;
-          const data = JSON.parse(text) as { data?: { job_post_list?: unknown[] } };
-          for (const item of data?.data?.job_post_list ?? []) {
-            const job = normalizeByteDanceJob(item);
-            if (job) jobs.push(job);
-          }
+          items = byteDanceSearchItems(JSON.parse(text));
         })
-        .catch(() => undefined)
-        .finally(() => pending.delete(task));
-      pending.add(task);
+        .catch(() => undefined);
     });
-
     try {
-      const loaded = edge.waitFor("Page.loadEventFired", 60_000);
-      const navigation = await edge.call<{ errorText?: string }>("Page.navigate", { url: BYTEDANCE_URL });
+      const navigation = await edge.call<{ errorText?: string }>("Page.navigate", {
+        url: byteDanceInternshipPageUrl(keyword, page),
+      });
       if (navigation.errorText) throw new Error(`字节招聘页加载失败：${navigation.errorText}`);
-      await loaded;
-      onProgress({ source: "bytedance", phase: "opening", message: "字节招聘页面已加载，正在等待岗位数据…", collected: 0 });
-      await delay(3_500, signal);
-
-      for (const keyword of request.keywords) {
-        throwIfAborted(signal);
-        if (deduplicate(jobs, request.limitPerSource).length >= request.limitPerSource) break;
-        onProgress({ source: "bytedance", phase: "searching", message: `字节跳动：正在采集“${keyword}”`, collected: deduplicate(jobs, request.limitPerSource).length });
-        const foundInput = await edge.evaluate<boolean>(`(() => {
-          const selectors = ['input[placeholder*="输入城市或职位"]', 'input[placeholder*="职位"]', 'input[placeholder*="搜索"]', 'input'];
-          const input = selectors.map((selector) => document.querySelector(selector)).find(Boolean);
-          if (!(input instanceof HTMLInputElement)) return false;
-          input.focus();
-          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-          setter?.call(input, ${JSON.stringify(keyword)});
-          input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: ${JSON.stringify(keyword)} }));
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
-          input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
-          return true;
-        })()`);
-        if (!foundInput) throw new Error("未找到字节跳动官网的岗位搜索框，页面结构可能已改版。");
-        await edge.call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
-        await edge.call("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
-        await delay(3_500, signal);
-
-        for (let page = 0; page < 3 && deduplicate(jobs, request.limitPerSource).length < request.limitPerSource; page += 1) {
-          const clicked = await edge.evaluate<boolean>(`(() => {
-            const buttons = [...document.querySelectorAll('button')];
-            const button = buttons.find((item) => {
-              const text = (item.textContent || '').trim();
-              const label = item.getAttribute('aria-label') || '';
-              return !item.disabled && (text.includes('下一页') || text === '>' || label.toLowerCase() === 'next');
-            }) || document.querySelector('[class*="pagination"] button:last-child');
-            if (!(button instanceof HTMLElement) || button.matches(':disabled')) return false;
-            button.click();
-            return true;
-          })()`);
-          if (!clicked) break;
-          await delay(2_500, signal);
-        }
-      }
-      if (pending.size > 0) await Promise.allSettled([...pending]);
+      const deadline = Date.now() + 25_000;
+      while (items === null && Date.now() < deadline) await delay(250, signal);
+      if (items === null) throw new Error(`字节招聘第 ${page} 页未返回岗位数据，官网可能已改版或触发了验证。`);
+      return items;
     } finally {
       stopResponseListener();
       stopFinishedListener();
-      await edge.dispose();
-      if (this.activeEdgeSession === edge) this.activeEdgeSession = null;
     }
-
-    const result = deduplicate(jobs, request.limitPerSource);
-    if (result.length === 0) throw new Error("未捕获到字节跳动岗位数据，官网可能已改版或触发了验证。");
-    onProgress({ source: "bytedance", phase: "completed", message: `字节跳动采集完成，获取 ${result.length} 个岗位`, collected: result.length });
-    return result;
   }
 
   private destroyActiveWindow(): void {

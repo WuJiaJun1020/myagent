@@ -84,6 +84,40 @@ export type ModelStreamEvent =
   | { type: "completed"; response: ModelResponse }
   | { type: "failed"; error: AiGatewayError };
 
+export type ModelResponseDiagnostics = Pick<ModelResponse, "requestId" | "model" | "text" | "finishReason" | "usage"> & {
+  providerStopReason: string;
+};
+
+export type ModelCallOptions = AiCallOptions & {
+  /** Local lifecycle metadata only. No credentials, URLs, prompts or raw errors. */
+  onCallDiagnostics?: (diagnostics: ModelCallDiagnostics) => void;
+  /** Opt-in local diagnostics, including responses rejected by validation. Never add this text to generic errors. */
+  onResponseDiagnostics?: (response: ModelResponseDiagnostics) => void;
+};
+
+export type ModelCallPhase = "request_validation" | "settings" | "model_resolution" | "runtime_refresh"
+  | "request_preparation" | "runtime_call" | "response_validation";
+
+export type ModelCallDiagnostics = {
+  requestId: string;
+  model?: AiResolvedModel;
+  phase: ModelCallPhase;
+  elapsedMs: number;
+  timeline: Array<{ phase: ModelCallPhase; elapsedMs: number }>;
+  outcome?: "succeeded" | "failed";
+  timeoutSource?: "local_deadline" | "upstream";
+  /** Whether completeSimple returned a message (including a provider error message). */
+  runtimeResponseReceived: boolean;
+  totalTimeoutMs?: number;
+  runtimeTimeoutMs?: number;
+  websocketConnectTimeoutMs?: number;
+  providerMaxRetries?: number;
+  maxRetryDelayMs?: number;
+  estimatedInputTokens?: number;
+  inputTextCharacters?: number;
+  maxOutputTokens?: number;
+};
+
 /**
  * Provider-neutral text generation port shared by product modules.
  *
@@ -96,7 +130,7 @@ export interface ModelGateway {
   /** Inspect locally available routes without sending model input. */
   getAvailableModels?(): Promise<AiAvailableModel[]>;
   /** Expected request/provider/cancellation failures are returned, not thrown. */
-  generate(request: ModelRequest, options?: AiCallOptions): Promise<AiGatewayResult<ModelResponse>>;
+  generate(request: ModelRequest, options?: ModelCallOptions): Promise<AiGatewayResult<ModelResponse>>;
   /** Expected failures terminate the iterator with one `failed` event. */
   stream(request: ModelRequest, options?: AiCallOptions): AsyncIterable<ModelStreamEvent>;
 }

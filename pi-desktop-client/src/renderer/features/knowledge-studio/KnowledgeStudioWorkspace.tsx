@@ -38,6 +38,8 @@ import {
 } from "../../../shared/contracts/knowledge-studio";
 import { knowledgeStudioGateway } from "../../services/knowledge-studio-gateway";
 import { useKnowledgeStudioStore } from "../../stores/knowledge-studio-store";
+import { useQuestionBankStore } from "../../stores/question-bank-store";
+import { useUiStore } from "../../stores/ui-store";
 import { KnowledgeGenerationProcess } from "./KnowledgeGenerationProcess";
 import { readSavedGenerationModel, readSavedGenerationSources, readSavedGenerationThinkingLevel, reconcileGenerationSources, saveGenerationModel, saveGenerationSources, saveGenerationThinkingLevel } from "./generation-preferences";
 
@@ -561,12 +563,26 @@ function ReviewPanel() {
   const cancelBatch = useKnowledgeStudioStore((state) => state.cancelBatch);
   const deleteBatch = useKnowledgeStudioStore((state) => state.deleteBatch);
   const publishBatch = useKnowledgeStudioStore((state) => state.publishBatch);
+  const importSupportedToInterview = useKnowledgeStudioStore((state) => state.importSupportedToInterview);
   const revealArtifact = useKnowledgeStudioStore((state) => state.revealArtifact);
+  const setActiveModule = useUiStore((state) => state.setActiveModule);
+  const setInterviewView = useUiStore((state) => state.setInterviewView);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [view, setView] = useState<"review" | "process">("review");
+  const [importedToInterview, setImportedToInterview] = useState(false);
   const candidate = batch?.candidates.find((item) => item.id === selectedCandidateId) ?? batch?.candidates[0];
-  useEffect(() => { setSelectedCandidateId(batch?.candidates[0]?.id ?? null); setView(batch && (batch.status === "queued" || batch.status === "running") ? "process" : "review"); }, [batch?.id]);
+  useEffect(() => { setSelectedCandidateId(batch?.candidates[0]?.id ?? null); setImportedToInterview(false); setView(batch && (batch.status === "queued" || batch.status === "running") ? "process" : "review"); }, [batch?.id]);
   const canPublish = batch && batch.candidates.length > 0 && batch.candidates.every((item) => item.humanStatus !== "pending") && batch.candidates.some((item) => item.humanStatus === "approved");
+  const supportedCount = batch?.candidates.filter((item) => item.validationStatus === "supported" && item.humanStatus !== "rejected" && item.evidence.length > 0).length ?? 0;
+  const importSupported = async () => {
+    if (!batch) return;
+    const result = await importSupportedToInterview(batch.id);
+    if (result) {
+      await useQuestionBankStore.getState().initialize(true);
+      setImportedToInterview(true);
+    }
+  };
+  const openInterviewBank = () => { setInterviewView("question-bank"); setActiveModule("interview"); };
   const deleteSelectedBatch = () => {
     if (!batch) return;
     const publishedWarning = batch.artifact || batch.status === "published"
@@ -584,7 +600,21 @@ function ReviewPanel() {
         {snapshot?.batches.length === 0 && <div className="knowledge-empty"><Sparkles size={28} /><strong>还没有生成任务</strong></div>}
       </aside>
       <header className="knowledge-review-header knowledge-review-topbar">
-        {batch ? <><div className="knowledge-review-title"><span className={`knowledge-batch-status ${batch.status}`}>{statusLabel(batch.status)}</span><h2>{batch.title}</h2><p>{batch.targetRole} · 计划 {batch.requestedQuestionCount} 题 · {batch.sourceIds.length} 份资料</p><p className="knowledge-review-model-info"><Cpu size={13} />{generationModelLabel(batch)}<span>·</span>{generationThinkingLabel(batch)}</p></div><div className="knowledge-actions"><button type="button" onClick={() => setView("process")}><Sparkles size={15} />查看生成过程</button>{(batch.status === "queued" || batch.status === "running") && <button type="button" onClick={() => void cancelBatch(batch.id)}>取消生成</button>}{(batch.status === "failed" || batch.status === "cancelled") && <button type="button" onClick={() => { void retryBatch(batch.id); setView("process"); }}><RefreshCw size={15} />重新生成</button>}{batch.artifact && <button type="button" onClick={() => void revealArtifact(batch.artifact!.path)}><FolderOpen size={15} />查看题包</button>}<button className="danger-ghost" type="button" disabled={busy || batch.status === "queued" || batch.status === "running"} title={batch.status === "queued" || batch.status === "running" ? "请先取消运行中的任务" : "删除任务及题包"} onClick={deleteSelectedBatch}><Trash2 size={15} />删除</button><button className="primary" type="button" disabled={!canPublish || busy} onClick={() => void publishBatch(batch.id)}><PackageCheck size={15} />发布题包</button></div></> : <div><span className="eyebrow">GENERATION RUNS</span><h2>选择生成任务</h2></div>}
+        {batch ? <>
+          <div className="knowledge-review-title"><span className={`knowledge-batch-status ${batch.status}`}>{statusLabel(batch.status)}</span><h2>{batch.title}</h2><p>{batch.targetRole} · 计划 {batch.requestedQuestionCount} 题 · {batch.sourceIds.length} 份资料</p><p className="knowledge-review-model-info"><Cpu size={13} />{generationModelLabel(batch)}<span>·</span>{generationThinkingLabel(batch)}</p></div>
+          <div className="knowledge-actions">
+            <button type="button" onClick={() => setView("process")}><Sparkles size={15} />查看生成过程</button>
+            {(batch.status === "queued" || batch.status === "running") && <button type="button" onClick={() => void cancelBatch(batch.id)}>取消生成</button>}
+            {(batch.status === "failed" || batch.status === "cancelled") && <button type="button" onClick={() => { void retryBatch(batch.id); setView("process"); }}><RefreshCw size={15} />重新生成</button>}
+            {batch.artifact && <button type="button" onClick={() => void revealArtifact(batch.artifact!.path)}><FolderOpen size={15} />查看题包</button>}
+            <button type="button" disabled={busy || supportedCount === 0 || (batch.status !== "review" && batch.status !== "published")}
+              title="仅导入证据支持、未被人工驳回且原文引文可核对的题目；用于联调，不要求先发布 JSON 题包"
+              onClick={() => void importSupported()}><PackageCheck size={15} />导入面试题库（{supportedCount}）</button>
+            {importedToInterview && <button type="button" onClick={openInterviewBank}>查看面试题库<ChevronRight size={15} /></button>}
+            <button className="danger-ghost" type="button" disabled={busy || batch.status === "queued" || batch.status === "running"} title={batch.status === "queued" || batch.status === "running" ? "请先取消运行中的任务" : "删除任务及题包"} onClick={deleteSelectedBatch}><Trash2 size={15} />删除</button>
+            <button className="primary" type="button" disabled={!canPublish || busy} onClick={() => void publishBatch(batch.id)}><PackageCheck size={15} />发布题包</button>
+          </div>
+        </> : <div><span className="eyebrow">GENERATION RUNS</span><h2>选择生成任务</h2></div>}
       </header>
       <section className="knowledge-review-candidates-column">
         {batch ? <>

@@ -84,6 +84,9 @@ export type QuestionBankQuestionSummary = {
 export type QuestionBankQuestionDetail = QuestionBankQuestionSummary & {
   intent: string;
   answerOutline: string[];
+  /** A complete, spoken-style answer when the source provides one. */
+  referenceAnswer?: string;
+  evidence?: Array<{ sourceId: string; sourceTitle: string; segmentId: string; quote: string }>;
   rubric: QuestionBankRubricItem[];
   commonMistakes: string[];
   followUps: QuestionBankFollowUp[];

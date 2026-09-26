@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
+import type { InterviewCallTrace } from "../../shared/contracts/interview";
 import { InterviewDatabase, type QuestionBankPackageInput } from "./interview-database";
 import { loadQuestionBankCatalog } from "./question-bank-catalog";
 
@@ -17,6 +18,50 @@ async function createDatabase(): Promise<{ directory: string; path: string; data
   cleanup.push(directory);
   const path = join(directory, "interview.db");
   return { directory, path, database: new InterviewDatabase(path) };
+}
+
+// Seed the retired plan format directly so migration tests do not depend on removed runtime APIs.
+function seedLegacyPlan(path: string, database: InterviewDatabase, input: {
+  interviewId: string;
+  operationId: string;
+  promptVersion: string;
+  competencies: string[];
+  jobDescriptionHash: string;
+  resumeHash: string;
+  questions: Array<{ ordinal: number; competency: string; kind: string; difficulty: string; prompt: string; rubric: string[] }>;
+  invocation: { providerId: string; modelId: string; requestHash: string; responseHash: string;
+    inputTokens?: number; outputTokens?: number; totalTokens?: number; durationMs: number };
+}) {
+  const legacy = new DatabaseSync(path);
+  const planId = input.interviewId + "-legacy-plan";
+  const callId = input.interviewId + "-legacy-call";
+  const now = new Date().toISOString();
+  try {
+    legacy.exec("PRAGMA foreign_keys = ON; BEGIN IMMEDIATE");
+    legacy.prepare(`INSERT INTO model_invocations
+      (id, interview_id, operation_id, purpose, status, prompt_version, provider_id, model_id, request_hash, response_hash, started_at, finished_at)
+      VALUES (?, ?, ?, 'prepare_questions', 'succeeded', ?, ?, ?, ?, ?, ?, ?)`)
+      .run(callId, input.interviewId, input.operationId, input.promptVersion, input.invocation.providerId,
+        input.invocation.modelId, input.invocation.requestHash, input.invocation.responseHash, now, now);
+    legacy.prepare(`INSERT INTO interview_plans
+      (id, interview_id, version, operation_id, prompt_version, model_invocation_id, question_count, competencies_json, job_description_hash, resume_hash, created_at)
+      VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(planId, input.interviewId, input.operationId, input.promptVersion, callId, input.questions.length,
+        JSON.stringify(input.competencies), input.jobDescriptionHash, input.resumeHash, now);
+    const insertQuestion = legacy.prepare(`INSERT INTO interview_questions
+      (id, interview_id, plan_id, ordinal, competency, kind, difficulty, prompt, rubric_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const question of input.questions) {
+      insertQuestion.run(planId + "-" + question.ordinal, input.interviewId, planId, question.ordinal,
+        question.competency, question.kind, question.difficulty, question.prompt, JSON.stringify(question.rubric), now);
+    }
+    legacy.prepare("UPDATE interviews SET status = 'ready', active_plan_id = ?, active_question_id = NULL WHERE id = ?")
+      .run(planId, input.interviewId);
+    legacy.exec("COMMIT");
+  } finally {
+    legacy.close();
+  }
+  return database.getInterviewSession(input.interviewId)!;
 }
 
 function migrationQuestionPackage(
@@ -241,7 +286,10 @@ function downgradeQuestionBankToLegacyV4(path: string): void {
         DROP TABLE question_practice_attempts;
         DROP TABLE question_practice_items;
         DROP TABLE question_practice_sessions;
-        DELETE FROM schema_migrations WHERE version IN (5, 6, 7);
+        DROP TABLE interview_algorithm_attempts;
+        DROP TABLE interview_algorithm_exams;
+        DROP TABLE interview_score_reports;
+        DELETE FROM schema_migrations WHERE version IN (5, 6, 7, 8, 9, 10, 11);
       `);
       database.exec("COMMIT");
     } catch (error) {
@@ -255,6 +303,27 @@ function downgradeQuestionBankToLegacyV4(path: string): void {
 }
 
 describe("InterviewDatabase", () => {
+  it("upgrades an existing v10 interview database with its transcript intact", async () => {
+    const { path, database } = await createDatabase();
+    const created = database.createInterview({ candidateName: "张三", positionTitle: "Agent 工程师",
+      jobDescription: "负责 Agent 开发", resumeText: "维护过智能助手", questionCount: 1, competencies: [] });
+    database.appendInterviewExchange({ interviewId: created.id, operationId: "v10-chat",
+      interviewerText: "请介绍智能助手。", candidateText: "我维护过检索链路。" });
+    database.finishInterview(created.id);
+    database.close();
+
+    const legacy = new DatabaseSync(path);
+    legacy.exec("DROP TABLE interview_score_reports; DELETE FROM schema_migrations WHERE version = 11;");
+    legacy.close();
+
+    const upgraded = new InterviewDatabase(path);
+    expect(upgraded.getSchemaVersion()).toBe(11);
+    expect(upgraded.getInterviewSession(created.id)?.turns.map((turn) => turn.content)).toEqual([
+      "我维护过检索链路。", "请介绍智能助手。",
+    ]);
+    expect(upgraded.getInterviewSession(created.id)?.scoreReports).toEqual([]);
+    upgraded.close();
+  });
   it("upgrades an existing v2 database without losing interviews or turns", async () => {
     const directory = await mkdtemp(join(tmpdir(), "pi-interview-database-v2-"));
     cleanup.push(directory);
@@ -331,25 +400,32 @@ describe("InterviewDatabase", () => {
       ) VALUES (
         'legacy-turn', 'legacy-interview', 0, 'system', '旧版初始化记录', NULL, NULL, '2026-09-19T00:00:00.000Z'
       );
+      INSERT INTO job_collection_runs (
+        id, status, sources_json, keywords_json, limit_per_source, results_json, started_at, finished_at
+      ) VALUES (
+        'legacy-collection', 'completed', '["bytedance"]', '["AI"]', 100, '[]',
+        '2026-09-19T00:00:00.000Z', '2026-09-19T00:01:00.000Z'
+      );
     `);
     legacy.close();
 
     const upgraded = new InterviewDatabase(path);
-    expect(upgraded.getSchemaVersion()).toBe(7);
+    expect(upgraded.getSchemaVersion()).toBe(11);
     expect(upgraded.getInterviewSession("legacy-interview")).toMatchObject({
       interview: {
         id: "legacy-interview",
         title: "旧版面试",
         status: "draft",
         questionCount: 2,
+        directorEnabled: false,
       },
       plan: null,
       currentQuestion: null,
       answeredCount: 0,
       preparationError: null,
     });
-    expect(upgraded.claimInterviewPreparation("legacy-interview", "legacy-prepare", "questions-v1"))
-      .toBe("claimed");
+    expect(upgraded.startJobCollection({ sources: ["bytedance"], keywords: [], limitPerSource: 500 }))
+      .toMatchObject({ limitPerSource: 500 });
     upgraded.close();
 
     const inspected = new DatabaseSync(path);
@@ -364,6 +440,8 @@ describe("InterviewDatabase", () => {
       question_id: null,
       operation_id: null,
     });
+    expect(inspected.prepare("SELECT limit_per_source FROM job_collection_runs WHERE id = 'legacy-collection'").get())
+      .toEqual({ limit_per_source: 100 });
     inspected.close();
   });
 
@@ -377,8 +455,7 @@ describe("InterviewDatabase", () => {
       questionCount: 1,
       competencies: ["技术基础"],
     });
-    database.claimInterviewPreparation(interview.id, "migration-prepare", "questions-v1");
-    const prepared = database.completeInterviewPreparation({
+    const prepared = seedLegacyPlan(path, database, {
       interviewId: interview.id,
       operationId: "migration-prepare",
       promptVersion: "questions-v1",
@@ -428,14 +505,17 @@ describe("InterviewDatabase", () => {
       DROP TABLE question_practice_attempts;
       DROP TABLE question_practice_items;
       DROP TABLE question_practice_sessions;
-      DELETE FROM schema_migrations WHERE version IN (4, 5, 6, 7);
+      DROP TABLE interview_algorithm_attempts;
+      DROP TABLE interview_algorithm_exams;
+      DROP TABLE interview_score_reports;
+      DELETE FROM schema_migrations WHERE version IN (4, 5, 6, 7, 8, 9, 10, 11);
     `);
     expect((legacy.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as { version: number }).version)
       .toBe(3);
     legacy.close();
 
     const upgraded = new InterviewDatabase(path);
-    expect(upgraded.getSchemaVersion()).toBe(7);
+    expect(upgraded.getSchemaVersion()).toBe(11);
     expect(upgraded.getInterviewSession(interview.id)).toMatchObject({
       plan: { id: prepared.plan!.id, version: 1, questionCount: 1 },
       currentQuestion: { id: question.id, ordinal: 0, prompt: "解释 Python GIL。" },
@@ -454,8 +534,7 @@ describe("InterviewDatabase", () => {
       questionCount: 1,
       competencies: ["技术基础"],
     });
-    database.claimInterviewPreparation(interview.id, "legacy-v4-prepare", "questions-v1");
-    const prepared = database.completeInterviewPreparation({
+    const prepared = seedLegacyPlan(path, database, {
       interviewId: interview.id,
       operationId: "legacy-v4-prepare",
       promptVersion: "questions-v1",
@@ -504,7 +583,7 @@ describe("InterviewDatabase", () => {
     legacy.close();
 
     const upgraded = new InterviewDatabase(path);
-    expect(upgraded.getSchemaVersion()).toBe(7);
+    expect(upgraded.getSchemaVersion()).toBe(11);
     expect(upgraded.getQuestionBankSnapshot()).toMatchObject({ total: 0, published: 0, favorites: 0 });
     expect(upgraded.getInterview(interview.id)).toMatchObject({
       id: interview.id,
@@ -528,7 +607,7 @@ describe("InterviewDatabase", () => {
     upgraded.close();
 
     const reopened = new InterviewDatabase(path);
-    expect(reopened.getSchemaVersion()).toBe(7);
+    expect(reopened.getSchemaVersion()).toBe(11);
     expect(reopened.getQuestionBankSnapshot()).toMatchObject({ total: 1, published: 1 });
     expect(reopened.getInterviewSession(interview.id)?.plan?.id).toBe(prepared.plan!.id);
     reopened.close();
@@ -644,7 +723,7 @@ describe("InterviewDatabase", () => {
 
     const retried = new InterviewDatabase(path);
     try {
-      expect(retried.getSchemaVersion()).toBe(7);
+    expect(retried.getSchemaVersion()).toBe(11);
       expect(retried.getQuestionBankSnapshot()).toMatchObject({ total: 0, published: 0, favorites: 0 });
       expect(retried.getInterview(interview.id)).toMatchObject({
         id: interview.id,
@@ -702,14 +781,17 @@ describe("InterviewDatabase", () => {
       DROP TABLE question_practice_attempts;
       DROP TABLE question_practice_items;
       DROP TABLE question_practice_sessions;
-      DELETE FROM schema_migrations WHERE version IN (5, 6, 7);
+      DROP TABLE interview_algorithm_attempts;
+      DROP TABLE interview_algorithm_exams;
+      DROP TABLE interview_score_reports;
+      DELETE FROM schema_migrations WHERE version IN (5, 6, 7, 8, 9, 10, 11);
     `);
     expect((completeV4.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as { version: number }).version)
       .toBe(4);
     completeV4.close();
 
     const upgraded = new InterviewDatabase(path);
-    expect(upgraded.getSchemaVersion()).toBe(7);
+    expect(upgraded.getSchemaVersion()).toBe(11);
     expect(upgraded.getQuestionBankItem(question!.id)).toMatchObject({
       id: question!.id,
       prompt: "完整 v4 中必须保留的题目。",
@@ -748,7 +830,7 @@ describe("InterviewDatabase", () => {
       INSERT INTO schema_migrations (version, applied_at) VALUES (99, '2026-09-21T00:00:00.000Z');
     `);
     future.close();
-    expect(() => new InterviewDatabase(path)).toThrow("高于客户端支持的版本 7");
+    expect(() => new InterviewDatabase(path)).toThrow("高于客户端支持的版本 11");
   });
 
   it("persists interview business memory independently from Pi sessions", async () => {
@@ -759,21 +841,24 @@ describe("InterviewDatabase", () => {
       jobDescription: "负责 Node.js 服务和数据库设计。",
       resumeText: "三年 TypeScript 和 PostgreSQL 开发经验。",
       questionCount: 5,
+      directorEnabled: true,
       competencies: ["技术基础", "项目经验"],
     });
 
     expect(created.title).toBe("后端开发工程师 · 张三");
     expect(created.status).toBe("draft");
+    expect(created.directorEnabled).toBe(true);
     expect(created.documents.map((document) => document.kind)).toEqual(["job_description", "resume"]);
     expect(created.documents[0]?.contentHash).toHaveLength(64);
     database.close();
 
     const reopened = new InterviewDatabase(path);
-    expect(reopened.getSchemaVersion()).toBe(7);
+    expect(reopened.getSchemaVersion()).toBe(11);
     expect(reopened.getInterview(created.id)).toMatchObject({
       id: created.id,
       candidateName: "张三",
       positionTitle: "后端开发工程师",
+      directorEnabled: true,
       competencies: ["技术基础", "项目经验"],
     });
     expect(reopened.getSnapshot().counts.draft).toBe(1);
@@ -805,7 +890,7 @@ describe("InterviewDatabase", () => {
     database.close();
   });
 
-  it("persists a prepared question plan idempotently and recovers an interrupted re-prepare", async () => {
+  it("reads a historical question plan and recovers its interrupted preparation", async () => {
     const { path, database } = await createDatabase();
     const created = database.createInterview({
       candidateName: "候选人 A",
@@ -816,9 +901,7 @@ describe("InterviewDatabase", () => {
       competencies: ["技术基础", "项目经验"],
     });
 
-    expect(database.claimInterviewPreparation(created.id, "prepare-1", "questions-v1")).toBe("claimed");
-    expect(database.claimInterviewPreparation(created.id, "prepare-1", "questions-v1")).toBe("already_running");
-    const ready = database.completeInterviewPreparation({
+    const ready = seedLegacyPlan(path, database, {
       interviewId: created.id,
       operationId: "prepare-1",
       promptVersion: "questions-v1",
@@ -849,9 +932,13 @@ describe("InterviewDatabase", () => {
       answeredCount: 0,
       preparationError: null,
     });
-    expect(database.claimInterviewPreparation(created.id, "prepare-1", "questions-v1")).toBe("already_completed");
-    expect(database.claimInterviewPreparation(created.id, "prepare-2", "questions-v1")).toBe("claimed");
     database.close();
+
+    const legacy = new DatabaseSync(path);
+    legacy.prepare("UPDATE interviews SET status = 'preparing', active_operation_id = 'interrupted-operation' WHERE id = ?").run(created.id);
+    legacy.prepare("INSERT INTO model_invocations (id, interview_id, operation_id, purpose, status, prompt_version, started_at) VALUES ('interrupted-call', ?, 'interrupted-operation', 'prepare_questions', 'running', 'questions-v1', ?)")
+      .run(created.id, new Date().toISOString());
+    legacy.close();
 
     const reopened = new InterviewDatabase(path);
     expect(reopened.getInterviewSession(created.id)).toMatchObject({
@@ -859,6 +946,127 @@ describe("InterviewDatabase", () => {
       plan: { version: 1, questionCount: 3 },
       preparationError: { code: "interrupted" },
     });
+    reopened.close();
+  });
+
+  it("starts and persists a resume-only draft conversation without a question plan", async () => {
+    const { path, database } = await createDatabase();
+    const created = database.createInterview({ candidateName: "张三", positionTitle: "后端工程师",
+      jobDescription: "", resumeText: "负责订单系统", questionCount: 5, competencies: ["项目经验"] });
+    expect(created.documents.map((document) => document.kind)).toEqual(["resume"]);
+    const started = database.appendInterviewExchange({ interviewId: created.id, operationId: "resume-chat-start",
+      interviewerText: "请介绍订单系统。" });
+    expect(started.interview.status).toBe("interviewing");
+    expect(started.plan).toBeNull();
+    expect(started.turns.map((turn) => turn.content)).toEqual(["请介绍订单系统。"]);
+    database.close();
+    const reopened = new InterviewDatabase(path);
+    expect(reopened.getInterviewSession(created.id)?.turns).toHaveLength(1);
+    reopened.close();
+  });
+
+  it("manually ends an interview, keeps its transcript, and rejects further dialogue", async () => {
+    const { path, database } = await createDatabase();
+    const created = database.createInterview({ candidateName: "张三", positionTitle: "Agent 工程师",
+      jobDescription: "", resumeText: "做过 Agent 项目", questionCount: 5, competencies: [] });
+    database.appendInterviewExchange({ interviewId: created.id, operationId: "start",
+      interviewerText: "请介绍这个项目。" });
+    const ended = database.finishInterview(created.id);
+    expect(ended.interview.status).toBe("completed");
+    expect(ended.turns.map((turn) => turn.content)).toEqual(["请介绍这个项目。"]);
+    expect(database.getSnapshot().counts).toMatchObject({ interviewing: 0, completed: 1 });
+    expect(() => database.appendInterviewExchange({ interviewId: created.id, operationId: "later",
+      candidateText: "继续", interviewerText: "不应写入" })).toThrow("不能进行对话");
+    expect(() => database.finishInterview(created.id)).toThrow("已结束");
+    database.close();
+    const reopened = new InterviewDatabase(path);
+    expect(reopened.getInterviewSession(created.id)?.interview.status).toBe("completed");
+    expect(reopened.getInterviewSession(created.id)?.turns).toHaveLength(1);
+    reopened.close();
+  });
+
+  it("deletes an interview with its resume, turns and debug data", async () => {
+    const { path, database } = await createDatabase();
+    const created = database.createInterview({ candidateName: "测试候选人", positionTitle: "Agent 工程师",
+      jobDescription: "", resumeText: "Agent 项目经历", questionCount: 3, competencies: [] });
+    database.appendInterviewExchange({ interviewId: created.id, operationId: "chat-1",
+      interviewerText: "请介绍项目。" });
+    expect(database.deleteInterview(created.id).interviews).toEqual([]);
+    expect(database.getInterviewSession(created.id)).toBeNull();
+    expect(() => database.deleteInterview(created.id)).toThrow("面试不存在或已删除");
+    database.close();
+
+    const raw = new DatabaseSync(path);
+    expect((raw.prepare("SELECT COUNT(*) AS n FROM interview_documents WHERE interview_id = ?")
+      .get(created.id) as { n: number }).n).toBe(0);
+    expect((raw.prepare("SELECT COUNT(*) AS n FROM interview_turns WHERE interview_id = ?")
+      .get(created.id) as { n: number }).n).toBe(0);
+    raw.close();
+  });
+
+  it("persists successful call details and failed attempts in transcript order", async () => {
+    const { path, database } = await createDatabase();
+    const created = database.createInterview({ candidateName: "测试候选人", positionTitle: "Agent 应用开发工程师",
+      jobDescription: "", resumeText: "开发过 Agent 应用", questionCount: 3, competencies: [] });
+    const trace: InterviewCallTrace = {
+      operationId: "call-start", status: "succeeded", startedAt: "2026-09-23T00:00:00.000Z",
+      finishedAt: "2026-09-23T00:00:01.000Z", requestedModel: { providerId: "openai-codex", modelId: "gpt-6-luna" },
+      reasoning: "medium", timeoutMs: 180000, maxInputTokens: 96000,
+      messages: [{ kind: "system_prompt", role: "system", content: "系统提示词全文" },
+        { kind: "resume", role: "user", content: "简历全文" },
+        { kind: "instruction", role: "user", content: "请开始面试" }],
+      attempts: [{ providerId: "openai-codex", modelId: "gpt-6-luna", startedAt: "2026-09-23T00:00:00.000Z",
+        finishedAt: "2026-09-23T00:00:01.000Z", requestId: "request-1", usage: { totalTokens: 42 } }],
+      outputText: "请介绍你的 Agent 项目。",
+    };
+    database.appendInterviewExchange({ interviewId: created.id, operationId: trace.operationId,
+      interviewerText: "请介绍你的 Agent 项目。", trace });
+    database.appendInterviewDebugFailure(created.id, { ...trace, operationId: "call-failed", status: "failed",
+      outputText: undefined, error: { code: "timeout", message: "调用超时" },
+      attempts: [{ providerId: "openai-codex", modelId: "gpt-6-luna", startedAt: trace.startedAt,
+        finishedAt: trace.finishedAt, error: { code: "timeout", message: "调用超时" } }] });
+    database.close();
+
+    const reopened = new InterviewDatabase(path);
+    const session = reopened.getInterviewSession(created.id);
+    expect(session?.turns[0].trace?.messages.map((message) => message.kind))
+      .toEqual(["system_prompt", "resume", "instruction"]);
+    expect(session?.turns[0].trace?.attempts[0]).toMatchObject({ requestId: "request-1", usage: { totalTokens: 42 } });
+    expect(session?.debugEvents).toMatchObject([{ ordinal: 1, trace: { operationId: "call-failed",
+      status: "failed", error: { code: "timeout" } } }]);
+    expect(session?.answeredCount).toBe(0);
+    reopened.close();
+  });
+
+  it("persists formal interview turns and web sources across reopening", async () => {
+    const { path, database } = await createDatabase();
+    const created = database.createInterview({ candidateName: "李四", positionTitle: "AI 工程师",
+      jobDescription: "负责 Agent 系统", resumeText: "做过 LangGraph 项目", questionCount: 1,
+      competencies: ["项目经验"] });
+    seedLegacyPlan(path, database, { interviewId: created.id, operationId: "prepare-chat", promptVersion: "test",
+      competencies: ["项目经验"], jobDescriptionHash: "a".repeat(64), resumeHash: "b".repeat(64),
+      questions: [{ ordinal: 0, competency: "项目经验", kind: "project", difficulty: "intermediate",
+        prompt: "介绍一个 Agent 项目。", rubric: ["职责清楚"] }],
+      invocation: { providerId: "test", modelId: "test", requestHash: "c".repeat(64), responseHash: "d".repeat(64), durationMs: 1 } });
+    const started = database.appendInterviewExchange({ interviewId: created.id, operationId: "chat-start",
+      interviewerText: "你好，介绍一个你做过的 Agent 项目。" });
+    expect(started.interview.status).toBe("interviewing");
+    expect(started.turns).toHaveLength(1);
+    const answered = database.appendInterviewExchange({ interviewId: created.id, operationId: "chat-reply",
+      candidateText: "我做过一个工作流 Agent。", interviewerText: "你如何管理状态？",
+      topicFlow: { version: 1, foundationNeed: "unknown", coverage: [], blocks: [{ id: "block-1",
+        source: "resume", anchor: "工作流 Agent 项目", objective: "厘清状态管理", questionRounds: [1, 2],
+        evidenceCount: 1, noNewEvidenceStreak: 0, status: "active" }] },
+      search: { query: "LangGraph StateGraph", sources: [{ title: "文档", url: "https://example.com", snippet: "状态图" }] } });
+    expect(answered.turns.map((turn) => turn.role)).toEqual(["interviewer", "candidate", "interviewer"]);
+    expect(answered.answeredCount).toBe(1);
+    expect(answered.topicFlow?.blocks[0].anchor).toBe("工作流 Agent 项目");
+    expect(database.appendInterviewExchange({ interviewId: created.id, operationId: "chat-reply",
+      candidateText: "不应重复", interviewerText: "不应重复" }).turns).toHaveLength(3);
+    database.close();
+    const reopened = new InterviewDatabase(path);
+    expect(reopened.getInterviewSession(created.id)?.turns[2].search?.sources[0].url).toBe("https://example.com");
+    expect(reopened.getInterviewSession(created.id)?.topicFlow?.blocks[0].questionRounds).toEqual([1, 2]);
     reopened.close();
   });
 
@@ -1306,14 +1514,17 @@ describe("InterviewDatabase", () => {
       DROP TABLE question_practice_attempts;
       DROP TABLE question_practice_items;
       DROP TABLE question_practice_sessions;
-      DELETE FROM schema_migrations WHERE version IN (6, 7);
+      DROP TABLE interview_algorithm_attempts;
+      DROP TABLE interview_algorithm_exams;
+      DROP TABLE interview_score_reports;
+      DELETE FROM schema_migrations WHERE version IN (6, 7, 8, 9, 10, 11);
     `);
     expect((v5.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as { version: number }).version)
       .toBe(5);
     v5.close();
 
     const upgraded = new InterviewDatabase(path);
-    expect(upgraded.getSchemaVersion()).toBe(7);
+    expect(upgraded.getSchemaVersion()).toBe(11);
     expect(upgraded.getQuestionBankItem(question!.id)).toMatchObject({
       stableKey: "practice.one",
       version: 1,
@@ -1345,7 +1556,10 @@ describe("InterviewDatabase", () => {
       DROP TABLE question_practice_attempts;
       DROP TABLE question_practice_items;
       DROP TABLE question_practice_sessions;
-      DELETE FROM schema_migrations WHERE version IN (6, 7);
+      DROP TABLE interview_algorithm_attempts;
+      DROP TABLE interview_algorithm_exams;
+      DROP TABLE interview_score_reports;
+      DELETE FROM schema_migrations WHERE version IN (6, 7, 8, 9, 10, 11);
       CREATE TRIGGER fail_v6_migration
       BEFORE INSERT ON schema_migrations
       WHEN NEW.version = 6
@@ -1368,7 +1582,7 @@ describe("InterviewDatabase", () => {
     rolledBack.close();
 
     const retried = new InterviewDatabase(path);
-    expect(retried.getSchemaVersion()).toBe(7);
+    expect(retried.getSchemaVersion()).toBe(11);
     expect(retried.getQuestionBankSnapshot()).toMatchObject({ published: 2 });
     retried.close();
   });
@@ -1396,7 +1610,10 @@ describe("InterviewDatabase", () => {
 
     const earlyV6 = new DatabaseSync(path);
     earlyV6.exec(`
-      DELETE FROM schema_migrations WHERE version = 7;
+      DROP TABLE interview_algorithm_attempts;
+      DROP TABLE interview_algorithm_exams;
+      DROP TABLE interview_score_reports;
+      DELETE FROM schema_migrations WHERE version IN (7, 8, 9, 10, 11);
       ALTER TABLE question_practice_items DROP COLUMN draft_elapsed_seconds;
     `);
     expect((earlyV6.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as { version: number }).version)
@@ -1404,7 +1621,7 @@ describe("InterviewDatabase", () => {
     earlyV6.close();
 
     const upgraded = new InterviewDatabase(path);
-    expect(upgraded.getSchemaVersion()).toBe(7);
+    expect(upgraded.getSchemaVersion()).toBe(11);
     expect(upgraded.getQuestionPracticeSession(started.id)?.currentItem).toMatchObject({
       draftAnswer: "旧版 v6 草稿",
       draftRevision: 1,

@@ -44,6 +44,8 @@ export type AiRequestMetadata = {
   budget: AiRequestBudget;
   /** Optional caller-generated correlation ID. It is not a conversation ID. */
   traceId?: string;
+  /** Stable, non-sensitive identifier for provider prompt-cache affinity across calls. */
+  cacheSessionId?: string;
 };
 
 export type AiCallOptions = {
@@ -67,6 +69,7 @@ export type AiUsage = {
   outputTokens?: number;
   totalTokens?: number;
   cachedInputTokens?: number;
+  cachedWriteTokens?: number;
   reasoningTokens?: number;
   inputItems?: number;
   costUsd?: number;
@@ -100,6 +103,11 @@ export type AiGatewayDiagnosticCode =
   | "CONNECTION_REFUSED"
   | "CONNECTION_RESET"
   | "WEBSOCKET_FAILURE"
+  | "LOCAL_DEADLINE"
+  | "UPSTREAM_TIMEOUT"
+  | "CONNECT_TIMEOUT"
+  | "BODY_TIMEOUT"
+  | "TLS_FAILURE"
   | "HEADER_TIMEOUT";
 
 /**
@@ -116,6 +124,8 @@ export type AiGatewayError = {
   diagnosticCode?: AiGatewayDiagnosticCode;
   /** Schema paths only; never include model text or user-provided values. */
   validationIssues?: string[];
+  /** Local validation stage, distinct from a provider/transport failure. */
+  validationStage?: "json_syntax" | "json_schema";
 };
 
 export type AiGatewayResult<T> =
@@ -174,6 +184,12 @@ export function assertAiRequestMetadata(metadata: unknown): asserts metadata is 
     || candidate.traceId.length > 128
   )) {
     throw new TypeError("traceId must be a non-blank canonical value of at most 128 characters");
+  }
+  if (candidate.cacheSessionId !== undefined && (
+    typeof candidate.cacheSessionId !== "string"
+    || !/^[a-zA-Z0-9._:-]{1,64}$/u.test(candidate.cacheSessionId)
+  )) {
+    throw new TypeError("cacheSessionId must be a canonical value of at most 64 characters");
   }
 }
 

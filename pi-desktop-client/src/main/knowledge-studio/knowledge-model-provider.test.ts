@@ -230,14 +230,38 @@ describe("KnowledgeGenerationWorkflow", () => {
       rubric: [{ title: "要点", description: "说明原因", weight: 100 }], pitfalls: [], followUps: [],
       evidence: [{ segmentId, quote: "依据" }] })) });
     const review = JSON.stringify({ items: Array.from({ length: 4 }, (_, ordinal) => ({ ordinal, verdict: "supported", notes: [] })) });
-    const gateway = new QueueGateway([{ error: "invalid_provider_response" }, draft(1), draft(3), answer, review]);
+    const gateway = new QueueGateway([
+      ...Array.from({ length: 4 }, () => ({ error: "invalid_provider_response" as const })),
+      draft(1), draft(3), answer, review,
+    ]);
     const result = await new KnowledgeGenerationWorkflow(gateway).generate({
       batchId: "output-split", title: "输出拆批", targetRole: "工程师", difficulty: "basic", questionCount: 4,
       segments: [{ id: segmentId, sourceId: "source", sourceTitle: "资料", content: "依据：每个问题都要有事实支持。" }],
     }, new AbortController().signal, () => undefined);
     expect(result.candidates).toHaveLength(4);
     expect(gateway.requests.filter((request) => request.metadata.purpose === "question-generation.drafts")
-      .map((request) => JSON.parse(request.messages[1]!.content).questionCount)).toEqual([4, 2, 2]);
+      .map((request) => JSON.parse(request.messages[1]!.content).questionCount)).toEqual([4, 4, 4, 4, 2, 2]);
+  });
+
+  it("retries malformed JSON in the same planning window before splitting it", async () => {
+    const segmentId = "source:segment:0";
+    const gateway = new QueueGateway([
+      '{"items":[]} {}',
+      JSON.stringify({ items: [{ ordinal: 0, competency: "可靠性", kind: "technical", difficulty: "basic",
+        question: "如何处理重试？", evidenceSegmentIds: [segmentId] }] }),
+      JSON.stringify({ items: [{ ordinal: 0, answer: "先确认状态，再决定是否重试。",
+        rubric: [{ title: "依据", description: "说明依据", weight: 100 }], pitfalls: [], followUps: [],
+        evidence: [{ segmentId, quote: "依据" }] }] }),
+      JSON.stringify({ items: [{ ordinal: 0, verdict: "supported", notes: [] }] }),
+    ]);
+    const result = await new KnowledgeGenerationWorkflow(gateway).generate({
+      batchId: "repair-json", title: "JSON 修复", targetRole: "工程师", difficulty: "basic", questionCount: 1,
+      segments: [{ id: segmentId, sourceId: "source", sourceTitle: "资料", content: "依据：重试前先确认状态。" }],
+    }, new AbortController().signal, () => undefined);
+    expect(result.candidates).toHaveLength(1);
+    const drafts = gateway.requests.filter((request) => request.metadata.purpose === "question-generation.drafts");
+    expect(drafts).toHaveLength(2);
+    expect(drafts[1]?.messages[0]?.content).toContain("第 1/3 次重试");
   });
 
   it("tops up missing questions after cross-window deduplication", async () => {
@@ -692,7 +716,8 @@ describe("KnowledgeGenerationWorkflow", () => {
       pitfalls: [], followUps: [], evidence: [{ segmentId, quote: "依据" }],
     })) });
     const review = JSON.stringify({ items: drafts.map((_, ordinal) => ({ ordinal, verdict: "supported", notes: [] })) });
-    const gateway = new QueueGateway([JSON.stringify({ items: drafts }), { error: "invalid_provider_response" },
+    const gateway = new QueueGateway([JSON.stringify({ items: drafts }),
+      ...Array.from({ length: 4 }, () => ({ error: "invalid_provider_response" as const })),
       answers(1), answers(2), review]);
     const result = await new KnowledgeGenerationWorkflow(gateway).generate({
       batchId: "answer-split", title: "答案拆批", targetRole: "工程师", difficulty: "basic", questionCount: 3,
@@ -700,7 +725,7 @@ describe("KnowledgeGenerationWorkflow", () => {
     }, new AbortController().signal, () => undefined);
     expect(result.candidates).toHaveLength(3);
     expect(gateway.requests.filter((request) => request.metadata.purpose === "question-generation.answers")
-      .map((request) => JSON.parse(request.messages[1]!.content).drafts.length)).toEqual([3, 1, 2]);
+      .map((request) => JSON.parse(request.messages[1]!.content).drafts.length)).toEqual([3, 3, 3, 3, 1, 2]);
   });
 
   it("repairs only the invalid answer from a successful batch", async () => {

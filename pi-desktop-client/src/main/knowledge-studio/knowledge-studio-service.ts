@@ -15,6 +15,9 @@ import type {
   KnowledgeImportFilesResult,
   KnowledgeImportTextRequest,
   KnowledgeImportUrlRequest,
+  KnowledgeInterviewImportCounts,
+  KnowledgeInterviewImportPayload,
+  KnowledgeInterviewImportResult,
   KnowledgeReviewCandidateRequest,
   KnowledgeSourceDetail,
   KnowledgeSourceOriginalPreview,
@@ -95,6 +98,7 @@ export type KnowledgeStudioServiceOptions = {
   selectFiles?: () => Promise<string[]>;
   revealPath?: (path: string) => void;
   captureWebPage?: (url: string, targetPath: string) => Promise<void>;
+  importToInterview?: (payload: KnowledgeInterviewImportPayload) => Promise<KnowledgeInterviewImportCounts>;
   now?: () => Date;
 };
 
@@ -430,6 +434,44 @@ export class KnowledgeStudioService {
     this.database.createArtifact(summary);
     this.database.updateBatch(batchId, { status: "published", stage: "published", progress: 100, updatedAt: createdAt });
     return this.database.getBatch(batchId)!;
+  }
+
+  async importSupportedToInterview(id: unknown): Promise<KnowledgeInterviewImportResult> {
+    this.assertOpen();
+    if (!this.options.importToInterview) throw new Error("智能面试题库不可用");
+    const batchId = requiredText(id, "任务 ID", 160);
+    const batch = this.database.getBatch(batchId);
+    if (!batch) throw new Error("生成任务不存在");
+    if (batch.status !== "review" && batch.status !== "published") throw new Error("请等待生成任务进入审核阶段");
+    const sourceDetails = new Map(batch.sourceIds.map((sourceId) => [sourceId, this.database.getSource(sourceId)]));
+    const segmentContents = new Map<string, Map<string, string>>();
+    for (const [sourceId, detail] of sourceDetails) {
+      if (detail) segmentContents.set(sourceId, new Map(detail.segments.map((segment) => [segment.id, segment.content])));
+    }
+    const eligible = batch.candidates.filter((candidate) => candidate.validationStatus === "supported"
+      && candidate.humanStatus !== "rejected" && candidate.answer.trim() && candidate.rubric.length > 0
+      && candidate.evidence.length > 0 && candidate.evidence.every((evidence) => {
+        const content = segmentContents.get(evidence.sourceId)?.get(evidence.segmentId);
+        return Boolean(evidence.quote && content?.includes(evidence.quote));
+      }));
+    if (!eligible.length) throw new Error("当前任务没有原文引文可逐字核对的证据支持题");
+    const payload: KnowledgeInterviewImportPayload = {
+      batchId: batch.id,
+      title: batch.title,
+      targetRole: batch.targetRole,
+      sources: [...sourceDetails.values()].filter((source): source is NonNullable<typeof source> => Boolean(source)).map((source) => ({
+        id: source.id, title: source.title, kind: source.kind, format: source.format,
+        contentHash: source.contentHash, ...(source.sourceUrl ? { sourceUrl: source.sourceUrl } : {}),
+      })),
+      questions: eligible.map((candidate) => ({
+        id: candidate.id, ordinal: candidate.ordinal, kind: candidate.kind, difficulty: candidate.difficulty,
+        competency: candidate.competency, question: candidate.question, answer: candidate.answer,
+        rubric: candidate.rubric, pitfalls: candidate.pitfalls, followUps: candidate.followUps,
+        evidence: candidate.evidence,
+      })),
+    };
+    const counts = await this.options.importToInterview(payload);
+    return { eligibleCount: eligible.length, skippedCount: batch.candidates.length - eligible.length, ...counts };
   }
 
   revealArtifact(path: unknown): void {
