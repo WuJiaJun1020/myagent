@@ -62,6 +62,7 @@ export type SessionListItem = {
   messageCount: number;
   current: boolean;
   workspace?: {
+    cwd?: string;
     name: string;
     current: boolean;
     available: boolean;

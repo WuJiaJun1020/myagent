@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { HintButton } from "../../components/ui/tooltip";
 import {
   Blocks,
@@ -15,37 +15,45 @@ import { agentGateway } from "../../services/agent-gateway";
 import { useAgentStore } from "../../stores/agent-store";
 import { useSessionStore } from "../../stores/session-store";
 import { useUiStore } from "../../stores/ui-store";
+import { useProjectStore } from "../../stores/project-store";
 
 function getWorkspaceName(cwd: string): string {
   return cwd.split(/[\\/]/).filter(Boolean).at(-1) ?? "未选择工作区";
 }
 
 export function AgentSidebar() {
+  const selectingRef = useRef(false);
+  const [selecting, setSelecting] = useState(false);
+  const rememberProject = useProjectStore((state) => state.remember);
+  const sessions = useSessionStore((state) => state.sessions);
   const newSessionMenu = useRef<HTMLDivElement>(null);
   const status = useAgentStore((state) => state.processStatus);
   const busy = useAgentStore((state) => state.busy);
-  const setStatus = useAgentStore((state) => state.setProcessStatus);
   const setError = useAgentStore((state) => state.setError);
-  const resetSession = useAgentStore((state) => state.resetSession);
   const agentView = useUiStore((state) => state.moduleViews.agent);
   const setAgentView = useUiStore((state) => state.setAgentView);
   const setSettingsOpen = useUiStore((state) => state.setSettingsOpen);
-  const clearDetailSelection = useUiStore((state) => state.clearDetailSelection);
   const session = useSessionStore((state) => state.session);
   const mutation = useSessionStore((state) => state.mutation);
   const createSession = useSessionStore((state) => state.createSession);
-  const controlsDisabled = busy || Boolean(mutation) || !session;
+  const controlsDisabled = busy || Boolean(mutation) || !session || selecting;
+  useEffect(() => {
+    rememberProject(status.cwd);
+    for (const entry of sessions) if (entry.mode === "work" && entry.workspace?.cwd) rememberProject(entry.workspace.cwd);
+  }, [status.cwd, sessions, rememberProject]);
 
   async function selectWorkspace(): Promise<void> {
+    if (busy || mutation || selectingRef.current) return;
+    selectingRef.current = true;
+    setSelecting(true);
     try {
-      const nextStatus = await agentGateway.selectWorkspace();
-      if (nextStatus.cwd && nextStatus.cwd !== status.cwd) {
-        resetSession();
-        clearDetailSelection();
-      }
-      setStatus(nextStatus);
+      const directory = await agentGateway.selectWorkspace();
+      if (directory) rememberProject(directory);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      selectingRef.current = false;
+      setSelecting(false);
     }
   }
 
@@ -85,15 +93,15 @@ export function AgentSidebar() {
         </div>
       </div>
 
-      <section className="sidebar-projects agent-projects" aria-label="项目">
+      {agentView !== "activity" && agentView !== "review" && <section className="sidebar-projects agent-projects" aria-label="项目">
         <span className="section-label">当前工作区</span>
-        <HintButton className="workspace-button" type="button" hint="选择工作区" onClick={() => void selectWorkspace()}>
+        <HintButton className="workspace-button" type="button" hint="创建项目" disabled={controlsDisabled} onClick={() => void selectWorkspace()}>
           <FolderOpen size={16} />
           <strong>{getWorkspaceName(status.cwd)}</strong>
         </HintButton>
-      </section>
+      </section>}
 
-      {agentView === "files" ? <FileTree /> : agentView === "activity" || agentView === "review" ? <SessionHistory />
+      {agentView === "files" ? <FileTree /> : agentView === "activity" || agentView === "review" ? <SessionHistory selectingProject={selecting} onSelectWorkspace={() => void selectWorkspace()} />
         : <ResourceSidebarSummary view={agentView} />}
 
       <nav className="sidebar-utilities" aria-label="工作区辅助功能">
@@ -110,7 +118,6 @@ export function AgentSidebar() {
           <span className="connection-dot" />
           <span>
             <strong>{statusLabel}</strong>
-            <small>{status.state === "running" ? "本地 RPC" : "Pi runtime"}</small>
           </span>
         </div>
         <HintButton className="icon-button" type="button" aria-label="打开设置" hint="设置" onClick={() => setSettingsOpen(true)}>

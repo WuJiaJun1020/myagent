@@ -140,7 +140,7 @@ export interface PiDesktopApi {
   getWindowMaximized(): Promise<boolean>;
   onWindowMaximized(listener: (maximized: boolean) => void): () => void;
   getStatus(): Promise<ProcessStatus>;
-  selectWorkspace(): Promise<ProcessStatus>;
+  selectWorkspace(): Promise<string | null>;
   restart(): Promise<ProcessStatus>;
   getRuntimeSnapshot(): Promise<AgentRuntimeSnapshot>;
   getSessionConfiguration(): Promise<AgentSessionConfiguration>;
@@ -149,7 +149,7 @@ export interface PiDesktopApi {
   discardImages(imageIds: string[]): Promise<void>;
   sendPrompt(message: string, imageIds: string[], streamingBehavior?: "steer" | "followUp"): Promise<void>;
   getSessionOverview(): Promise<SessionOverview>;
-  newSession(mode: SessionMode): Promise<AgentRuntimeSnapshot>;
+  newSession(mode: SessionMode, cwd?: string): Promise<AgentRuntimeSnapshot>;
   switchSession(sessionId: string): Promise<AgentRuntimeSnapshot>;
   cloneCurrentSession(): Promise<AgentRuntimeSnapshot>;
   forkCurrentSession(entryId: string): Promise<AgentRuntimeSnapshot>;

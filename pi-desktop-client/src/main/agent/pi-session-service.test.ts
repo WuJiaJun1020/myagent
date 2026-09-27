@@ -1,7 +1,7 @@
 import { appendFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionMode, SnapshotTurnFileChanges, ThinkingLevel } from "../../shared/contracts/agent-session";
 import type { RpcCommand, RpcMessage } from "../../shared/rpc";
 import { PiEventAdapter } from "./pi-event-adapter";
@@ -295,12 +295,45 @@ describe("PiSessionService mutations", () => {
     expect(fakePi.getStatus().cwd).toBe(otherWorkspace);
     expect(fakePi.restarts).toEqual([]);
     expect(snapshot.session.id).toBe("other-work");
+    expect(snapshot.sessions.find((session) => session.id === "other-work")?.workspace).toMatchObject({
+      cwd: otherWorkspace, current: true, available: true,
+    });
     expect(latestSwitchCommand(fakePi.commands)).toMatchObject({
       sessionPath: expect.stringContaining("other-work.jsonl"),
     });
     expect(fakePi.commands.filter((command) => command.type === "get_available_models")).toHaveLength(modelRequestsBeforeSwitch);
     expect(fakePi.commands.filter((command) => command.type === "get_commands")).toHaveLength(commandRequestsBeforeSwitch);
     expect(fakePi.commands.filter((command) => command.type === "get_available_thinking_levels")).toHaveLength(thinkingRequestsBeforeSwitch + 1);
+  });
+
+  it("creates work in an existing project through native switching without restart", async () => {
+    const { service, fakePi, otherWorkspace } = await setup();
+    await service.newSession("work", otherWorkspace);
+    expect(fakePi.getStatus().cwd).toBe(otherWorkspace);
+    expect(fakePi.restarts).toEqual([]);
+    expect(fakePi.commands.some((command) => command.type === "switch_session")).toBe(true);
+    expect(fakePi.commands.some((command) => command.type === "new_session")).toBe(true);
+  });
+
+  it("initializes a different empty project only when creating its first work session", async () => {
+    const { service, fakePi, cwd } = await setup();
+    const empty = join(cwd, "empty-project");
+    await mkdir(empty);
+    await service.newSession("work", empty);
+    expect(fakePi.restarts).toEqual([{ cwd: empty, sessionDir: undefined }]);
+    expect(fakePi.getStatus().cwd).toBe(empty);
+  });
+
+  it("does not create in the old project when an extension cancels switching", async () => {
+    const { service, fakePi, cwd, otherWorkspace } = await setup();
+    const send = fakePi.send.bind(fakePi);
+    vi.spyOn(fakePi, "send").mockImplementation(async (command) => command.type === "switch_session"
+      ? { type: "response", command: "switch_session", success: true, data: { cancelled: true } }
+      : send(command));
+    await service.newSession("work", otherWorkspace);
+    expect(fakePi.getStatus().cwd).toBe(cwd);
+    expect(fakePi.restarts).toEqual([]);
+    expect(fakePi.commands.some((command) => command.type === "new_session")).toBe(false);
   });
 
   it("refreshes model-specific thinking levels when switching sessions", async () => {

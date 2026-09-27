@@ -3,7 +3,7 @@ import { applyWorkspaceAppearance, normalizeAccent, normalizePalette, workspaceT
 // Runs before React mounts; uses the same palette as runtime settings and previews.
 let stored: Record<string, unknown> = {};
 try { stored = JSON.parse(localStorage.getItem("pi-desktop-settings") || "null")?.state ?? {}; } catch { /* Use defaults for malformed storage. */ }
-const preference = stored.theme === "light" || stored.theme === "system" ? stored.theme : "dark";
+const preference = stored.theme === "dark" || stored.theme === "system" ? stored.theme : "light";
 const mode = preference === "system" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : preference;
 const style = document.getElementById("workspace-theme-palettes") ?? document.createElement("style");
 style.id = "workspace-theme-palettes";

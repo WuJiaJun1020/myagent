@@ -63,21 +63,21 @@ function initialResolvedTheme(): ResolvedTheme {
     const bootstrappedTheme = document.documentElement.dataset.theme;
     if (bootstrappedTheme === "light" || bootstrappedTheme === "dark") return bootstrappedTheme;
   }
-  return "dark";
+  return "light";
 }
 
 export const useSettingsStore = create<SettingsStore>()(persist(
   (set) => ({
-    theme: "dark",
+    theme: "light",
     palette: "gray",
     accent: "theme",
     setPalette: (palette) => set({ palette: normalizePalette(palette) }),
     setAccent: (accent) => set({ accent: normalizeAccent(accent) }),
     resolvedTheme: initialResolvedTheme(),
     animationEnabled: true,
-    uiFontFamily: "system",
+    uiFontFamily: "noto",
     contentFontFamily: "ui",
-    codeFontFamily: "consolas",
+    codeFontFamily: "cascadia",
     uiFontSize: DEFAULT_UI_FONT_SIZE,
     contentFontSize: DEFAULT_CONTENT_FONT_SIZE,
     codeFontSize: DEFAULT_CODE_FONT_SIZE,
@@ -98,9 +98,9 @@ export const useSettingsStore = create<SettingsStore>()(persist(
     setContentFontSize: (contentFontSize) => set({ contentFontSize: clamp(contentFontSize, 12, 20) }),
     setCodeFontSize: (codeFontSize) => set({ codeFontSize: clamp(codeFontSize, 10, 18) }),
     resetTypography: () => set({
-      uiFontFamily: "system",
+      uiFontFamily: "noto",
       contentFontFamily: "ui",
-      codeFontFamily: "consolas",
+      codeFontFamily: "cascadia",
       uiFontSize: DEFAULT_UI_FONT_SIZE,
       contentFontSize: DEFAULT_CONTENT_FONT_SIZE,
       codeFontSize: DEFAULT_CODE_FONT_SIZE,

@@ -302,9 +302,9 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("pi:get-session-overview", () => sessionService.getSessionOverview());
-  ipcMain.handle("pi:new-session", (_event, mode: unknown) => {
+  ipcMain.handle("pi:new-session", async (_event, mode: unknown, directory: unknown) => {
     fileChangeTracker.clear();
-    return sessionService.newSession(mode);
+    return sessionService.newSession(mode, directory);
   });
   ipcMain.handle("pi:switch-session", (_event, sessionId: unknown) => {
     fileChangeTracker.clear();
@@ -412,15 +412,11 @@ function registerIpc(): void {
   });
   ipcMain.handle("pi:select-workspace", async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
-      title: "选择 Pi 工作区",
-      properties: ["openDirectory"],
+      title: "创建项目 · 选择项目文件夹",
+      buttonLabel: "创建项目",
+      properties: ["openDirectory", "createDirectory"],
     });
-    if (!result.canceled && result.filePaths[0]) {
-      fileChangeTracker.clear();
-      eventAdapter.beginSession();
-      await pi.restart(result.filePaths[0]);
-    }
-    return pi.getStatus();
+    return result.canceled ? null : result.filePaths[0] ?? null;
   });
   ipcMain.handle("workspace:list-directory", (_event, path: unknown) => workspaceFiles.listDirectory(path));
   ipcMain.handle("workspace:search-files", (_event, query: unknown) => workspaceFiles.searchFiles(query));

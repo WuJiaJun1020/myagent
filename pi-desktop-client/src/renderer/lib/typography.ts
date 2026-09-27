@@ -2,7 +2,7 @@ export type UiFontFamily = "system" | "noto" | "yahei" | "segoe";
 export type ContentFontFamily = "ui" | "noto" | "wenkai" | "sans" | "serif";
 export type CodeFontFamily = "jetbrains" | "maple" | "consolas" | "cascadia" | "system";
 
-export const DEFAULT_UI_FONT_SIZE = 13;
+export const DEFAULT_UI_FONT_SIZE = 14;
 export const DEFAULT_CONTENT_FONT_SIZE = 13;
 export const DEFAULT_CODE_FONT_SIZE = 12;
 
@@ -74,7 +74,8 @@ export function applyTypographySettings(settings: {
   root.style.setProperty("--font-ui", uiFontStacks[settings.uiFontFamily]);
   root.style.setProperty("--font-content", contentFontStacks[settings.contentFontFamily]);
   root.style.setProperty("--font-code", codeFontStacks[settings.codeFontFamily]);
-  root.style.setProperty("--ui-font-adjust", `${settings.uiFontSize - DEFAULT_UI_FONT_SIZE}px`);
+  // Existing CSS sizes use a 13px design baseline, independently of the default.
+  root.style.setProperty("--ui-font-adjust", `${settings.uiFontSize - 13}px`);
   root.style.setProperty("--content-font-size", `${settings.contentFontSize}px`);
   root.style.setProperty("--code-font-size", `${settings.codeFontSize}px`);
 }

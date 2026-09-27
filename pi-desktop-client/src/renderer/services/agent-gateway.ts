@@ -24,7 +24,7 @@ import type { ExtensionUiResponse, ProcessStatus } from "../../shared/rpc";
 
 export interface AgentGateway {
   getStatus(): Promise<ProcessStatus>;
-  selectWorkspace(): Promise<ProcessStatus>;
+  selectWorkspace(): Promise<string | null>;
   restart(): Promise<ProcessStatus>;
   getRuntimeSnapshot(): Promise<AgentRuntimeSnapshot>;
   getSessionConfiguration(): Promise<AgentSessionConfiguration>;
@@ -32,7 +32,7 @@ export interface AgentGateway {
   addImageData(items: Array<{ name: string; mimeType: string; data: Uint8Array }>, maxAttachments: number): Promise<ImageAttachment[]>;
   discardImages(imageIds: string[]): Promise<void>;
   getSessionOverview(): Promise<SessionOverview>;
-  newSession(mode: SessionMode): Promise<AgentRuntimeSnapshot>;
+  newSession(mode: SessionMode, cwd?: string): Promise<AgentRuntimeSnapshot>;
   switchSession(sessionId: string): Promise<AgentRuntimeSnapshot>;
   cloneCurrentSession(): Promise<AgentRuntimeSnapshot>;
   forkCurrentSession(entryId: string): Promise<AgentRuntimeSnapshot>;
@@ -101,7 +101,7 @@ class DesktopAgentGateway implements AgentGateway {
     return window.piDesktop.getStatus();
   }
 
-  selectWorkspace(): Promise<ProcessStatus> {
+  selectWorkspace(): Promise<string | null> {
     return window.piDesktop.selectWorkspace();
   }
 
@@ -133,8 +133,8 @@ class DesktopAgentGateway implements AgentGateway {
     return window.piDesktop.getSessionOverview();
   }
 
-  newSession(mode: SessionMode): Promise<AgentRuntimeSnapshot> {
-    return window.piDesktop.newSession(mode);
+  newSession(mode: SessionMode, cwd?: string): Promise<AgentRuntimeSnapshot> {
+    return window.piDesktop.newSession(mode, cwd);
   }
 
   switchSession(sessionId: string): Promise<AgentRuntimeSnapshot> {

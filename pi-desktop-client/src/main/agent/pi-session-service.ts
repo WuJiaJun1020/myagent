@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
+import { stat } from "node:fs/promises";
+import { basename, dirname, isAbsolute, resolve } from "node:path";
 import type {
   AgentRuntimeSnapshot,
   AgentHistorySnapshot,
@@ -454,8 +455,24 @@ export class PiSessionService {
     return this.getSnapshot(true);
   }
 
-  async newSession(mode: unknown = "work"): Promise<AgentRuntimeSnapshot> {
+  async newSession(mode: unknown = "work", directory?: unknown): Promise<AgentRuntimeSnapshot> {
     const sessionMode = validateSessionMode(mode);
+    if (directory !== undefined) {
+      if (sessionMode !== "work" || typeof directory !== "string" || !isAbsolute(directory) || directory.length > 32768) throw new Error("项目目录无效");
+      if (!(await stat(directory)).isDirectory()) throw new Error("项目目录不可用");
+      if (!sameWorkspace(directory, this.pi.getStatus().cwd)) {
+        const snapshot = await this.getSnapshot();
+        const existing = snapshot.sessions.find((session) => session.mode === "work" && session.workspace?.cwd && sameWorkspace(session.workspace.cwd, directory));
+        if (existing) {
+          const switched = await this.switchSession(existing.id);
+          // Extensions can cancel a native switch. Do not create in the old directory.
+          if (!sameWorkspace(directory, this.pi.getStatus().cwd)) return switched;
+        } else {
+          this.eventAdapter.beginSession();
+          await this.pi.restart(directory);
+        }
+      }
+    }
     const { sessionFile } = await this.getNormalizedCurrentSession();
     const cwd = this.pi.getStatus().cwd;
     const chatSessionDir = this.chatSessionDirectory(cwd);
@@ -615,7 +632,14 @@ export class PiSessionService {
     if (!this.recentSessions.some((session) => session.id === sessionId)) return undefined;
     this.recentSessions = this.recentSessions
       .filter((session) => session.id === sessionId || session.messageCount > 0)
-      .map((session) => ({ ...session, current: session.id === sessionId }));
+      .map((session) => ({
+        ...session,
+        current: session.id === sessionId,
+        ...(session.workspace ? { workspace: {
+          ...session.workspace,
+          current: sameWorkspace(session.workspace.cwd || "", this.pi.getStatus().cwd),
+        } } : {}),
+      }));
     return this.recentSessions;
   }
 
@@ -650,6 +674,7 @@ export class PiSessionService {
           ...(scope === "workspace"
             ? {
                 workspace: {
+                  cwd: session.cwd,
                   name: workspaceName(session.cwd),
                   current: sameWorkspace(session.cwd, cwd),
                   available: Boolean(session.cwd) && existsSync(session.cwd),
@@ -672,7 +697,7 @@ export class PiSessionService {
         messageCount: current.messageCount,
         current: true,
         ...(!isGlobalChat
-          ? { workspace: { name: workspaceName(cwd), current: true, available: existsSync(cwd) } }
+          ? { workspace: { cwd, name: workspaceName(cwd), current: true, available: existsSync(cwd) } }
           : {}),
       });
     }

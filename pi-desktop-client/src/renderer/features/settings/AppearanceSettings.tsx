@@ -151,7 +151,7 @@ export function AppearanceSettings() {
             {uiFontOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
           </select>
         </SettingsRow>
-        <SettingsRow title="界面字号" description="以 13px 为默认基准，其他界面文字会按层级同步调整。">
+        <SettingsRow title="界面字号" description="默认 14px，其他界面文字会按层级同步调整。">
           <FontSizeControl label="界面字号" value={uiFontSize} min={11} max={17} onChange={setUiFontSize} />
         </SettingsRow>
         <SettingsRow title="内容字体" description="用于用户消息和 Agent 回复正文；霞鹜文楷更适合长文阅读。">

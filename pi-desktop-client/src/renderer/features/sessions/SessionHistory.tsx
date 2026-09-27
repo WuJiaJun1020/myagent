@@ -1,7 +1,9 @@
 import { HintButton } from "../../components/ui/tooltip";
 import {
   Check,
-  BriefcaseBusiness,
+  ChevronRight,
+  FolderPlus,
+  Plus,
   FolderOpen,
   LoaderCircle,
   MessageCircle,
@@ -17,6 +19,8 @@ import type { SessionListItem } from "../../../shared/contracts/agent-session";
 import { useAgentStore } from "../../stores/agent-store";
 import { useSessionStore } from "../../stores/session-store";
 import { useUiStore } from "../../stores/ui-store";
+import { groupSessionProjects } from "./session-projects";
+import { useProjectStore } from "../../stores/project-store";
 
 type WorkspacePopover = {
   title: string;
@@ -25,7 +29,10 @@ type WorkspacePopover = {
   left: number;
 };
 
-export function SessionHistory() {
+export function SessionHistory({ onSelectWorkspace, selectingProject = false }: { onSelectWorkspace: () => void; selectingProject?: boolean }) {
+  const directories = useProjectStore((state) => state.directories);
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const cwd = useAgentStore((state) => state.processStatus.cwd);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -35,14 +42,17 @@ export function SessionHistory() {
   const pendingSessionId = useSessionStore((state) => state.pendingSessionId);
   const error = useSessionStore((state) => state.error);
   const switchSession = useSessionStore((state) => state.switchSession);
+  const createSession = useSessionStore((state) => state.createSession);
   const renameSession = useSessionStore((state) => state.renameSession);
   const deleteSession = useSessionStore((state) => state.deleteSession);
   const clearError = useSessionStore((state) => state.clearError);
   const setSessionOverviewOpen = useUiStore((state) => state.setSessionOverviewOpen);
   const busy = useAgentStore((state) => state.busy);
-  const controlsDisabled = busy || Boolean(mutation);
+  const controlsDisabled = busy || Boolean(mutation) || selectingProject;
   const sessionChanging = mutation === "session" || mutation === "initializing";
   const recentSessions = [...sessions].sort((a, b) => b.modifiedAt - a.modifiedAt);
+  const projects = groupSessionProjects(sessions, cwd, directories);
+  const chats = recentSessions.filter((session) => session.mode === "chat");
   const setAgentView = useUiStore((state) => state.setAgentView);
 
   function startRename(sessionId: string, currentName: string): void {
@@ -71,7 +81,7 @@ export function SessionHistory() {
     const rect = event.currentTarget.getBoundingClientRect();
     setWorkspacePopover({
       title,
-      workspace: session.workspace.name,
+      workspace: session.workspace.cwd || session.workspace.name,
       top: rect.top + rect.height / 2,
       left: rect.right + 8,
     });
@@ -110,7 +120,7 @@ export function SessionHistory() {
               aria-label={unavailable ? `${title}，原工作目录不可用` : title}
               onClick={() => { setAgentView("activity"); void switchSession(session.id); }}
             >
-              {session.mode === "chat" ? <MessageCircle size={14} /> : <BriefcaseBusiness size={14} />}
+              {session.mode === "chat" && <MessageCircle size={14} />}
               <span>
                 <strong>{title}</strong>
               </span>
@@ -136,8 +146,11 @@ export function SessionHistory() {
   return (
     <section className="sidebar-sessions session-history">
       <header>
-        <span className="section-label">最近会话</span>
+        <span className="section-label">项目</span>
         <span className="session-header-actions">
+          <TooltipIconButton className="session-overview-button" label="创建项目" disabled={controlsDisabled} onClick={() => onSelectWorkspace()}>
+            <FolderPlus size={14} />
+          </TooltipIconButton>
           <TooltipIconButton className="session-overview-button" label="打开当前会话概览" disabled={controlsDisabled} onClick={() => setSessionOverviewOpen(true)}>
             <PanelTopOpen size={14} />
           </TooltipIconButton>
@@ -148,23 +161,50 @@ export function SessionHistory() {
           <span>{error}</span><button type="button" aria-label="关闭错误" onClick={clearError}><X size={12} /></button>
         </div>
       )}
-      <div className="session-list">
+      <div className="session-list" onScroll={() => setWorkspacePopover(null)}>
         {sessionChanging && sessions.length === 0 ? (
           <div className="session-loading"><LoaderCircle className="spin" size={13} />正在加载会话…</div>
-        ) : sessions.length === 0 ? (
-          <div className="session-loading">还没有最近会话</div>
         ) : (
-          (["chat", "work"] as const).map((mode) => {
-            const entries = recentSessions.filter((session) => session.mode === mode);
-            const title = mode === "chat" ? "最近聊天" : "最近工作";
-            return <section className="session-group" aria-label={title} key={mode}>
-              <header className="session-group-header">
-                {mode === "chat" ? <MessageCircle size={12} /> : <BriefcaseBusiness size={12} />}
-                <span>{title}</span><small>{entries.length}</small>
-              </header>
-              {entries.length ? entries.map(renderSession) : <div className="session-group-empty">暂无会话</div>}
-            </section>;
-          })
+          <>
+            {projects.map((project) => <section className="session-project" key={project.key} aria-label={`项目 ${project.name}`}>
+              <div className="session-project-row">
+              <HintButton className={`session-project-heading ${project.current ? "current" : ""}`}
+                hint={project.cwd || "原工作目录不可用"} aria-label={`项目 ${project.name}`}
+                aria-expanded={!collapsed.has(project.key)} onClick={() => {
+                  setWorkspacePopover(null);
+                  setCollapsed((previous) => { const next = new Set(previous); next.delete(project.key); return next; });
+                }}>
+                <FolderOpen size={15} /><strong>{project.name}</strong>
+                {project.current && <i aria-label="当前工作区" />}
+              </HintButton>
+              <HintButton className="session-project-create" hint={`在 ${project.name} 中新建工作会话`}
+                aria-label={`在 ${project.name} 中新建工作会话`} disabled={controlsDisabled || !project.cwd}
+                onClick={() => {
+                  setAgentView("activity");
+                  setCollapsed((previous) => { const next = new Set(previous); next.delete(project.key); return next; });
+                  void createSession("work", project.cwd);
+                }}><Plus size={13} /></HintButton>
+              <HintButton className="session-project-toggle" hint={collapsed.has(project.key) ? "展开项目" : "收起项目"}
+                aria-label={`${collapsed.has(project.key) ? "展开" : "收起"}项目 ${project.name}`} aria-expanded={!collapsed.has(project.key)} onClick={() => {
+                  setCollapsed((previous) => {
+                    const next = new Set(previous);
+                    if (next.has(project.key)) next.delete(project.key); else next.add(project.key);
+                    return next;
+                  });
+                }}>
+                <ChevronRight size={12} className="project-chevron" />
+              </HintButton>
+              </div>
+              {!collapsed.has(project.key) && <div className="session-project-children">
+                {project.sessions.length ? project.sessions.map(renderSession) : <div className="session-group-empty">暂无工作会话</div>}
+              </div>}
+            </section>)}
+            {!projects.length && <div className="session-group-empty">打开工作区以开始</div>}
+            <section className="session-group project-chat-group" aria-label="最近聊天">
+              <header className="session-group-header"><span>最近聊天</span><small>{chats.length}</small></header>
+              {chats.length ? chats.map(renderSession) : <div className="session-group-empty">暂无聊天</div>}
+            </section>
+          </>
         )}
       </div>
       {workspacePopover && createPortal(

@@ -24,18 +24,40 @@ export function BrowserPanel() {
   useEffect(() => {
     let last = "";
     let frame = 0;
+    let disposed = false;
     const update = () => {
+      frame = 0;
       const element = surface.current;
       const rect = element?.getBoundingClientRect();
       const modal = [...document.querySelectorAll('[aria-modal="true"], dialog[open], .modal-backdrop, .settings-page')].some(node => node.getClientRects().length > 0);
       const visible = !document.hidden && !modal && element?.getClientRects().length && !element.closest('[aria-hidden="true"], [data-inactive="true"]');
       const bounds = visible && rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;
       const key = JSON.stringify(bounds);
-      if (key !== last) { last = key; void window.piDesktop.browserSetBounds(bounds).catch(reason => setError(String(reason))); }
-      frame = requestAnimationFrame(update);
+      if (key !== last) { last = key; void window.piDesktop.browserSetBounds(bounds).catch(reason => { if (!disposed) setError(String(reason)); }); }
     };
-    frame = requestAnimationFrame(update);
-    return () => { cancelAnimationFrame(frame); void window.piDesktop.browserSetBounds(null).catch(() => {}); };
+    // Coalesce changes into one measurement; never poll when the layout is idle.
+    const schedule = () => { if (!disposed && !frame) frame = requestAnimationFrame(update); };
+    const resize = new ResizeObserver(schedule);
+    for (let node: HTMLElement | null = surface.current; node; node = node.parentElement) resize.observe(node);
+    const mutations = new MutationObserver(schedule);
+    mutations.observe(document.body, { subtree: true, childList: true, attributes: true,
+      attributeFilter: ["open", "aria-modal", "aria-hidden", "data-inactive", "hidden", "class", "style"] });
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, true);
+    document.addEventListener("visibilitychange", schedule);
+    document.addEventListener("transitionend", schedule, true);
+    schedule();
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(frame);
+      resize.disconnect();
+      mutations.disconnect();
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, true);
+      document.removeEventListener("visibilitychange", schedule);
+      document.removeEventListener("transitionend", schedule, true);
+      void window.piDesktop.browserSetBounds(null).catch(() => {});
+    };
   }, []);
 
   const action = (value: BrowserAction) => handle(window.piDesktop.browserAction(value));

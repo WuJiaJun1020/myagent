@@ -27,7 +27,7 @@ const api: PiDesktopApi = {
     return () => ipcRenderer.removeListener("app:window-maximized", handler);
   },
   getStatus: () => ipcRenderer.invoke("pi:get-status") as Promise<ProcessStatus>,
-  selectWorkspace: () => ipcRenderer.invoke("pi:select-workspace") as Promise<ProcessStatus>,
+  selectWorkspace: () => ipcRenderer.invoke("pi:select-workspace") as Promise<string | null>,
   restart: () => ipcRenderer.invoke("pi:restart") as Promise<ProcessStatus>,
   getRuntimeSnapshot: () => ipcRenderer.invoke("pi:get-runtime-snapshot"),
   getSessionConfiguration: () => ipcRenderer.invoke("pi:get-session-configuration"),
@@ -36,7 +36,7 @@ const api: PiDesktopApi = {
   discardImages: (imageIds) => ipcRenderer.invoke("pi:discard-images", imageIds),
   sendPrompt: (message, imageIds, streamingBehavior) => ipcRenderer.invoke("pi:send-prompt", message, imageIds, streamingBehavior),
   getSessionOverview: () => ipcRenderer.invoke("pi:get-session-overview"),
-  newSession: (mode) => ipcRenderer.invoke("pi:new-session", mode),
+  newSession: (mode, cwd) => ipcRenderer.invoke("pi:new-session", mode, cwd),
   switchSession: (sessionId) => ipcRenderer.invoke("pi:switch-session", sessionId),
   cloneCurrentSession: () => ipcRenderer.invoke("pi:clone-current-session"),
   forkCurrentSession: (entryId) => ipcRenderer.invoke("pi:fork-current-session", entryId),

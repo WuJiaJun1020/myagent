@@ -18,5 +18,5 @@ it("preserves the restored interview workspace during fallback", async () => {
   vi.stubGlobal("localStorage", { getItem: () => "invalid json" });
   vi.stubGlobal("sessionStorage", { getItem: () => JSON.stringify({ activeModule: "interview" }) });
   await import("./theme-bootstrap");
-  expect(root.dataset).toMatchObject({ workspace: "interview", theme: "dark", palette: "gray", accent: "theme" });
+  expect(root.dataset).toMatchObject({ workspace: "interview", theme: "light", palette: "gray", accent: "theme" });
 });

@@ -30,7 +30,7 @@ type SessionStore = {
   pendingSessionId: string | null;
   error: string | null;
   initialize: (cwd: string) => Promise<void>;
-  createSession: (mode?: SessionMode) => Promise<void>;
+  createSession: (mode?: SessionMode, cwd?: string) => Promise<void>;
   switchSession: (sessionId: string) => Promise<void>;
   cloneSession: () => Promise<void>;
   forkSession: (entryId: string) => Promise<void>;
@@ -235,11 +235,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     }
   },
 
-  createSession: async (mode) => {
+  createSession: async (mode, targetCwd) => {
     const generation = ++operationGeneration;
     set({ mutation: "session", error: null });
     try {
-      let snapshot = await agentGateway.newSession(mode ?? get().session?.mode ?? "work");
+      let snapshot = await agentGateway.newSession(mode ?? get().session?.mode ?? "work", targetCwd);
       const configured = await applyPreferredConfiguration(snapshot);
       snapshot = configured.snapshot;
       if (generation !== operationGeneration) return;

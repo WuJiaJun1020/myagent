@@ -21,7 +21,8 @@
     "dist:win:setup": "npm run prepare:python:win && npm run build && npm run verify:renderer && electron-builder --win nsis --x64",
     "verify:package": "node scripts/verify-packaged-runtime.cjs --runtime-only",
     "verify:portable": "node scripts/verify-packaged-runtime.cjs",
-    "verify:knowledge-ui": "npm run build && node scripts/verify-knowledge-ui.mjs"
+    "verify:knowledge-ui": "npm run build && node scripts/verify-knowledge-ui.mjs",
+    "verify:package-deps": "node scripts/verify-packaged-dependencies.cjs"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "file:../pi-agent/packages/coding-agent",
@@ -33,11 +34,11 @@
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^6.0.0",
+    "apache-arrow": "18.1.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^13.2.0",
     "mammoth": "^1.12.3",
-    "monaco-editor": "^0.57.0",
     "node-pty": "^1.1.0",
     "pdf-parse": "^2.4.5",
     "prismjs": "^1.30.0",
@@ -63,6 +64,7 @@
     "electron-builder": "^26.15.3",
     "esbuild": "^0.25.9",
     "lucide-react": "^0.544.0",
+    "monaco-editor": "^0.57.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "tailwindcss": "^4.3.3",
@@ -125,6 +127,10 @@
       {
         "from": "node_modules/@lancedb/lancedb/RUST_THIRD_PARTY_LICENSES.html",
         "to": "licenses/LanceDB-Rust-Third-Party.html"
+      },
+      {
+        "from": "node_modules/monaco-editor/LICENSE",
+        "to": "licenses/Monaco-MIT.txt"
       }
     ],
     "directories": {
@@ -137,7 +143,9 @@
       "!node_modules/@img/**/*",
       "!node_modules/onnxruntime-node/**/*",
       "!node_modules/onnxruntime-web/**/*",
-      "!node_modules/sharp/**/*"
+      "!node_modules/sharp/**/*",
+      "!node_modules/**/*.map",
+      "!node_modules/pdf-parse/dist/pdf-parse/web/**/*"
     ],
     "win": {
       "target": [
@@ -156,6 +164,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
-    }
+    },
+    "electronLanguages": [
+      "en-US",
+      "zh-CN",
+      "zh-TW"
+    ]
   }
 }
