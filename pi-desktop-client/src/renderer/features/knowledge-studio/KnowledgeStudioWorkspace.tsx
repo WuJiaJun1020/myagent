@@ -1,3 +1,5 @@
+import { KnowledgeDialog, useKnowledgeConfirmation } from "./KnowledgeDialog";
+import { HoverHint, HintButton } from "../../components/ui/tooltip";
 import {
   AlertCircle,
   ArrowLeft,
@@ -9,6 +11,7 @@ import {
   Globe2,
   LoaderCircle,
   PackageCheck,
+  PanelLeft,
   Plus,
   RefreshCw,
   Search,
@@ -110,6 +113,7 @@ function SourceSegments({ detail, comparison = false }: { detail: KnowledgeSourc
 }
 
 function SourcesPanel() {
+  const { confirm, confirmation } = useKnowledgeConfirmation();
   const snapshot = useKnowledgeStudioStore((state) => state.snapshot);
   const detail = useKnowledgeStudioStore((state) => state.sourceDetail);
   const selectedId = useKnowledgeStudioStore((state) => state.selectedSourceId);
@@ -174,15 +178,15 @@ function SourcesPanel() {
       setMode("none"); setTitle(""); setUrl("");
     }
   };
-  const deleteSelectedSource = () => {
+  const deleteSelectedSource = async () => {
     if (!detail) return;
     const references = snapshot?.batches.filter((batch) => batch.sourceIds.includes(detail.id)) ?? [];
     const published = references.filter((batch) => batch.status === "published" || batch.artifact);
     const taskDetail = references.length > 0
       ? `\n\n同时会永久删除 ${references.length} 个关联生成任务${published.length > 0 ? `，其中 ${published.length} 个已经发布` : ""}，包括候选题、生成记录和题包文件。`
       : "";
-    if (!window.confirm(`确定删除资料“${detail.title}”吗？${taskDetail}\n\n此操作无法撤销。`)) return;
-    if (published.length > 0 && !window.confirm("再次确认：已发布题包也会被永久删除，删除后无法从练习题库追溯这些产物。是否继续？")) return;
+    if (!await confirm(`确定删除资料“${detail.title}”吗？${taskDetail}\n\n此操作无法撤销。`)) return;
+    if (published.length > 0 && !await confirm("再次确认：已发布题包也会被永久删除，删除后无法从练习题库追溯这些产物。是否继续？")) return;
     void deleteSource({ id: detail.id, deleteReferencingBatches: references.length > 0 });
   };
 
@@ -232,7 +236,7 @@ function SourcesPanel() {
                         remarkPlugins={[remarkGfm]}
                         skipHtml
                         components={{
-                          a: ({ children, href }) => <span className="knowledge-markdown-link" title={href}>{children}</span>,
+                          a: ({ children, href }) => <HoverHint content={href}><span className="knowledge-markdown-link" >{children}</span></HoverHint>,
                           img: ({ alt }) => <span className="knowledge-markdown-image">图片：{alt || "原文插图"}</span>,
                         }}
                       >{originalPreview.content ?? ""}</ReactMarkdown>
@@ -255,14 +259,14 @@ function SourcesPanel() {
   }
 
   return (
-    <div className="knowledge-sources-layout">
+    <div className="knowledge-sources-layout">{confirmation}
       <section className="knowledge-source-list-panel">
         <div className="knowledge-panel-heading">
-          <div><span className="eyebrow">SOURCE LIBRARY</span><h2>资料库</h2></div>
+          <div><h2>资料库</h2></div>
           <div className="knowledge-import-menu" aria-label="导入资料">
-            <button type="button" title="导入本地文件" onClick={() => void importFiles()} disabled={busy}><FolderOpen size={15} /><span>文件</span></button>
-            <button type="button" title="粘贴文本" onClick={() => setMode("text")}><Plus size={15} /><span>文本</span></button>
-            <button type="button" title="导入网页" onClick={() => setMode("url")}><Globe2 size={15} /><span>网页</span></button>
+            <HintButton type="button" hint="导入本地文件" onClick={() => void importFiles()} disabled={busy}><FolderOpen size={15} /><span>文件</span></HintButton>
+            <HintButton type="button" hint="粘贴文本" onClick={() => setMode("text")}><Plus size={15} /><span>文本</span></HintButton>
+            <HintButton type="button" hint="导入网页" onClick={() => setMode("url")}><Globe2 size={15} /><span>网页</span></HintButton>
           </div>
         </div>
         <div className="knowledge-source-list">
@@ -305,9 +309,7 @@ function SourcesPanel() {
       </section>
 
       {mode !== "none" && (
-        <div className="knowledge-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setMode("none"); }}>
-          <section className="knowledge-modal" role="dialog" aria-modal="true">
-            <header><div><Sparkles size={18} /><strong>{mode === "text" ? "粘贴文本资料" : "导入单页网页"}</strong></div><button type="button" onClick={() => setMode("none")}><X size={17} /></button></header>
+        <KnowledgeDialog title={mode === "text" ? "粘贴文本资料" : "导入单页网页"} onClose={() => setMode("none")} actions={<> <button type="button" onClick={() => setMode("none")}>取消</button><button className="primary" type="button" disabled={busy || (mode === "text" ? !title.trim() || content.trim().length < 40 : !url.trim())} onClick={() => void (mode === "text" ? submitText() : submitUrl())}>{busy && <LoaderCircle className="spin" size={15} />}导入</button> </>}>
             <label>资料标题<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={mode === "url" ? "可留空，自动读取网页标题" : "例如：Agent Memory 设计笔记"} /></label>
             {mode === "text" ? (
               <label>资料正文<textarea rows={13} value={content} onChange={(event) => setContent(event.target.value)} placeholder="粘贴 Markdown、纯文本或整理后的资料……" /></label>
@@ -315,15 +317,15 @@ function SourcesPanel() {
               <label>网页地址<input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com/article" /></label>
             )}
             <p className="knowledge-hint">资料只保存在本机；只有创建生成任务并确认后，所选片段才会发送给模型 Provider。</p>
-            <footer><button type="button" onClick={() => setMode("none")}>取消</button><button className="primary" type="button" disabled={busy || (mode === "text" ? !title.trim() || content.trim().length < 40 : !url.trim())} onClick={() => void (mode === "text" ? submitText() : submitUrl())}>{busy && <LoaderCircle className="spin" size={15} />}导入</button></footer>
-          </section>
-        </div>
+        </KnowledgeDialog>
       )}
     </div>
   );
 }
 
 function GeneratePanel() {
+  const [configOpen, setConfigOpen] = useState(false);
+  const [budgetOpen, setBudgetOpen] = useState(false);
   const snapshot = useKnowledgeStudioStore((state) => state.snapshot);
   const modelInfo = useKnowledgeStudioStore((state) => state.modelInfo);
   const busy = useKnowledgeStudioStore((state) => state.busy);
@@ -390,14 +392,7 @@ function GeneratePanel() {
     saveGenerationThinkingLevel(aiSettings.thinkingLevel);
   }, [aiSettings.thinkingLevel]);
 
-  useEffect(() => {
-    if (!sourcePickerOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSourcePickerOpen(false);
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [sourcePickerOpen]);
+
 
   const totalChars = snapshot?.sources.filter((source) => selected.includes(source.id)).reduce((sum, source) => sum + source.charCount, 0) ?? 0;
   const selectedSources = snapshot?.sources.filter((source) => selected.includes(source.id)) ?? [];
@@ -469,7 +464,7 @@ function GeneratePanel() {
         <header className="knowledge-generation-form-header"><h2>创建题目生成任务</h2><span className="knowledge-form-source-count">{selected.length} 份资料 · {questionCount || 0} 道题</span></header>
         <div className="knowledge-generation-form-body">
           <div className="knowledge-generation-settings">
-            <div className="knowledge-form-section-title"><span>01</span><div><h3>任务设置</h3><p>确定题包的范围与出题难度</p></div></div>
+            <div className="knowledge-form-section-title"><div><h3>任务设置</h3></div></div>
             <div className="knowledge-form-grid">
               <label>任务名称<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
               <label>目标岗位<input value={targetRole} onChange={(event) => setTargetRole(event.target.value)} /></label>
@@ -477,35 +472,35 @@ function GeneratePanel() {
               <label>整体难度<select value={difficulty} onChange={(event) => setDifficulty(event.target.value as typeof difficulty)}><option value="mixed">混合难度</option><option value="basic">入门</option><option value="intermediate">中级</option><option value="advanced">高级</option></select></label>
             </div>
             <section className="knowledge-generation-source-summary">
-              <div className="knowledge-ai-heading"><div className="knowledge-form-section-title"><span>02</span><div><h3>事实来源</h3><p>从资料库选择生成题目的依据</p></div></div><button className="knowledge-source-select-button" type="button" onClick={openSourcePicker}><FolderOpen size={15} />选择资料</button></div>
+              <div className="knowledge-ai-heading"><div className="knowledge-form-section-title"><div><h3>事实来源</h3></div></div><button className="knowledge-source-select-button" type="button" onClick={openSourcePicker}><FolderOpen size={15} />选择资料</button></div>
               <div className="knowledge-selected-source-overview"><strong>{selected.length ? `已选择 ${selected.length} 份资料` : "尚未选择资料"}</strong><span>{selected.length ? `原文共 ${totalChars.toLocaleString()} 字符 · 最多 ${MAX_KNOWLEDGE_BATCH_SOURCES} 份` : "请选择至少一份资料后开始生成"}</span></div>
-              {selected.length > 0 && <p className="knowledge-ai-routing-hint">这里是所选资料全文字符数；下方预览按清洗后的全部片段估算。各窗口均衡分配题数，问题规划先按每窗配额调用一次，仅在失败时拆小；答案每次最多 5 道，独立审核每次最多 10 道。实际 token 以模型用量为准。</p>}
-              {selected.length > 0 && <div className="knowledge-window-preview" aria-live="polite">{!Number.isInteger(questionCount) || questionCount < 1 || questionCount > MAX_KNOWLEDGE_BATCH_QUESTIONS ? <span className="knowledge-window-preview-error">题目数量须为 1–{MAX_KNOWLEDGE_BATCH_QUESTIONS} 道</span> : windowPreview ? <><strong>预计 {windowPreview.windowCount} 个资料窗口 · 覆盖 {windowPreview.coveredSegments}/{windowPreview.availableSegments} 个片段</strong><span>资料正文约 {windowPreview.totalSourceTokens.toLocaleString()} tokens；模型容量 {windowPreview.modelContextWindowTokens.toLocaleString()} tokens（运行时元数据）</span><span>每次完整输入预算 {windowPreview.fullInputBudgetTokens.toLocaleString()} tokens（容量 70%，最高参照 258k）；提示词与 Schema 约 {windowPreview.requestOverheadTokens.toLocaleString()}，后续阶段余量 {windowPreview.planningReserveTokens.toLocaleString()}，资料净预算约 {windowPreview.sourceBudgetTokens.toLocaleString()} tokens</span><details><summary>查看各窗口预计输入与题数配额</summary><ol>{windowPreview.windows.map((item) => <li key={item.index}>窗口 {item.index}：计划 {item.plannedQuestions} 道局部候选、{item.segmentCount} 个片段、{item.sourceCount} 份资料、完整输入约 {item.estimatedInputTokens.toLocaleString()} tokens；{item.firstSegmentId}@{item.firstStartOffset} → {item.lastSegmentId}@{item.lastEndOffset}</li>)}</ol></details></> : windowPreviewError ? <span className="knowledge-window-preview-error">无法预估窗口：{windowPreviewError}</span> : <span>正在估算资料窗口和 token 预算…</span>}</div>}
-              {selectedSources.length > 0 && <div className="knowledge-selected-source-chips">{selectedSources.slice(0, 3).map((source) => <span key={source.id} title={source.title}>{source.title}</span>)}{selectedSources.length > 3 && <span>另有 {selectedSources.length - 3} 份</span>}</div>}
+              {selected.length > 0 && <button className="knowledge-detail-link" type="button" onClick={() => setBudgetOpen(true)}>查看资料窗口与输入预算<ChevronRight size={14} /></button>}
+              {budgetOpen && <KnowledgeDialog title="资料窗口与输入预算" onClose={() => setBudgetOpen(false)}><div className="knowledge-window-preview" aria-live="polite">{!Number.isInteger(questionCount) || questionCount < 1 || questionCount > MAX_KNOWLEDGE_BATCH_QUESTIONS ? <span className="knowledge-window-preview-error">题目数量须为 1–{MAX_KNOWLEDGE_BATCH_QUESTIONS} 道</span> : windowPreview ? <><strong>预计 {windowPreview.windowCount} 个资料窗口 · 覆盖 {windowPreview.coveredSegments}/{windowPreview.availableSegments} 个片段</strong><span>资料正文约 {windowPreview.totalSourceTokens.toLocaleString()} tokens；模型容量 {windowPreview.modelContextWindowTokens.toLocaleString()} tokens（运行时元数据）</span><span>每次完整输入预算 {windowPreview.fullInputBudgetTokens.toLocaleString()} tokens（容量 70%，最高参照 258k）；提示词与 Schema 约 {windowPreview.requestOverheadTokens.toLocaleString()}，后续阶段余量 {windowPreview.planningReserveTokens.toLocaleString()}，资料净预算约 {windowPreview.sourceBudgetTokens.toLocaleString()} tokens</span><section><h3>窗口与题数配额</h3><ol>{windowPreview.windows.map((item) => <li key={item.index}>窗口 {item.index}：计划 {item.plannedQuestions} 道局部候选、{item.segmentCount} 个片段、{item.sourceCount} 份资料、完整输入约 {item.estimatedInputTokens.toLocaleString()} tokens；{item.firstSegmentId}@{item.firstStartOffset} → {item.lastSegmentId}@{item.lastEndOffset}</li>)}</ol></section></> : windowPreviewError ? <span className="knowledge-window-preview-error">无法预估窗口：{windowPreviewError}</span> : <span>正在估算资料窗口和 token 预算…</span>}</div></KnowledgeDialog>}
+              {selectedSources.length > 0 && <div className="knowledge-selected-source-chips">{selectedSources.slice(0, 3).map((source) => <HoverHint content={source.title} key={source.id}><span  >{source.title}</span></HoverHint>)}{selectedSources.length > 3 && <span>另有 {selectedSources.length - 3} 份</span>}</div>}
             </section>
-            <section className="knowledge-generation-ai">
-              <div className="knowledge-ai-heading"><div className="knowledge-form-section-title"><span>03</span><div><h3>AI 参数设置</h3><p>配置将随任务保存，重试沿用本次参数</p></div></div><button type="button" onClick={resetAiSettings}>恢复默认</button></div>
+            <button className="knowledge-config-entry" type="button" onClick={() => setConfigOpen(true)}><span><strong>模型与提示词</strong><small>{selectedModel?.name ?? "默认模型"}</small></span><ChevronRight size={16} /></button>
+            {configOpen && <KnowledgeDialog title="模型与提示词" onClose={() => setConfigOpen(false)}><section className="knowledge-generation-ai">
+              <div className="knowledge-ai-heading"><h3>调用设置</h3><button type="button" onClick={resetAiSettings}>恢复默认</button></div>
               <div className="knowledge-ai-routing">
                 <label>生成模型<select value={selectedModelKey} onChange={(event) => selectGenerationModel(event.target.value)}><option value="">跟随默认模型{modelInfo?.configured ? ` · ${modelInfo.providerId} / ${modelInfo.modelId}` : ""}</option>{aiSettings.model && !selectedModel && <option value={selectedModelKey}>上次选择的模型不可用 · {aiSettings.model.providerId} / {aiSettings.model.modelId}</option>}{availableModels.map((model) => <option key={`${model.providerId}/${model.modelId}`} value={JSON.stringify([model.providerId, model.modelId])}>{model.providerId} / {model.name === model.modelId ? model.modelId : `${model.name} (${model.modelId})`}</option>)}</select></label>
                 <label>思考程度<select value={aiSettings.thinkingLevel ?? "default"} onChange={(event) => setAiSettings((current) => ({ ...current, thinkingLevel: event.target.value as KnowledgeGenerationAiSettings["thinkingLevel"] }))}><option value="default">模型默认（不指定）</option>{selectedModel?.reasoningLevels.map((level) => <option key={level} value={level}>{({ minimal: "最少", low: "低", medium: "中", high: "高", xhigh: "超高", max: "最大" } as const)[level]}</option>)}</select></label>
+                <label>超时（秒）<input type="number" min={10} max={300} step={10} value={aiSettings.timeoutMs / 1000} onChange={(event) => setAiSettings((current) => ({ ...current, timeoutMs: Number(event.target.value) * 1000 }))} /></label>
               </div>
-              <p className="knowledge-ai-routing-hint"><Cpu size={13} />{selectedModel ? `本任务所有阶段使用 ${selectedModel.providerId} / ${selectedModel.modelId}；思考程度以模型支持情况为准。` : "未指定模型时跟随应用默认设置；非推理模型不能调整思考程度。"}</p>
-              <div className="knowledge-ai-common"><label>单次请求超时（秒）<input type="number" min={10} max={300} step={10} value={aiSettings.timeoutMs / 1000} onChange={(event) => setAiSettings((current) => ({ ...current, timeoutMs: Number(event.target.value) * 1000 }))} /></label><div><strong>应用层输入预算</strong><span>{windowPreview ? `${windowPreview.fullInputBudgetTokens.toLocaleString()} tokens / 次（含系统提示词、Schema 与资料）` : "按实际模型容量动态计算；容量未知时禁止生成"}</span></div></div>
+              <p className="knowledge-ai-budget-note">输入预算：{windowPreview ? `${windowPreview.fullInputBudgetTokens.toLocaleString()} tokens / 次` : "按模型容量计算，容量未知时禁止生成"}<span>配置随任务保存，重试沿用。</span></p>
               <div className="knowledge-ai-stage-tabs" role="tablist" aria-label="模型调用阶段">{([ ["drafts", "知识点与问题"], ["answers", "答案与 Rubric"], ["review", "独立质量校验"] ] as const).map(([stage, label]) => <button key={stage} type="button" role="tab" aria-selected={activeAiStage === stage} className={activeAiStage === stage ? "active" : ""} onClick={() => setActiveAiStage(stage)}>{label}</button>)}</div>
               <div className="knowledge-ai-stage-panel" role="tabpanel">
-                <p className="knowledge-ai-routing-hint">温度使用模型默认值；不设置应用层输出 token 上限，仍受模型和服务商自身限制。</p>
+
                 <label>补充系统指令<textarea rows={2} maxLength={4000} value={activeStageSettings.additionalSystemInstruction} onChange={(event) => updateStage(activeAiStage, { additionalSystemInstruction: event.target.value })} placeholder="可选；补充出题偏好，不替换内置约束。" /></label>
-                <div className="knowledge-ai-prompt-heading"><strong>本阶段完整系统提示词</strong><span>下方就是实际发送的系统指令；资料和题目作为单独输入传入</span></div>
+                <div className="knowledge-ai-prompt-heading"><strong>完整系统提示词</strong><span>只读预览 · 包含上方补充指令</span></div>
                 <pre className="knowledge-ai-prompt-content">{knowledgeSystemPrompt(activeAiStage, activeStageSettings.additionalSystemInstruction)}</pre>
-                <p className="knowledge-ai-version">模板标识：{KNOWLEDGE_STUDIO_PROMPT_VERSION}（仅用于追溯修订，不是提示词正文）</p>
+                <p className="knowledge-ai-version">模板：{KNOWLEDGE_STUDIO_PROMPT_VERSION}</p>
               </div>
-              <div className="knowledge-workflow-compact">知识点与问题 <ChevronRight size={12} /> 答案与 Rubric <ChevronRight size={12} /> 质量校验 <ChevronRight size={12} /> 人工审核</div>
-            </section>
+            </section></KnowledgeDialog>}
           </div>
         </div>
         <footer className="knowledge-generation-form-footer"><div className="knowledge-generation-submit-row"><label className="knowledge-privacy-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>允许将所选资料发送给当前模型。资料中的指令仅作为文本处理。</span></label><button className="knowledge-generate-button" type="button" disabled={busy || (modelInfo?.configured !== true && !aiSettings.model) || selected.length === 0 || selected.length > MAX_KNOWLEDGE_BATCH_SOURCES || !title.trim() || !targetRole.trim() || !confirmed || !validAiSettings || !Number.isInteger(questionCount) || questionCount < 1 || questionCount > MAX_KNOWLEDGE_BATCH_QUESTIONS} onClick={() => void createBatch({ title, targetRole, sourceIds: selected, questionCount, difficulty, privacyConfirmed: confirmed, aiSettings })}>{busy ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}开始批量生成</button></div></footer>
       </section>
-      {sourcePickerOpen && <div className="knowledge-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSourcePickerOpen(false); }}><section className="knowledge-source-selection-dialog" role="dialog" aria-modal="true" aria-label="选择事实来源"><header><div><span className="eyebrow">SOURCE LIBRARY</span><h2>选择事实来源</h2><p>最多 {MAX_KNOWLEDGE_BATCH_SOURCES} 份；只有确认后才更新任务选择。</p></div><button type="button" aria-label="关闭资料选择" onClick={() => setSourcePickerOpen(false)}><X size={18} /></button></header><div className="knowledge-source-picker-tools"><label className="knowledge-source-search"><Search size={16} /><input value={sourceQuery} onChange={(event) => setSourceQuery(event.target.value)} placeholder="搜索资料名称" autoFocus /></label><button type="button" onClick={() => setDraftSelected(snapshot?.sources.slice(0, MAX_KNOWLEDGE_BATCH_SOURCES).map((source) => source.id) ?? [])}>全选</button><button type="button" onClick={() => setDraftSelected([])}>清空</button></div><div className="knowledge-source-picker-heading"><strong>已选 {draftSelected.length}/{MAX_KNOWLEDGE_BATCH_SOURCES}</strong><span>资料内容将在确认生成后发送给当前模型</span></div><div className="knowledge-source-picker">{visibleSources.map((source) => <label className={draftSelected.includes(source.id) ? "selected" : ""} key={source.id}><input type="checkbox" checked={draftSelected.includes(source.id)} disabled={!draftSelected.includes(source.id) && draftSelected.length >= MAX_KNOWLEDGE_BATCH_SOURCES} onChange={(event) => toggleDraftSource(source.id, event.target.checked)} /><span className="knowledge-format-badge">{formatLabel(source.format)}</span><span><strong>{source.title}</strong><small>{source.segmentCount} 个片段 · {source.charCount.toLocaleString()} 字符</small></span></label>)}{visibleSources.length === 0 && <div className="knowledge-source-picker-empty">{sourceQuery ? "没有匹配的资料" : "资料库还是空的，请先导入资料"}</div>}</div><footer><button type="button" onClick={() => setSourcePickerOpen(false)}>取消</button><button type="button" className="primary" onClick={applySourceSelection}>完成选择 · {draftSelected.length} 份</button></footer></section></div>}
+      {sourcePickerOpen && <KnowledgeDialog title="选择事实来源" onClose={() => setSourcePickerOpen(false)} actions={<> <button type="button" onClick={() => setSourcePickerOpen(false)}>取消</button><button type="button" className="primary" onClick={applySourceSelection}>完成选择 · {draftSelected.length} 份</button> </>}> <div className="knowledge-source-picker-tools"><label className="knowledge-source-search"><Search size={16} /><input value={sourceQuery} onChange={(event) => setSourceQuery(event.target.value)} placeholder="搜索资料名称" autoFocus /></label><button type="button" onClick={() => setDraftSelected(snapshot?.sources.slice(0, MAX_KNOWLEDGE_BATCH_SOURCES).map((source) => source.id) ?? [])}>全选</button><button type="button" onClick={() => setDraftSelected([])}>清空</button></div><div className="knowledge-source-picker-heading"><strong>已选 {draftSelected.length}/{MAX_KNOWLEDGE_BATCH_SOURCES}</strong><span>资料内容将在确认生成后发送给当前模型</span></div><div className="knowledge-source-picker">{visibleSources.map((source) => <label className={draftSelected.includes(source.id) ? "selected" : ""} key={source.id}><input type="checkbox" checked={draftSelected.includes(source.id)} disabled={!draftSelected.includes(source.id) && draftSelected.length >= MAX_KNOWLEDGE_BATCH_SOURCES} onChange={(event) => toggleDraftSource(source.id, event.target.checked)} /><span className="knowledge-format-badge">{formatLabel(source.format)}</span><span><strong>{source.title}</strong><small>{source.segmentCount} 个片段 · {source.charCount.toLocaleString()} 字符</small></span></label>)}{visibleSources.length === 0 && <div className="knowledge-source-picker-empty">{sourceQuery ? "没有匹配的资料" : "资料库还是空的，请先导入资料"}</div>}</div> </KnowledgeDialog>}
     </div>
   );
 }
@@ -553,6 +548,8 @@ function CandidateEditor({ candidate }: { candidate: KnowledgeQuestionCandidate 
 }
 
 function ReviewPanel() {
+  const [tasksCollapsed, setTasksCollapsed] = useState(false);
+  const { confirm, confirmation } = useKnowledgeConfirmation();
   const snapshot = useKnowledgeStudioStore((state) => state.snapshot);
   const batch = useKnowledgeStudioStore((state) => state.batch);
   const selectedBatchId = useKnowledgeStudioStore((state) => state.selectedBatchId);
@@ -583,42 +580,42 @@ function ReviewPanel() {
     }
   };
   const openInterviewBank = () => { setInterviewView("question-bank"); setActiveModule("interview"); };
-  const deleteSelectedBatch = () => {
+  const deleteSelectedBatch = async () => {
     if (!batch) return;
     const publishedWarning = batch.artifact || batch.status === "published"
       ? "\n\n该任务已经发布，本地 JSON 题包也会被永久删除。"
       : "";
-    if (!window.confirm(`确定删除生成任务“${batch.title}”吗？候选题、审核结果和生成记录会一并删除。${publishedWarning}\n\n此操作无法撤销。`)) return;
+    if (!await confirm(`确定删除生成任务“${batch.title}”吗？候选题、审核结果和生成记录会一并删除。${publishedWarning}\n\n此操作无法撤销。`)) return;
     void deleteBatch(batch.id);
   };
   if (batch && view === "process") return <KnowledgeGenerationProcess batch={batch} progress={progress} sources={snapshot?.sources ?? []} onBack={() => setView("review")} />;
   return (
-    <div className="knowledge-review-layout">
+    <div className={`knowledge-review-layout${tasksCollapsed ? " tasks-collapsed" : ""}`}>{confirmation}
       <aside className="knowledge-batch-list">
-        <div className="knowledge-panel-heading"><div><span className="eyebrow">GENERATION RUNS</span><h2>生成任务</h2></div></div>
-        {snapshot?.batches.map((item) => <button type="button" className={selectedBatchId === item.id ? "active" : ""} key={item.id} onClick={() => void selectBatch(item.id)}><span><strong>{item.title}</strong><small>{item.candidateCount}/{item.requestedQuestionCount} 题 · {item.targetRole}</small><small title={`${generationModelLabel(item)} · ${generationThinkingLabel(item)}`}>{generationModelLabel(item)} · {generationThinkingLabel(item)}</small></span><em className={item.status}>{statusLabel(item.status)}</em></button>)}
+        <div className="knowledge-panel-heading"><div><h2>生成任务</h2></div></div>
+        {snapshot?.batches.map((item) => <button type="button" className={selectedBatchId === item.id ? "active" : ""} key={item.id} onClick={() => void selectBatch(item.id)}><span><strong>{item.title}</strong><small>{item.candidateCount}/{item.requestedQuestionCount} 题 · {item.targetRole}</small><HoverHint content={`${generationModelLabel(item)} · ${generationThinkingLabel(item)}`}><small >{generationModelLabel(item)} · {generationThinkingLabel(item)}</small></HoverHint></span><em className={item.status}>{statusLabel(item.status)}</em></button>)}
         {snapshot?.batches.length === 0 && <div className="knowledge-empty"><Sparkles size={28} /><strong>还没有生成任务</strong></div>}
       </aside>
       <header className="knowledge-review-header knowledge-review-topbar">
         {batch ? <>
-          <div className="knowledge-review-title"><span className={`knowledge-batch-status ${batch.status}`}>{statusLabel(batch.status)}</span><h2>{batch.title}</h2><p>{batch.targetRole} · 计划 {batch.requestedQuestionCount} 题 · {batch.sourceIds.length} 份资料</p><p className="knowledge-review-model-info"><Cpu size={13} />{generationModelLabel(batch)}<span>·</span>{generationThinkingLabel(batch)}</p></div>
+          <div className="knowledge-review-title"><HintButton className="knowledge-task-toggle" type="button" hint={tasksCollapsed ? "展开任务列表" : "收起任务列表"} aria-expanded={!tasksCollapsed} onClick={() => setTasksCollapsed(value => !value)}><PanelLeft size={16} />{tasksCollapsed ? "展开任务列表" : "收起任务列表"}</HintButton><span className={`knowledge-batch-status ${batch.status}`}>{statusLabel(batch.status)}</span><h2>{batch.title}</h2><p>{batch.targetRole} · 计划 {batch.requestedQuestionCount} 题 · {batch.sourceIds.length} 份资料</p><p className="knowledge-review-model-info"><Cpu size={13} />{generationModelLabel(batch)}<span>·</span>{generationThinkingLabel(batch)}</p></div>
           <div className="knowledge-actions">
             <button type="button" onClick={() => setView("process")}><Sparkles size={15} />查看生成过程</button>
             {(batch.status === "queued" || batch.status === "running") && <button type="button" onClick={() => void cancelBatch(batch.id)}>取消生成</button>}
             {(batch.status === "failed" || batch.status === "cancelled") && <button type="button" onClick={() => { void retryBatch(batch.id); setView("process"); }}><RefreshCw size={15} />重新生成</button>}
             {batch.artifact && <button type="button" onClick={() => void revealArtifact(batch.artifact!.path)}><FolderOpen size={15} />查看题包</button>}
-            <button type="button" disabled={busy || supportedCount === 0 || (batch.status !== "review" && batch.status !== "published")}
-              title="仅导入证据支持、未被人工驳回且原文引文可核对的题目；用于联调，不要求先发布 JSON 题包"
-              onClick={() => void importSupported()}><PackageCheck size={15} />导入面试题库（{supportedCount}）</button>
+            <HintButton type="button" disabled={busy || supportedCount === 0 || (batch.status !== "review" && batch.status !== "published")}
+              hint="仅导入证据支持、未被人工驳回且原文引文可核对的题目；用于联调，不要求先发布 JSON 题包"
+              onClick={() => void importSupported()}><PackageCheck size={15} />导入面试题库（{supportedCount}）</HintButton>
             {importedToInterview && <button type="button" onClick={openInterviewBank}>查看面试题库<ChevronRight size={15} /></button>}
-            <button className="danger-ghost" type="button" disabled={busy || batch.status === "queued" || batch.status === "running"} title={batch.status === "queued" || batch.status === "running" ? "请先取消运行中的任务" : "删除任务及题包"} onClick={deleteSelectedBatch}><Trash2 size={15} />删除</button>
+            <HintButton className="danger-ghost" type="button" disabled={busy || batch.status === "queued" || batch.status === "running"} hint={batch.status === "queued" || batch.status === "running" ? "请先取消运行中的任务" : "删除任务及题包"} onClick={deleteSelectedBatch}><Trash2 size={15} />删除</HintButton>
             <button className="primary" type="button" disabled={!canPublish || busy} onClick={() => void publishBatch(batch.id)}><PackageCheck size={15} />发布题包</button>
           </div>
-        </> : <div><span className="eyebrow">GENERATION RUNS</span><h2>选择生成任务</h2></div>}
+        </> : <div><h2>选择生成任务</h2></div>}
       </header>
       <section className="knowledge-review-candidates-column">
         {batch ? <>
-          <header className="knowledge-candidates-heading"><div><span className="eyebrow">QUESTION CANDIDATES</span><h2>候选题</h2></div><span>{batch.candidates.length}/{batch.requestedQuestionCount}</span></header>
+          <header className="knowledge-candidates-heading"><div><h2>候选题</h2></div><span>{batch.candidates.length}/{batch.requestedQuestionCount}</span></header>
           <div className="knowledge-candidates-layout">
             <nav>{batch.candidates.map((item) => <button key={item.id} className={candidate?.id === item.id ? "active" : ""} type="button" onClick={() => setSelectedCandidateId(item.id)}><span>{item.ordinal + 1}</span><span><strong>{item.question}</strong><small>{validationLabel(item.validationStatus)} · {item.humanStatus === "approved" ? "已通过" : item.humanStatus === "rejected" ? "已驳回" : "待审核"}</small></span></button>)}</nav>
             <main>{candidate ? <CandidateEditor candidate={candidate} /> : <div className="knowledge-empty"><LoaderCircle size={32} /><strong>暂无候选题</strong></div>}</main>
@@ -650,7 +647,6 @@ export function KnowledgeStudioWorkspace() {
     <div className="knowledge-studio-shell">
       <header className="knowledge-studio-toolbar">
         <nav className="knowledge-tabs">{tabs.map(({ id, label, count, icon: Icon }) => <button className={tab === id ? "active" : ""} type="button" key={id} onClick={() => setTab(id)}><Icon size={16} />{label}{count !== null && <span>{count}</span>}</button>)}</nav>
-        <div className="knowledge-toolbar-stats" aria-label="知识工坊统计"><span><b>{snapshot?.sourceCount ?? 0}</b> 资料</span><span><b>{snapshot?.candidateCount ?? 0}</b> 候选题</span><span><b>{snapshot?.publishedCount ?? 0}</b> 已发布</span></div>
       </header>
       {error && <div className="knowledge-global-message error"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={clearError}><X size={15} /></button></div>}
       {notice && !error && <div className="knowledge-global-message success"><Check size={16} /><span>{notice}</span></div>}

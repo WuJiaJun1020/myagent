@@ -1,3 +1,4 @@
+import { HintButton, HoverHint } from "../../components/ui/tooltip";
 import { AlertCircle, ArrowLeft, Bot, Bug, ClipboardCheck, Code2, Download, Globe2, Pause, Play, Send, Sparkles, UserRound } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_INTERVIEW_CHAT_MODEL, MAX_INTERVIEW_ROUNDS, type CandidateTurnResult, type InterviewChatModelInfo, type InterviewSession } from "../../../shared/contracts/interview";
@@ -225,9 +226,9 @@ export function InterviewConversation({ session }: { session: InterviewSession }
         <span><strong>{session.interview.title}</strong><small>{session.interview.candidateName} · {session.interview.positionTitle}</small></span>
       </div>
       <div className="interview-conversation-header-actions">
-        <button type="button" className="interview-call-header-button" disabled={callGroups.length === 0}
+        <HintButton type="button" className="interview-call-header-button" disabled={callGroups.length === 0}
           onClick={() => setSelectedCallGroupId(callGroups.at(-1)!.id)}
-          title="按轮次查看完整提示词、模型调用和导演审查" aria-label="调试记录"><Bug size={15} /><span>调试记录</span></button>
+          hint="按轮次查看完整提示词、模型调用和导演审查" aria-label="调试记录"><Bug size={15} /><span>调试记录</span></HintButton>
         <button type="button" disabled={session.turns.length === 0} onClick={exportText}><Download size={15} />导出会话</button>
         {readOnly ? <span className="interview-conversation-ended-label">已结束</span>
           : <button type="button" disabled={chatting || agentBusy || mutation || autoStartInterviewId === session.interview.id} onClick={() => { void finish(); }}>结束面试</button>}
@@ -257,10 +258,10 @@ export function InterviewConversation({ session }: { session: InterviewSession }
           return <article className={`interview-conversation-message ${turn.role === "candidate" ? "candidate" : "interviewer"}`} key={turn.id}>
           {turn.role === "interviewer" && <span className="interview-message-avatar"><Bot size={16} /></span>}
           <div className="interview-message-main"><div className="interview-message-byline"><strong>{turn.role === "candidate" ? turn.source === "agent" ? "模拟候选人" : "我" : "AI 面试官"}</strong><span>{timeLabel(turn.createdAt)}</span>
-            {turn.role === "interviewer" && turn.questionType && <span className="interview-question-type-badge"
-              title="这条面试官消息的最终分类">{QUESTION_TYPE_LABELS[turn.questionType]}</span>}
+            {turn.role === "interviewer" && turn.questionType && <HoverHint content="这条面试官消息的最终分类"><span className="interview-question-type-badge"
+              >{QUESTION_TYPE_LABELS[turn.questionType]}</span></HoverHint>}
             {turn.role === "candidate" && turn.source === "agent" && turn.candidateOutcome?.mistakeMade
-              && <span className="interview-candidate-mistake-badge" title={`模型自报故意误答，原文匹配：“${turn.candidateOutcome.mistakeQuote}”；未经独立技术核验`}>故意误答</span>}
+              && <HoverHint content={`模型自报故意误答，原文匹配：“${turn.candidateOutcome.mistakeQuote}”；未经独立技术核验`}><span className="interview-candidate-mistake-badge" >故意误答</span></HoverHint>}
             {callGroup && <button type="button" className="interview-call-trigger" onClick={() => setSelectedCallGroupId(callGroup.id)}
               aria-label={`查看${callGroup.label}调用详情`}><Bug size={12} />调用详情</button>}
             {callGroup?.hasFailure && <span className="interview-call-status failure"><AlertCircle size={12} />含失败记录</span>}

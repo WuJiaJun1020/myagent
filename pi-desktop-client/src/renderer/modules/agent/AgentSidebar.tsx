@@ -1,12 +1,11 @@
+import { useRef } from "react";
+import { HintButton } from "../../components/ui/tooltip";
 import {
   Blocks,
-  BriefcaseBusiness,
-  Database,
-  Files,
-  FolderOpen,
-  GitPullRequest,
-  MessageCircle,
+  Plus,
   MessageSquareText,
+  Database,
+  FolderOpen,
   Settings,
 } from "lucide-react";
 import { FileTree } from "../../features/files/FileTree";
@@ -22,6 +21,7 @@ function getWorkspaceName(cwd: string): string {
 }
 
 export function AgentSidebar() {
+  const newSessionMenu = useRef<HTMLDivElement>(null);
   const status = useAgentStore((state) => state.processStatus);
   const busy = useAgentStore((state) => state.busy);
   const setStatus = useAgentStore((state) => state.setProcessStatus);
@@ -58,70 +58,52 @@ export function AgentSidebar() {
 
   return (
     <>
-      <nav className="sidebar-nav" aria-label="Agent 工作区导航">
-        <div className={`nav-session-row ${agentView === "activity" ? "active" : ""}`}>
-          <button className="nav-item nav-session-entry" type="button" onClick={() => setAgentView("activity")}>
-            <MessageSquareText size={16} />
-            <span>会话</span>
-            {busy && <span className="nav-running-dot" aria-label="执行中" />}
-          </button>
-          <div className="sidebar-mode-switch" role="group" aria-label="会话模式">
-            <button
-              type="button"
-              className={session?.mode === "chat" ? "active" : ""}
-              disabled={controlsDisabled}
-              aria-pressed={session?.mode === "chat"}
-              title="新建纯聊天"
-              onClick={() => {
-                setAgentView("activity");
-                void createSession("chat");
-              }}
-            >
-              <MessageCircle size={12} /><span>聊天</span>
-            </button>
-            <button
-              type="button"
-              className={session?.mode === "work" ? "active" : ""}
-              disabled={controlsDisabled}
-              aria-pressed={session?.mode === "work"}
-              title="新建工作会话"
-              onClick={() => {
-                setAgentView("activity");
-                void createSession("work");
-              }}
-            >
-              <BriefcaseBusiness size={12} /><span>工作</span>
-            </button>
-          </div>
+      <div className="sidebar-conversation-row">
+        <button className={`nav-item ${agentView === "activity" ? "active" : ""}`}
+          type="button" aria-current={agentView === "activity" ? "page" : undefined}
+          onClick={() => setAgentView("activity")}>
+          <MessageSquareText size={16} /><span>会话</span>
+        </button>
+        <HintButton className="icon-button" type="button" hint="新建会话" aria-label="新建会话"
+          disabled={controlsDisabled} onClick={(event) => {
+            const menu = newSessionMenu.current;
+            if (!menu) return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            menu.style.left = `${Math.max(8, rect.right - 160)}px`;
+            menu.style.top = `${rect.bottom + 6}px`;
+            menu.togglePopover();
+          }}>
+          <Plus size={16} />
+        </HintButton>
+        <div ref={newSessionMenu} popover="auto" className="sidebar-create-menu" aria-label="新建会话类型">
+          {(["chat", "work"] as const).map((mode) => <button key={mode} type="button" disabled={controlsDisabled}
+            onClick={() => {
+              newSessionMenu.current?.hidePopover();
+              setAgentView("activity");
+              void createSession(mode);
+            }}>新建{mode === "chat" ? "聊天" : "工作"}会话</button>)}
         </div>
-        <button className={`nav-item ${agentView === "files" ? "active" : ""}`} type="button" onClick={() => setAgentView("files")}>
-          <Files size={16} />
-          <span>项目文件</span>
-        </button>
-        <button className={`nav-item ${agentView === "review" ? "active" : ""}`} type="button" onClick={() => setAgentView("review")}>
-          <GitPullRequest size={16} />
-          <span>代码审查</span>
-        </button>
-        <button className={`nav-item ${agentView === "mcp" ? "active" : ""}`} type="button" onClick={() => setAgentView("mcp")}>
-          <Blocks size={16} />
-          <span>资源中心</span>
-        </button>
-        <button className={`nav-item ${agentView === "memory" ? "active" : ""}`} type="button" onClick={() => setAgentView("memory")}>
-          <Database size={16} />
-          <span>Pi 上下文</span>
-        </button>
-      </nav>
+      </div>
 
-      <section className="sidebar-projects" aria-label="项目">
-        <span className="section-label">项目</span>
-        <button className="workspace-button" type="button" title="选择工作区" onClick={() => void selectWorkspace()}>
+      <section className="sidebar-projects agent-projects" aria-label="项目">
+        <span className="section-label">当前工作区</span>
+        <HintButton className="workspace-button" type="button" hint="选择工作区" onClick={() => void selectWorkspace()}>
           <FolderOpen size={16} />
           <strong>{getWorkspaceName(status.cwd)}</strong>
-        </button>
+        </HintButton>
       </section>
 
       {agentView === "files" ? <FileTree /> : agentView === "activity" || agentView === "review" ? <SessionHistory />
         : <ResourceSidebarSummary view={agentView} />}
+
+      <nav className="sidebar-utilities" aria-label="工作区辅助功能">
+        <button className={`nav-item ${agentView === "mcp" ? "active" : ""}`} type="button" onClick={() => setAgentView("mcp")}>
+          <Blocks size={15} /><span>资源中心</span>
+        </button>
+        <button className={`nav-item ${agentView === "memory" ? "active" : ""}`} type="button" onClick={() => setAgentView("memory")}>
+          <Database size={15} /><span>Pi 上下文</span>
+        </button>
+      </nav>
 
       <div className="sidebar-footer">
         <div className={`connection ${status.state}`}>
@@ -131,9 +113,9 @@ export function AgentSidebar() {
             <small>{status.state === "running" ? "本地 RPC" : "Pi runtime"}</small>
           </span>
         </div>
-        <button className="icon-button" type="button" aria-label="打开设置" title="设置" onClick={() => setSettingsOpen(true)}>
+        <HintButton className="icon-button" type="button" aria-label="打开设置" hint="设置" onClick={() => setSettingsOpen(true)}>
           <Settings size={15} />
-        </button>
+        </HintButton>
       </div>
     </>
   );

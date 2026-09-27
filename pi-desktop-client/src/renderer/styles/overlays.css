@@ -1,0 +1,87 @@
+/* Shared overlays use the active module's palette and follow light/dark themes. */
+/* Chromium 135+ exposes the native picker without replacing select semantics:
+   https://developer.chrome.com/blog/a-customizable-select */
+@supports (appearance: base-select) {
+  select:not([multiple]):not([size]),
+  select:not([multiple]):not([size])::picker(select) {
+    appearance: base-select;
+  }
+
+  select:not([multiple]):not([size]) {
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  select:not([multiple]):not([size])::picker(select) {
+    min-width: anchor-size(width);
+    max-width: min(480px, calc(100vw - 24px));
+    max-height: min(360px, calc(100vh - 32px));
+    overflow: auto;
+    margin-block: 6px;
+    padding: 5px;
+    color: var(--text);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow-popover);
+    font: calc(12px + var(--ui-font-adjust))/1.5 var(--font-ui);
+  }
+
+  select:not([multiple]):not([size])::picker-icon {
+    content: "";
+    width: 7px;
+    height: 7px;
+    flex: 0 0 auto;
+    margin: -3px 2px 0 auto;
+    border-right: 1.5px solid var(--text-muted);
+    border-bottom: 1.5px solid var(--text-muted);
+    transform: rotate(45deg);
+  }
+
+  select:not([multiple]):not([size]):open::picker-icon {
+    transform: translateY(3px) rotate(225deg);
+  }
+
+  /* The trace drawer used to draw its own arrow over the native selector. */
+  .interview-call-drawer-toolbar select { padding-right: 10px; }
+  .interview-call-drawer-toolbar select + svg { display: none; }
+
+  select:not([multiple]):not([size]) option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 34px;
+    padding: 7px 10px;
+    color: var(--text);
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  select:not([multiple]):not([size]) option:checked {
+    background: var(--bg-selected);
+  }
+
+  select:not([multiple]):not([size]) option:hover,
+  select:not([multiple]):not([size]) option:focus-visible {
+    background: var(--bg-hover);
+    outline: none;
+  }
+
+  select:not([multiple]):not([size]) option::checkmark {
+    order: 1;
+    margin-left: auto;
+    color: var(--text-soft);
+  }
+
+  select:not([multiple]):not([size]) option:disabled {
+    color: var(--text-muted);
+    opacity: .5;
+    cursor: not-allowed;
+  }
+}

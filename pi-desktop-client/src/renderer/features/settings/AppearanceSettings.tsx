@@ -1,5 +1,6 @@
+import { paletteOptions, accentOptions, themeStyle, type PaletteId, type AccentId, type ThemeMode } from "../../lib/workspace-theme";
 import { Check, Minus, Plus, RotateCcw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties, type KeyboardEvent } from "react";
 import {
   codeFontOptions,
   contentFontOptions,
@@ -17,15 +18,22 @@ const themeOptions: Array<{ value: ThemePreference; label: string; description: 
   { value: "dark", label: "深色", description: "始终使用深色界面" },
 ];
 
-function ThemePreview({ variant }: { variant: ThemePreference }) {
-  return (
-    <span className={`theme-preview ${variant}`} aria-hidden="true">
-      <i className="theme-preview-sidebar" />
-      <i className="theme-preview-window">
-        <b /><b /><b />
-      </i>
-    </span>
-  );
+export function WorkspaceThemePreview({ palette, mode, accent }: { palette: PaletteId; mode: ThemeMode; accent: AccentId }) {
+  return <span className="theme-preview" style={themeStyle(palette, mode, accent) as CSSProperties} aria-hidden="true">
+    <span className="theme-preview-sidebar"><b>Pi</b><i>会话</i><span>文件</span></span>
+    <span className="theme-preview-window"><span className="theme-preview-message">检查这段代码</span><span>已找到需要调整的地方。</span><code>+ return result;</code><span className="theme-preview-composer">描述任务…<b>↑</b></span></span>
+  </span>;
+}
+
+function navigateThemeChoices(event: KeyboardEvent<HTMLDivElement>): void {
+  const directions: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+  if (!(event.key in directions) && event.key !== "Home" && event.key !== "End") return;
+  const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="radio"]'));
+  const index = buttons.indexOf(event.target as HTMLButtonElement);
+  if (index < 0) return;
+  event.preventDefault();
+  const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + directions[event.key] + buttons.length) % buttons.length;
+  buttons[next].focus(); buttons[next].click();
 }
 
 function FontSizeControl({ label, value, min, max, onChange }: {
@@ -77,6 +85,11 @@ function FontSizeControl({ label, value, min, max, onChange }: {
 }
 
 export function AppearanceSettings() {
+  const palette = useSettingsStore((state) => state.palette);
+  const accent = useSettingsStore((state) => state.accent);
+  const resolvedTheme = useSettingsStore((state) => state.resolvedTheme);
+  const setPalette = useSettingsStore((state) => state.setPalette);
+  const setAccent = useSettingsStore((state) => state.setAccent);
   const theme = useSettingsStore((state) => state.theme);
   const setTheme = useSettingsStore((state) => state.setTheme);
   const animationEnabled = useSettingsStore((state) => state.animationEnabled);
@@ -97,23 +110,39 @@ export function AppearanceSettings() {
 
   return (
     <>
-      <SettingsGroup title="主题" description="配色立即应用，并保存在此电脑上。">
-        <div className="theme-choice-grid" role="radiogroup" aria-label="应用主题">
+      <SettingsGroup title="模式" description="明暗模式立即应用，并保存在此电脑上。">
+        <div className="theme-choice-grid" role="radiogroup" aria-label="明暗模式" onKeyDown={navigateThemeChoices}>
           {themeOptions.map((option) => (
             <button
               className={`theme-choice ${theme === option.value ? "active" : ""}`}
               type="button"
               role="radio"
+              tabIndex={theme === option.value ? 0 : -1}
               aria-checked={theme === option.value}
               onClick={() => setTheme(option.value)}
               key={option.value}
             >
-              <ThemePreview variant={option.value} />
+              <WorkspaceThemePreview palette={palette} mode={option.value === "system" ? resolvedTheme : option.value} accent={accent} />
               <span><strong>{option.label}</strong><small>{option.description}</small></span>
               {theme === option.value && <i className="theme-choice-check"><Check size={12} /></i>}
             </button>
           ))}
         </div>
+      </SettingsGroup>
+
+      <SettingsGroup title="配色主题" description="目前应用于 Agent 工作区；智慧面试和知识工坊将在后续阶段统一。">
+        <div className="theme-choice-grid" role="radiogroup" aria-label="配色主题" onKeyDown={navigateThemeChoices}>
+          {paletteOptions.map(option => <button key={option.value} type="button" className={`theme-choice ${palette === option.value ? "active" : ""}`} role="radio" tabIndex={palette === option.value ? 0 : -1} aria-checked={palette === option.value} onClick={() => setPalette(option.value)}>
+            <WorkspaceThemePreview palette={option.value} mode={resolvedTheme} accent={accent} />
+            <span><strong>{option.label}</strong><small>{option.description}</small></span>
+            {palette === option.value && <i className="theme-choice-check"><Check size={12} /></i>}
+          </button>)}
+        </div>
+        <SettingsRow title="强调色" description="用于主要操作、链接与键盘焦点。">
+          <select aria-label="强调色" value={accent} onChange={event => setAccent(event.target.value as AccentId)}>
+            {accentOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </SettingsRow>
       </SettingsGroup>
 
       <SettingsGroup title="字体与字号" description="分别调整界面控件、聊天内容和代码区域，修改后立即生效。">

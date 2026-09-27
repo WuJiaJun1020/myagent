@@ -162,14 +162,54 @@ describe("session composer drafts", () => {
   });
 
   it("opens the detail region when entering code review", () => {
-    useUiStore.setState({ detailPanelOpen: false });
+    useUiStore.setState({ agentDetailPanelOpen: false });
 
     useUiStore.getState().setAgentView("review");
 
     expect(useUiStore.getState()).toMatchObject({
       moduleViews: { agent: "review", interview: "dashboard" },
-      detailPanelOpen: true,
+      agentDetailPanelOpen: true,
     });
+  });
+
+  it("keeps Agent panel preferences separate from the interview sidebar", () => {
+    useUiStore.setState({ activeModule: "agent", agentDetailPanelOpen: false, detailPanelOpen: true });
+    const store = useUiStore.getState();
+    store.selectToolCall("tool-1");
+    expect(useUiStore.getState().agentDetailPanelOpen).toBe(true);
+    store.toggleDetailPanel();
+    expect(useUiStore.getState()).toMatchObject({ agentDetailPanelOpen: false, detailPanelOpen: true });
+    store.setActiveModule("interview");
+    store.toggleDetailPanel();
+    store.setActiveModule("agent");
+    expect(useUiStore.getState()).toMatchObject({ agentDetailPanelOpen: false, detailPanelOpen: false });
+    store.selectFile("example.ts");
+    expect(useUiStore.getState()).toMatchObject({ agentDetailPanelOpen: true, detailPanelOpen: false });
+  });
+
+  it("toggles code review open, closed and open again without changing interview or terminal panels", () => {
+    useUiStore.setState({ agentDetailPanelOpen: false, detailPanelOpen: true, terminalPanelOpen: true });
+    const store = useUiStore.getState();
+    for (const open of [true, false, true, false]) {
+      store.toggleAgentReview();
+      expect(useUiStore.getState()).toMatchObject({
+        moduleViews: { agent: open ? "review" : "activity", interview: "dashboard" },
+        agentDetailPanelOpen: open,
+        detailPanelOpen: true,
+        terminalPanelOpen: true,
+      });
+    }
+  });
+
+  it("reopens review hidden by the generic panel toggle and keeps sidebar navigation idempotent", () => {
+    const store = useUiStore.getState();
+    store.setAgentView("review");
+    store.setAgentView("review");
+    expect(useUiStore.getState().agentDetailPanelOpen).toBe(true);
+    store.toggleDetailPanel();
+    expect(useUiStore.getState().agentDetailPanelOpen).toBe(false);
+    store.toggleAgentReview();
+    expect(useUiStore.getState()).toMatchObject({ moduleViews: { agent: "review" }, agentDetailPanelOpen: true });
   });
 
 });

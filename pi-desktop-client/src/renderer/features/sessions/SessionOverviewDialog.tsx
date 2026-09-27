@@ -1,3 +1,4 @@
+import { HintButton, HoverHint } from "../../components/ui/tooltip";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BarChart3,
@@ -179,9 +180,9 @@ export function SessionOverviewDialog() {
             <div className="session-overview-content">
               <div className="session-overview-toolbar">
                 <span>{session?.name || "当前会话"}</span>
-                <button type="button" onClick={() => void refresh()} disabled={loading || controlsDisabled} title="刷新会话数据">
+                <HintButton type="button" onClick={() => void refresh()} disabled={loading || controlsDisabled} hint="刷新会话数据">
                   <RefreshCw className={loading ? "spin" : ""} size={14} />刷新
-                </button>
+                </HintButton>
               </div>
 
               {visibleError && <div className="session-overview-error" role="alert">{visibleError}</div>}
@@ -195,13 +196,13 @@ export function SessionOverviewDialog() {
                       <div><small>消息</small><strong>{formatNumber(overview.stats.totalMessages)}</strong><span>用户 {overview.stats.userMessages} · Pi {overview.stats.assistantMessages}</span></div>
                       <div><small>工具调用</small><strong>{formatNumber(overview.stats.toolCalls)}</strong><span>结果 {overview.stats.toolResults}</span></div>
                       <div><small>累计 Tokens</small><strong>{formatNumber(overview.stats.tokens.total)}</strong><span>输入 {formatNumber(overview.stats.tokens.input)} · 输出 {formatNumber(overview.stats.tokens.output)}</span></div>
-                      <div title="缓存读取 Token ÷ 累计 Prompt Token">
+                      <HoverHint content="缓存读取 Token ÷ 累计 Prompt Token"><div >
                         <small>缓存命中率</small>
                         <strong>{promptCache?.reported ? `${promptCache.hitRate?.toFixed(1)}%` : "未报告"}</strong>
                         <span>{promptCache?.reported
                           ? `读取 ${formatNumber(overview.stats.tokens.cacheRead)} · 写入 ${formatNumber(overview.stats.tokens.cacheWrite)}`
                           : "模型未返回缓存用量"}</span>
-                      </div>
+                      </div></HoverHint>
                       <div><small>估算费用</small><strong>{formatCost(overview.stats.cost)}</strong><span>由 Pi 按模型计费信息汇总</span></div>
                     </div>
                   </section>
@@ -229,7 +230,7 @@ export function SessionOverviewDialog() {
                     </div>
                     <div className="session-tree-list" role="tree" aria-label="会话分支树">
                       {treeRows.length > 0 ? treeRows.map(({ node, depth, level }) => (
-                        <button
+                        <HintButton
                           className={`session-tree-row ${node.id === overview.leafId ? "active" : ""}`}
                           type="button"
                           role="treeitem"
@@ -244,10 +245,10 @@ export function SessionOverviewDialog() {
                               ? { customInstructions: summaryInstructions.trim() }
                               : {}),
                           })}
-                          title={node.label ?? node.preview}
+                          hint={node.label ?? node.preview}
                         >
                           <GitFork size={13} /><span>{node.label ?? node.preview}</span>{node.id === overview.leafId && <em>当前</em>}
-                        </button>
+                        </HintButton>
                       )) : <div className="session-tree-empty">当前会话尚无可用分支。</div>}
                     </div>
                   </section>

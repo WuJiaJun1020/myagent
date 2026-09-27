@@ -1,6 +1,10 @@
+import { HoverHint } from "../../components/ui/tooltip";
 import { Check, Copy } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
+import { useBrowserStore } from "../../stores/browser-store";
+import { useUiStore } from "../../stores/ui-store";
+import { browserLinkTarget } from "../browser/browser-link";
 import remarkGfm from "remark-gfm";
 import { Button } from "../../components/ui/button";
 
@@ -48,7 +52,9 @@ function MarkdownCode({ className, children }: MarkdownCodeProps) {
 const markdownComponents: Components = {
   pre: ({ children }) => <>{children}</>,
   code: ({ className, children }) => <MarkdownCode className={className}>{children}</MarkdownCode>,
-  a: ({ href, children }) => <span className="markdown-link" title={href}>{children}</span>,
+  a: ({ href, children }) => <HoverHint content={href}>{href && (/^(https?:|file:)/i.test(href) || /\.html?$/i.test(href))
+    ? <a className="markdown-link" href={href} onClick={event => { event.preventDefault(); useUiStore.getState().setActiveModule("agent"); useBrowserStore.getState().show(browserLinkTarget(href)); }}>{children}</a>
+    : <span className="markdown-link">{children}</span>}</HoverHint>,
 };
 
 export function MarkdownContent({ content }: MarkdownContentProps) {
@@ -57,6 +63,7 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={markdownComponents}
+        urlTransform={(url, key) => key === "href" && (/^file:/i.test(url) || /^\/?[a-z]:[\\/]/i.test(url)) ? url : defaultUrlTransform(url)}
         skipHtml
       >
         {content}

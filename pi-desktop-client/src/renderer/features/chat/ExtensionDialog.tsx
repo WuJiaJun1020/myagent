@@ -1,3 +1,4 @@
+import { HintButton } from "../../components/ui/tooltip";
 import { motion } from "framer-motion";
 import { Bot, ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -75,7 +76,7 @@ export function ExtensionDialog() {
         <header className="modal-header">
           <span className="modal-icon">{isToolApproval ? <ShieldCheck size={16} /> : <Bot size={16} />}</span>
           <div><small>{isToolApproval ? "TOOL APPROVAL" : "PI EXTENSION"}</small><h2 id="extension-dialog-title">{request.title}</h2></div>
-          <button type="button" title="取消" onClick={() => void answer({ cancelled: true })}><X size={16} /></button>
+          <HintButton type="button" hint="取消" onClick={() => void answer({ cancelled: true })}><X size={16} /></HintButton>
         </header>
         {request.method === "confirm" && <p className="modal-message">{request.message}</p>}
         {remainingSeconds !== null && (

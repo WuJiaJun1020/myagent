@@ -1,14 +1,22 @@
+import { applyWorkspaceAppearance } from "../lib/workspace-theme";
 import { MotionConfig } from "framer-motion";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, type ReactNode } from "react";
 import { TooltipProvider } from "../components/ui/tooltip";
 import { applyTypographySettings } from "../lib/typography";
 import { useSettingsStore, type ResolvedTheme } from "../stores/settings-store";
+import { useUiStore } from "../stores/ui-store";
 
 type AppProvidersProps = {
   children: ReactNode;
 };
 
 export function AppProviders({ children }: AppProvidersProps) {
+  const activeModule = useUiStore((state) => state.activeModule);
+  useLayoutEffect(() => {
+    document.documentElement.dataset.workspace = activeModule;
+  }, [activeModule]);
+  const palette = useSettingsStore((state) => state.palette);
+  const accent = useSettingsStore((state) => state.accent);
   const theme = useSettingsStore((state) => state.theme);
   const animationEnabled = useSettingsStore((state) => state.animationEnabled);
   const uiFontFamily = useSettingsStore((state) => state.uiFontFamily);
@@ -20,16 +28,27 @@ export function AppProviders({ children }: AppProvidersProps) {
   const setResolvedTheme = useSettingsStore((state) => state.setResolvedTheme);
 
   useEffect(() => {
+    // Close the top-layer select picker before Escape reaches a surrounding dialog.
+    const dismissPickerFirst = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && document.querySelector("select:open")) {
+        event.stopPropagation();
+      }
+    };
+    document.addEventListener("keydown", dismissPickerFirst, true);
+    return () => document.removeEventListener("keydown", dismissPickerFirst, true);
+  }, []);
+
+  useLayoutEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const applyTheme = (): void => {
       const resolved: ResolvedTheme = theme === "system" ? (media.matches ? "dark" : "light") : theme;
-      document.documentElement.dataset.theme = resolved;
+      applyWorkspaceAppearance(document.documentElement, palette, accent, resolved, animationEnabled);
       setResolvedTheme(resolved);
     };
     applyTheme();
     media.addEventListener("change", applyTheme);
     return () => media.removeEventListener("change", applyTheme);
-  }, [setResolvedTheme, theme]);
+  }, [setResolvedTheme, theme, palette, accent, animationEnabled]);
 
   useEffect(() => {
     applyTypographySettings({

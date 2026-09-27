@@ -32,6 +32,8 @@ export default defineConfig({
       output: {
         onlyExplicitManualChunks: true,
         manualChunks(id) {
+          // Keep lazy editors independent of the application entry module.
+          if (id.includes("vite/preload-helper")) return "preload-helper";
           const modulePath = id.replaceAll("\\", "/");
           if (modulePath.includes("/node_modules/framer-motion/")) return "vendor-motion";
           if (

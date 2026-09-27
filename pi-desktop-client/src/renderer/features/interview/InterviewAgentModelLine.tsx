@@ -1,3 +1,4 @@
+import { HoverHint } from "../../components/ui/tooltip";
 import type { InterviewChatModelInfo, InterviewChatSettings } from "../../../shared/contracts/interview";
 import { DEFAULT_INTERVIEW_CHAT_MODEL } from "../../../shared/contracts/interview";
 import { INTERVIEW_REASONING_LABELS } from "./interview-model-settings";
@@ -10,7 +11,7 @@ export function InterviewAgentModelLine({ settings, models }: {
   const activeModel = models.find((model) => model.providerId === selected.providerId && model.modelId === selected.modelId);
   return <div className="interview-agent-model-line">
     <span>模型</span>
-    <strong title={`${selected.providerId} / ${selected.modelId}`}>{activeModel?.name ?? settings.model?.modelId ?? "GPT-6 Luna"}</strong>
+    <HoverHint content={`${selected.providerId} / ${selected.modelId}`}><strong >{activeModel?.name ?? settings.model?.modelId ?? "GPT-6 Luna"}</strong></HoverHint>
     <span>思考</span><strong>{INTERVIEW_REASONING_LABELS[settings.reasoning]}</strong>
   </div>;
 }

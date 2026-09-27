@@ -1,4 +1,4 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup } from "../../test-utils/render";
 import { describe, expect, it } from "vitest";
 import type { InterviewCallTrace, InterviewChatModelInfo, InterviewSession } from "../../../shared/contracts/interview";
 import { InterviewAgentUsage, InterviewUsageSummary } from "./InterviewAgentUsage";

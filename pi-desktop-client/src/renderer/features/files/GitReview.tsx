@@ -1,3 +1,4 @@
+import { HintButton, HoverHint } from "../../components/ui/tooltip";
 import {
   Binary,
   Check,
@@ -199,19 +200,19 @@ function ReviewTree({
     const stats = reviewFileStats(file, scope);
     const StateIcon = state === "created" ? FilePlus2 : state === "deleted" ? FileMinus2 : CircleDot;
     return (
-      <button
+      <HintButton
         className={`git-review-tree-file ${selectedPath === file.path ? "active" : ""}`}
         type="button"
         key={file.path}
         style={{ paddingLeft: 29 + depth * 17 }}
-        title={file.path}
+        hint={file.path}
         onClick={() => onSelectFile(file)}
       >
         <span className="git-review-file-type">{fileType(file.path)}</span>
         <span>{node.name}</span>
         <small><i>+{stats.additions}</i><b>-{stats.deletions}</b></small>
         <StateIcon className={state} size={14} />
-      </button>
+      </HintButton>
     );
   });
 }
@@ -455,7 +456,7 @@ export function GitReview({ onClose }: { onClose?: () => void }) {
         <div className="git-review-tab active">
           <FileDiff size={15} />
           <strong>审查</strong>
-          {onClose && <button type="button" aria-label="关闭代码审查" title="关闭代码审查" onClick={onClose}><X size={14} /></button>}
+          {onClose && <HintButton type="button" aria-label="关闭代码审查" hint="关闭代码审查" onClick={onClose}><X size={14} /></HintButton>}
         </div>
       </header>
 
@@ -482,10 +483,10 @@ export function GitReview({ onClose }: { onClose?: () => void }) {
           )}
         </div>
         <span className="git-review-total"><i>+{totals.additions}</i><b>-{totals.deletions}</b></span>
-        {status?.branch && <span className="git-review-branch" title={status.branch}>{status.branch}</span>}
-        <button className="git-review-refresh" type="button" title="刷新 Git 状态" aria-label="刷新 Git 状态" onClick={() => void refresh()} disabled={loading}>
+        {status?.branch && <HoverHint content={status.branch}><span className="git-review-branch" >{status.branch}</span></HoverHint>}
+        <HintButton className="git-review-refresh" type="button" hint="刷新 Git 状态" aria-label="刷新 Git 状态" onClick={() => void refresh()} disabled={loading}>
           <RefreshCw className={loading ? "spin" : ""} size={15} />
-        </button>
+        </HintButton>
       </div>
 
       {error && <p className="git-review-error">{error}</p>}
@@ -502,20 +503,20 @@ export function GitReview({ onClose }: { onClose?: () => void }) {
                 <header>
                   <div className="git-review-file-heading">
                     <span className="git-review-file-type">{fileType(selectedFile.path)}</span>
-                    <strong title={selectedFile.path}>{selectedFile.path}</strong>
+                    <HoverHint content={selectedFile.path}><strong >{selectedFile.path}</strong></HoverHint>
                     {selectedStats && <small><i>+{selectedStats.additions}</i><b>-{selectedStats.deletions}</b></small>}
                   </div>
-                  <button
+                  <HintButton
                     type="button"
                     disabled={!canOpenSelectedFile}
-                    title={canOpenSelectedFile ? "打开文件" : "文件已删除"}
+                    hint={canOpenSelectedFile ? "打开文件" : "文件已删除"}
                     aria-label={canOpenSelectedFile ? "打开文件" : "文件已删除"}
                     onClick={() => {
                       selectFile(selectedFile.path);
                       void openFile(selectedFile.path);
                       setAgentView("activity");
                     }}
-                  ><Eye size={14} /></button>
+                  ><Eye size={14} /></HintButton>
                 </header>
                 <div className="git-review-diff-content">
                   {!diff && diffLoading ? (

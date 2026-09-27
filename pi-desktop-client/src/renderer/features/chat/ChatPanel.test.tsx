@@ -210,3 +210,11 @@ describe("chat scroll position", () => {
     });
   });
 });
+
+
+it("keeps commentary before the trailing tool inside the process, even after failure", () => {
+  const messagesById = {user: message("user", "user", 1, []), note: message("note", "assistant", 2, [{type:"text",contentIndex:0,text:"准备运行检查"}])};
+  const rows = buildTaskRows({timeline:[{type:"message",id:"user"},{type:"message",id:"note"},{type:"tool",id:"t"}],messagesById,toolCallsById:{t:{id:"t",name:"bash",args:{},output:[],status:"error",startedAt:3,completedAt:4}},busy:false,runTiming:null});
+  expect(rows.filter(row => row.type === "message")).toEqual([{type:"message",id:"user"}]);
+  expect(rows[1]).toMatchObject({type:"task-activity",items:[{type:"assistant",messageId:"note"},{type:"tool",toolId:"t"}]});
+});

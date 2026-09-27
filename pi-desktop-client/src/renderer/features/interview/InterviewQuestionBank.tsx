@@ -1,11 +1,10 @@
+import { HintButton } from "../../components/ui/tooltip";
 import {
   AlertTriangle,
-  ArrowLeft,
   BookOpenCheck,
   CheckCircle2,
   ChevronRight,
   Clock3,
-  Database,
   FileQuestion,
   FilterX,
   Heart,
@@ -298,7 +297,6 @@ function QuestionBankOverview({
   practiceActive,
   practiceAvailable,
   practiceBusy,
-  onBack,
   onStartPractice,
   onOpenHistory,
 }: {
@@ -306,20 +304,15 @@ function QuestionBankOverview({
   practiceActive: boolean;
   practiceAvailable: number;
   practiceBusy: boolean;
-  onBack: () => void;
   onStartPractice: () => void;
   onOpenHistory: () => void;
 }) {
   return (
     <header className="question-bank-overview">
-      <button className="question-bank-back-button" type="button" onClick={onBack} title="返回智能面试">
-        <ArrowLeft size={14} />返回智能面试
-      </button>
       <div className="question-bank-overview-title">
         <FileQuestion size={16} />
         <span>
           <strong id="question-bank-title">面试问答题库</strong>
-          <small>可追溯、可版本化的本地面试题</small>
         </span>
       </div>
       <div className="question-bank-overview-counts" aria-label="题库概览">
@@ -331,12 +324,11 @@ function QuestionBankOverview({
         <button type="button" className="history" onClick={onOpenHistory}><History size={13} />练习历史</button>
         <button type="button" className="start" disabled={practiceBusy || (!practiceActive && practiceAvailable === 0)} onClick={onStartPractice}>{practiceBusy ? <LoaderCircle className="spin" size={13} /> : <Play size={13} />}{practiceActive ? "继续练习" : "开始练习"}</button>
       </div>
-      <span className="question-bank-local-badge"><Database size={13} />本机题库</span>
     </header>
   );
 }
 
-export function InterviewQuestionBank({ onBack }: { onBack: () => void }) {
+export function InterviewQuestionBank() {
   const snapshot = useQuestionBankStore((state) => state.snapshot);
   const items = useQuestionBankStore((state) => state.items);
   const total = useQuestionBankStore((state) => state.total);
@@ -419,7 +411,6 @@ export function InterviewQuestionBank({ onBack }: { onBack: () => void }) {
     practiceActive: Boolean(practiceOverview?.activeSession),
     practiceAvailable: total,
     practiceBusy: practiceOverviewLoading || practiceSessionLoading || loading || search !== filters.search,
-    onBack,
     onStartPractice: beginFilteredPractice,
     onOpenHistory: () => void openPracticeHistory(),
   };
@@ -441,7 +432,7 @@ export function InterviewQuestionBank({ onBack }: { onBack: () => void }) {
   }
 
   if (!initialized && loading) {
-    return <section className="question-bank-page" aria-labelledby="question-bank-title"><QuestionBankOverview {...overviewProps} /><div className="question-bank-page-state"><LoaderCircle className="spin" size={19} /><strong>正在读取面试题库…</strong><span>题目列表加载完成后，再按需读取所选题目的答案与评分标准。</span></div></section>;
+    return <section className="question-bank-page" aria-labelledby="question-bank-title"><QuestionBankOverview {...overviewProps} /><div className="question-bank-page-state"><LoaderCircle className="spin" size={19} /><strong>正在读取面试题库…</strong></div></section>;
   }
 
   if (!initialized && (error || snapshotError)) {
@@ -548,7 +539,6 @@ export function InterviewQuestionBank({ onBack }: { onBack: () => void }) {
             )}
           </article>
         </div>
-        <footer className="question-bank-browser-footer"><ShieldCheck size={13} /><span>题目正文与来源保存在 SQLite；列表只读取摘要，答案详情按需加载。</span><span>{items.length}/{total} 题</span></footer>
       </section>
       {practiceSetup && <QuestionPracticeStartDialog context={practiceSetup} onClose={() => setPracticeSetup(null)} />}
     </section>

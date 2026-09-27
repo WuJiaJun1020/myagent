@@ -1,3 +1,4 @@
+import { HintButton } from "../../components/ui/tooltip";
 import {
   ChevronDown,
   ChevronRight,
@@ -47,12 +48,12 @@ function TreeBranch({ path, depth }: { path: string; depth: number }) {
         const expanded = Boolean(expandedDirectories[entry.path]);
         return (
           <div key={entry.path}>
-            <button
+            <HintButton
               className={`file-tree-row ${activeFilePath === entry.path ? "active" : ""}`}
               type="button"
               style={{ paddingLeft: `${7 + depth * 13}px` }}
               disabled={entry.kind === "symlink"}
-              title={entry.kind === "symlink" ? "为保证工作区边界安全，文件树不展开符号链接" : entry.path}
+              hint={entry.kind === "symlink" ? "为保证工作区边界安全，文件树不展开符号链接" : entry.path}
               onClick={() => {
                 if (isDirectory) {
                   void toggleDirectory(entry.path);
@@ -69,7 +70,7 @@ function TreeBranch({ path, depth }: { path: string; depth: number }) {
                 {isDirectory ? expanded ? <FolderOpen size={14} /> : <Folder size={14} /> : <EntryIcon entry={entry} />}
               </span>
               <span>{entry.name}</span>
-            </button>
+            </HintButton>
             {isDirectory && expanded && <TreeBranch path={entry.path} depth={depth + 1} />}
           </div>
         );

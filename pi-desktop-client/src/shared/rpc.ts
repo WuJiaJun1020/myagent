@@ -182,6 +182,11 @@ export interface PiDesktopApi {
   cancelProviderLogin(flowId: string): Promise<void>;
   respondToProviderAuth(response: ProviderAuthResponse): Promise<void>;
   openExternal(url: string): Promise<void>;
+  browserGetState(): Promise<import("./contracts/browser").BrowserState>;
+  browserNavigate(input: string): Promise<void>;
+  browserSetBounds(bounds: import("./contracts/browser").BrowserBounds | null): Promise<void>;
+  browserAction(action: import("./contracts/browser").BrowserAction): Promise<void>;
+  onBrowserState(listener: (state: import("./contracts/browser").BrowserState) => void): () => void;
   setWindowTitle(title?: string): Promise<void>;
   send(command: RpcCommand): Promise<RpcMessage>;
   listWorkspaceDirectory(path: string): Promise<WorkspaceDirectoryListing>;

@@ -1,4 +1,4 @@
-import { Braces, FilePenLine, FileText, Search, Wrench } from "lucide-react";
+import { Braces, FilePenLine, FileText, Search, SquareTerminal, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ToolCallState } from "../../lib/event-reducer";
 import { DiffViewer } from "../files/DiffViewer";
@@ -138,13 +138,14 @@ export function resolveToolRenderer(tool: ToolCallState): ToolRendererDefinition
 }
 
 export function ToolCategoryIcon({ category }: { category: ToolPresentation["category"] }) {
-  if (category === "terminal") return <Braces size={15} />;
+  if (category === "terminal") return <SquareTerminal size={15} />;
   if (category === "read") return <FileText size={15} />;
   if (category === "edit") return <FilePenLine size={15} />;
   if (category === "search") return <Search size={15} />;
   return <Wrench size={15} />;
 }
 
-export function ToolDetailRenderer({ tool }: { tool: ToolCallState }) {
+export function ToolDetailRenderer({ tool, compact = false }: { tool: ToolCallState; compact?: boolean }) {
+  if (compact && terminalRenderer.supports(tool)) return <TerminalOutput compact command={stringArgument(tool, ["command", "cmd", "script"])} output={outputText(tool)} status={tool.status} />;
   return resolveToolRenderer(tool).renderDetail(tool);
 }

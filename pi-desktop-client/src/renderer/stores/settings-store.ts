@@ -1,3 +1,4 @@
+import { normalizePalette, normalizeAccent, type PaletteId, type AccentId } from "../lib/workspace-theme";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { ThinkingLevel } from "../../shared/contracts/agent-session";
@@ -15,6 +16,10 @@ export type ResolvedTheme = "dark" | "light";
 
 type SettingsStore = {
   theme: ThemePreference;
+  palette: PaletteId;
+  accent: AccentId;
+  setPalette: (palette: PaletteId) => void;
+  setAccent: (accent: AccentId) => void;
   resolvedTheme: ResolvedTheme;
   animationEnabled: boolean;
   uiFontFamily: UiFontFamily;
@@ -64,6 +69,10 @@ function initialResolvedTheme(): ResolvedTheme {
 export const useSettingsStore = create<SettingsStore>()(persist(
   (set) => ({
     theme: "dark",
+    palette: "gray",
+    accent: "theme",
+    setPalette: (palette) => set({ palette: normalizePalette(palette) }),
+    setAccent: (accent) => set({ accent: normalizeAccent(accent) }),
     resolvedTheme: initialResolvedTheme(),
     animationEnabled: true,
     uiFontFamily: "system",
@@ -109,8 +118,14 @@ export const useSettingsStore = create<SettingsStore>()(persist(
   {
     name: "pi-desktop-settings",
     storage: createJSONStorage(() => localStorage),
+    merge: (persisted, current) => {
+      const saved = (persisted ?? {}) as Partial<SettingsStore>;
+      return { ...current, ...saved, palette: normalizePalette(saved.palette), accent: normalizeAccent(saved.accent) };
+    },
     partialize: (state) => ({
       theme: state.theme,
+      palette: state.palette,
+      accent: state.accent,
       animationEnabled: state.animationEnabled,
       uiFontFamily: state.uiFontFamily,
       contentFontFamily: state.contentFontFamily,

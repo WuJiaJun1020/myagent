@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react";
+import { HintButton } from "../ui/tooltip";
 import type { ReactNode } from "react";
 import { rendererModuleDefinitions } from "../../modules/renderer-module-registry";
 import { useUiStore } from "../../stores/ui-store";
@@ -16,7 +16,6 @@ export function Sidebar({ children }: SidebarProps) {
     <aside className="sidebar">
       <div className="brand">
         <span className="brand-copy"><strong>Pi Desktop</strong></span>
-        <ChevronDown size={14} strokeWidth={1.8} aria-hidden="true" />
       </div>
 
       <nav className="sidebar-module-switcher" aria-label="功能区域">
@@ -28,17 +27,19 @@ export function Sidebar({ children }: SidebarProps) {
             });
           };
           return (
-            <button
+            <HintButton
               className={activeModule === module.id ? "active" : ""}
               type="button"
+              aria-current={activeModule === module.id ? "page" : undefined}
+              hint={module.navigationDescription}
               key={module.id}
               onFocus={preload}
               onPointerEnter={preload}
               onClick={() => setActiveModule(module.id)}
             >
               <Icon size={17} />
-              <span><strong>{module.navigationLabel}</strong><small>{module.navigationDescription}</small></span>
-            </button>
+              <span><strong>{module.navigationLabel}</strong></span>
+            </HintButton>
           );
         })}
       </nav>

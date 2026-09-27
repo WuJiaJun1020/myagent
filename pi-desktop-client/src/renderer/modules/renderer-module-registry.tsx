@@ -64,12 +64,11 @@ const interviewModule: RendererModuleDefinition<"interview"> = {
   keepWorkspaceAlive: true,
   preload: loadInterviewRendererModule,
   resolveLayout: (view) => {
-    const focused = view === "algorithms" || view === "question-bank";
     return {
       detailVariant: "default",
-      topbarSuppressed: focused,
-      sidebarSuppressed: focused,
-      detailSuppressed: focused,
+      topbarSuppressed: false,
+      sidebarSuppressed: false,
+      detailSuppressed: view !== "session",
     };
   },
 };

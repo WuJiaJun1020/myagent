@@ -1,3 +1,4 @@
+import { HintButton } from "../ui/tooltip";
 import { Minus, PanelLeft, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { TooltipIconButton } from "../ui/tooltip-icon-button";
@@ -35,21 +36,21 @@ export function AppChrome({ sidebarAvailable = true }: AppChromeProps) {
         {menuLabels.map((label) => <span key={label}>{label}</span>)}
       </nav>
       <div className="app-window-controls" aria-label="窗口控制">
-        <button type="button" className="app-window-control" aria-label="最小化窗口" title="最小化" onClick={() => void window.piDesktop.minimizeWindow()}>
+        <HintButton type="button" className="app-window-control" aria-label="最小化窗口" hint="最小化" onClick={() => void window.piDesktop.minimizeWindow()}>
           <Minus size={16} strokeWidth={1.6} />
-        </button>
-        <button
+        </HintButton>
+        <HintButton
           type="button"
           className="app-window-control"
           aria-label={maximized ? "还原窗口" : "最大化窗口"}
-          title={maximized ? "还原" : "最大化"}
+          hint={maximized ? "还原" : "最大化"}
           onClick={() => void window.piDesktop.toggleWindowMaximize().then(setMaximized)}
         >
           <Square size={13} strokeWidth={1.6} />
-        </button>
-        <button type="button" className="app-window-control close" aria-label="关闭窗口" title="关闭" onClick={() => void window.piDesktop.closeWindow()}>
+        </HintButton>
+        <HintButton type="button" className="app-window-control close" aria-label="关闭窗口" hint="关闭" onClick={() => void window.piDesktop.closeWindow()}>
           <X size={17} />
-        </button>
+        </HintButton>
       </div>
     </header>
   );

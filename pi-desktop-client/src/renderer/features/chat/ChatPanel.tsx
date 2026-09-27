@@ -1,6 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion } from "framer-motion";
-import { Bot, Braces, FileDiff, Lightbulb, MessageCircle, ShieldCheck, TerminalSquare } from "lucide-react";
+import { Braces, FileDiff, Lightbulb, MessageCircle, ShieldCheck, TerminalSquare } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { AgentMessage } from "../../../shared/contracts/agent-events";
 import type { SnapshotTimelineEntry } from "../../../shared/contracts/agent-session";
@@ -14,6 +14,8 @@ import { TaskActivityGroup, type TaskActivityItem } from "../agent/TaskActivityG
 import { AgentChangeReview } from "../files/AgentChangeReview";
 import { ToolCallCard } from "../tools/ToolCallCard";
 import { MessageItem } from "./MessageItem";
+import { usePendingPrompts } from "../../stores/pending-prompts";
+import { ChatTurnNavigation } from "./ChatTurnNavigation";
 
 export type TaskTimelineRow =
   | { type: "message"; id: string; hideThinking?: boolean }
@@ -131,7 +133,7 @@ export function buildTaskRows({
     let finalAssistantId: string | undefined;
     for (let cursor = segment.length - 1; cursor >= 0; cursor -= 1) {
       const candidate = segment[cursor];
-      if (candidate.type !== "message") continue;
+      if (candidate.type === "tool") break;
       const candidateMessage = messagesById[candidate.id];
       if (candidateMessage?.role === "assistant" && (hasText(candidateMessage) || candidateMessage.errorMessage)) {
         finalAssistantId = candidate.id;
@@ -196,6 +198,7 @@ export function shouldShowEmptyChatState(
 }
 
 export function ChatPanel() {
+  const pendingPrompts = usePendingPrompts(state => state.pending);
   const timelineOrder = useAgentStore((state) => state.timelineOrder);
   const messagesById = useAgentStore((state) => state.messagesById);
   const toolCallsById = useAgentStore((state) => state.toolCallsById);
@@ -236,7 +239,16 @@ export function ChatPanel() {
   // switchSession's authoritative snapshot. Keep the previous frame for the
   // entire RPC instead of treating an early session id change as readiness.
   if (!switchingSession) settledPresentationRef.current = livePresentation;
-  const presentation = switchingSession ? settledPresentationRef.current : livePresentation;
+  const confirmedPresentation = switchingSession ? settledPresentationRef.current : livePresentation;
+  const presentation = useMemo(() => {
+    const pending = pendingPrompts.filter(prompt => prompt.sessionId === confirmedPresentation.sessionId && !prompt.queued);
+    if (!pending.length) return confirmedPresentation;
+    return {
+      ...confirmedPresentation,
+      timeline: [...confirmedPresentation.timeline, ...pending.map(prompt => ({ type: "message" as const, id: prompt.id }))],
+      messagesById: { ...confirmedPresentation.messagesById, ...Object.fromEntries(pending.map(prompt => [prompt.id, { id: prompt.id, role: "user" as const, content: [{ type: "text" as const, contentIndex: 0, text: prompt.text }], timestamp: prompt.timestamp, streaming: false }])) },
+    };
+  }, [confirmedPresentation, pendingPrompts]);
   const rows = useMemo(
     () => buildTaskRows({
       timeline: presentation.timeline,
@@ -341,7 +353,7 @@ export function ChatPanel() {
       window.cancelAnimationFrame(frame);
       window.cancelAnimationFrame(scrollFrame);
     };
-  }, [activityRevision]);
+  }, [activityRevision, pendingPrompts]);
 
   useEffect(() => {
     if (chatFollowRequest === 0) return;
@@ -360,7 +372,31 @@ export function ChatPanel() {
     };
   }, [chatFollowRequest]);
 
+  const navigation = rows.flatMap((row, index) => {
+    if (row.type !== "message") return [];
+    const message = presentation.messagesById[row.id];
+    if (message?.role !== "user") return [];
+    const text = message.content.filter(block => block.type === "text").map(block => block.text).join("\n");
+    let answer = "";
+    for (let i = index + 1; i < rows.length; i++) {
+      const next = rows[i];
+      if (next.type !== "message") continue;
+      const response = presentation.messagesById[next.id];
+      if (response?.role === "user") break;
+      if (response) answer = response.content.filter(block => block.type === "text").map(block => block.text).join("\n");
+    }
+    return [{ id: row.id, index, text, answer }];
+  });
+  const visibleIndex = rowVirtualizer.getVirtualItems().find(item => item.end > (rowVirtualizer.scrollOffset ?? 0))?.index ?? 0;
+  const activeNavId = navigation.filter(item => item.index <= visibleIndex).at(-1)?.id ?? navigation[0]?.id;
+
   return (
+    <div className="chat-panel-with-navigation">
+      {navigation.length > 1 && <ChatTurnNavigation key={presentation.sessionId} items={navigation} activeId={activeNavId} onNavigate={index => {
+        stayPinnedRef.current = false;
+        restoringSessionRef.current = null;
+        rowVirtualizer.scrollToIndex(index, { align: "start" });
+      }} />}
     <section
       className="activity-stream"
       ref={viewportRef}
@@ -393,8 +429,6 @@ export function ChatPanel() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: animationEnabled ? 0.24 : 0 }}
         >
-          <div className="empty-orbit"><span /><div><Bot size={30} /></div></div>
-          <p className="eyebrow">{chatMode ? "PLAIN AI CHAT" : "LOCAL AGENT WORKSPACE"}</p>
           <h1>{chatMode ? "开始一段对话" : "从一个清晰的任务开始"}</h1>
           <p className="empty-description">{chatMode ? "当前会话不会访问项目文件或调用工具，适合讨论、问答和思路整理。" : "Pi 可以理解当前工作区、调用工具，并把执行过程持续呈现在这里。"}</p>
           <div className="capability-list" aria-label="当前能力">
@@ -421,7 +455,7 @@ export function ChatPanel() {
             let content = null;
             if (row.type === "message") {
               const message = presentation.messagesById[row.id];
-              content = message ? <MessageItem message={message} hideThinking={row.hideThinking} /> : null;
+              content = message ? <><MessageItem message={message} hideThinking={row.hideThinking} />{row.id.startsWith("pending:") && <div className="chat-send-pending" role="status">正在发送…</div>}</> : null;
             } else if (row.type === "task-activity") {
               content = (
                 <TaskActivityGroup
@@ -453,6 +487,8 @@ export function ChatPanel() {
           })}
         </div>
       )}
+      {pendingPrompts.some(prompt => prompt.sessionId === presentation.sessionId && prompt.queued) && <div className="chat-send-pending" role="status">正在加入消息队列…</div>}
     </section>
+    </div>
   );
 }

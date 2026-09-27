@@ -1,5 +1,4 @@
-import CodeMirror from "@uiw/react-codemirror";
-import { python } from "@codemirror/lang-python";
+import { PythonCodeEditor } from "../../components/ui/PythonCodeEditor";
 import { ArrowLeft, CheckCircle2, Clock3, LoaderCircle, Send } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { InterviewAlgorithmMode, InterviewSession } from "../../../shared/contracts/interview";
@@ -7,7 +6,6 @@ import { interviewGateway } from "../../services/interview-gateway";
 import { useInterviewStore } from "../../stores/interview-store";
 import { useUiStore } from "../../stores/ui-store";
 
-const PYTHON_EXTENSIONS = [python()];
 const DIFFICULTY = { easy: "简单", medium: "中等", hard: "困难" } as const;
 const VERDICT = {
   accepted: "通过", wrong_answer: "答案错误", runtime_error: "运行错误",
@@ -32,8 +30,6 @@ export function InterviewAlgorithmExam({ session }: { session: InterviewSession 
   const [drafts, setDrafts] = useState(exam.drafts);
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState<string | null>(null);
-  const [editorTheme, setEditorTheme] = useState<"light" | "dark">(() =>
-    typeof document !== "undefined" && document.documentElement.dataset.theme === "light" ? "light" : "dark");
   const [starting, setStarting] = useState(false);
   const startedRef = useRef(false);
   const expiredRef = useRef(false);
@@ -52,12 +48,6 @@ export function InterviewAlgorithmExam({ session }: { session: InterviewSession 
     return saveQueueRef.current;
   }
 
-  useEffect(() => {
-    const observer = new MutationObserver(() => setEditorTheme(
-      document.documentElement.dataset.theme === "light" ? "light" : "dark"));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => observer.disconnect();
-  }, []);
 
   const beginExam = useCallback(() => {
     if (startedRef.current) return;
@@ -161,9 +151,8 @@ export function InterviewAlgorithmExam({ session }: { session: InterviewSession 
             className={mode === candidateMode ? "active" : ""} key={candidateMode} onClick={() => setMode(candidateMode)}>
             {candidateMode === "leetcode" ? "LeetCode" : "ACM"}</button>)}
         </div>
-        <div className="interview-algorithm-editor"><CodeMirror key={mode} value={drafts[mode]} extensions={PYTHON_EXTENSIONS} theme={editorTheme}
-          onChange={(code) => setDrafts((current) => ({ ...current, [mode]: code }))}
-          basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: true }} /></div>
+        <div className="interview-algorithm-editor"><PythonCodeEditor key={mode} value={drafts[mode]}
+          onChange={(code) => setDrafts((current) => ({ ...current, [mode]: code }))} /></div>
         <div className="interview-algorithm-actions"><small>代码自动保存到本场面试；只返回判题摘要，不展示完整测试用例。</small>
           <button type="button" disabled={submitting || expired || starting} onClick={() => void submit()}>
             {submitting ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />}{submitting ? "判题中…" : "运行并提交"}</button></div>

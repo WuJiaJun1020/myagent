@@ -1,0 +1,21 @@
+import { createRoot } from "react-dom/client";
+import { TooltipProvider } from "@radix-ui/react-tooltip";
+import { ChatPanel } from "../../src/renderer/features/chat/ChatPanel";
+import { Composer } from "../../src/renderer/features/chat/Composer";
+import { AgentTopBar } from "../../src/renderer/modules/agent/AgentRendererModule";
+import { useAgentStore as agent } from "../../src/renderer/stores/agent-store";
+import { useUiStore as ui } from "../../src/renderer/stores/ui-store";
+import { useSessionStore as sessions } from "../../src/renderer/stores/session-store";
+import { usePendingPrompts as pending } from "../../src/renderer/stores/pending-prompts";
+import "../../src/renderer/lib/theme-bootstrap";
+document.documentElement.dataset.workspace="agent";
+document.documentElement.dataset.theme="light";
+document.documentElement.dataset.palette="gray";
+const messages=Array.from({length:20},(_,i)=>[{id:`u${i}`,role:'user',content:[{type:'text',contentIndex:0,text:`问题 ${i+1}`}],timestamp:i*10000,streaming:false},{id:`a${i}`,role:'assistant',content:[{type:'text',contentIndex:0,text:`这是第 ${i+1} 轮的回答。\n\n`+'验证导航与滚动定位。'.repeat(12)}],timestamp:i*10000+1000,streaming:false}]).flat();
+agent.setState({activeSessionId:'test',processStatus:{state:'running',cwd:'D:/test'},messagesById:Object.fromEntries(messages.map(m=>[m.id,m])) as any,timelineOrder:messages.map(m=>({type:'message',id:m.id})),busy:false});
+sessions.setState({session:{id:'test',mode:'work',approvalPolicy:'ask',thinkingLevel:'off',messageCount:40,model:{id:'test',name:'Test'},contextUsage:null} as any,mutation:null,pendingSessionId:null,commands:[],models:[]} as any);
+const qa:any={agent,ui,pending,errors:[]};(window as any).qa=qa;
+(window as any).piDesktop={sendPrompt:()=>new Promise((resolve,reject)=>{qa.resolve=resolve;qa.reject=reject;})};
+window.addEventListener('error',e=>qa.errors.push(e.message));
+createRoot(document.getElementById('root')!).render(<TooltipProvider><main style={{height:'100vh',display:'flex',flexDirection:'column'}}><AgentTopBar/><ChatPanel/><Composer/></main></TooltipProvider>);
+

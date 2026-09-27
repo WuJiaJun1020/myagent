@@ -1,3 +1,4 @@
+import { HintButton } from "../../components/ui/tooltip";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Check,
@@ -192,16 +193,16 @@ export function ProviderSettingsDialog() {
                     {providerCaveats[provider.id] && <p className="provider-caveat">{providerCaveats[provider.id]}</p>}
                     <footer>
                       {provider.authMethods.map((method) => (
-                        <button
+                        <HintButton
                           type="button"
                           key={method.type}
                           disabled={!method.interactive || Boolean(activeFlow) || busy}
-                          title={method.interactive ? method.name : "此认证方式需要在系统环境中配置"}
+                          hint={method.interactive ? method.name : "此认证方式需要在系统环境中配置"}
                           onClick={() => void login(provider.id, method.type)}
                         >
                           {active && activeFlow?.method === method.type ? <LoaderCircle className="spin" size={13} /> : method.type === "oauth" ? <UserRoundCheck size={13} /> : <KeyRound size={13} />}
                           {method.type === "oauth" ? method.loginLabel ?? (method.isSubscription ? "账号/订阅登录" : "OAuth 登录") : "配置 API Key"}
-                        </button>
+                        </HintButton>
                       ))}
                       {provider.stored && (
                         <button className="danger" type="button" disabled={Boolean(activeFlow) || busy} onClick={() => void logout(provider.id)}><LogOut size={13} />移除凭据</button>

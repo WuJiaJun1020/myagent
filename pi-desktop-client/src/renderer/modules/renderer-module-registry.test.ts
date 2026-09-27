@@ -2,21 +2,22 @@ import { describe, expect, it } from "vitest";
 import { getRendererModule } from "./renderer-module-registry";
 
 describe("renderer module layout", () => {
-  it("uses an immersive layout for focused interview workbenches", () => {
+  it("keeps interview workbenches in the shared navigation shell", () => {
     const interview = getRendererModule("interview");
 
     for (const view of ["question-bank", "algorithms"] as const) {
       expect(interview.resolveLayout(view)).toMatchObject({
         detailVariant: "default",
-        topbarSuppressed: true,
-        sidebarSuppressed: true,
+        topbarSuppressed: false,
+        sidebarSuppressed: false,
         detailSuppressed: true,
       });
     }
+    expect(interview.resolveLayout("session")).toMatchObject({ detailSuppressed: false });
     expect(interview.resolveLayout("dashboard")).toMatchObject({
       topbarSuppressed: false,
       sidebarSuppressed: false,
-      detailSuppressed: false,
+      detailSuppressed: true,
     });
   });
 

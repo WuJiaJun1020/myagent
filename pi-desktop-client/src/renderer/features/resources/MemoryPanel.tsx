@@ -26,8 +26,7 @@ export function MemoryPanel() {
     <div className="resource-page-scroll">
       <main className="resource-page">
         <header className="resource-page-header">
-          <div className="resource-page-mark memory"><Database size={21} /></div>
-          <div><span className="eyebrow">PI CONTEXT</span><h1>Pi 上下文来源</h1><p>浏览 Pi 实际注入模型上下文的持久指令，了解其作用域和来源。</p></div>
+          <div><h1>Pi 上下文来源</h1><p>浏览 Pi 实际注入模型上下文的持久指令，了解其作用域和来源。</p></div>
           <button type="button" disabled={loading || status.state !== "running"} onClick={() => void initialize(status.cwd)}>
             {loading ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}刷新
           </button>

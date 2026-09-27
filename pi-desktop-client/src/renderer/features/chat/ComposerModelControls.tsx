@@ -1,10 +1,12 @@
-import { Check, ChevronDown, Sparkles } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Check, ChevronDown } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { DesktopModel, ThinkingLevel } from "../../../shared/contracts/agent-session";
 import { normalizeThinkingLevels } from "../../../shared/thinking-levels";
 import { useAgentStore } from "../../stores/agent-store";
 import { useSessionStore } from "../../stores/session-store";
+import { useComposerPopover } from "./use-composer-popover";
+import { HoverHint } from "../../components/ui/tooltip";
 
 const thinkingLabels: Record<ThinkingLevel, string> = {
   off: "关闭",
@@ -24,10 +26,10 @@ function groupModels(models: DesktopModel[]): Array<[string, DesktopModel[]]> {
 
 export function ComposerModelControls() {
   const [open, setOpen] = useState(false);
-  const [popoverPosition, setPopoverPosition] = useState({ right: 12, bottom: 64 });
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const popoverPosition = useComposerPopover(open, triggerRef, popoverRef);
   const busy = useAgentStore((state) => state.busy);
   const session = useSessionStore((state) => state.session);
   const models = useSessionStore((state) => state.models);
@@ -45,7 +47,10 @@ export function ComposerModelControls() {
       if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) setOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener("pointerdown", closeOnOutsideClick);
     document.addEventListener("keydown", closeOnEscape);
@@ -55,42 +60,29 @@ export function ComposerModelControls() {
     };
   }, [open]);
 
-  useLayoutEffect(() => {
-    if (!open) return;
-    const positionPopover = () => {
-      const rect = triggerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setPopoverPosition({
-        right: Math.max(12, window.innerWidth - rect.right),
-        bottom: Math.max(12, window.innerHeight - rect.top + 8),
-      });
-    };
-    positionPopover();
-    window.addEventListener("resize", positionPopover);
-    return () => window.removeEventListener("resize", positionPopover);
-  }, [open]);
 
   return (
     <div className={`composer-model-control ${open ? "open" : ""}`} ref={rootRef}>
-      <button
-        className="composer-model-trigger"
-        ref={triggerRef}
-        type="button"
-        disabled={!session || models.length === 0}
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        title="选择模型与思考深度"
-        onClick={() => setOpen((value) => !value)}
-      >
-        <Sparkles size={13} />
-        <span className="composer-model-name">{session?.model?.name ?? "选择模型"}</span>
-        <span className="composer-thinking-label">{thinkingLabels[session?.thinkingLevel ?? "off"]}</span>
-        <ChevronDown size={12} />
-      </button>
+      <HoverHint disabled={open} content={`${session?.model?.name ?? "选择模型"} · 思考深度：${thinkingLabels[session?.thinkingLevel ?? "off"]}`}>
+        <button
+          className="composer-model-trigger"
+          ref={triggerRef}
+          type="button"
+          disabled={!session || models.length === 0}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-label="选择模型与思考深度"
+          onClick={() => setOpen((value) => !value)}
+        >
+          <span className="composer-model-name">{session?.model?.name ?? "选择模型"}</span>
+          <span className="composer-thinking-label">{thinkingLabels[session?.thinkingLevel ?? "off"]}</span>
+          <ChevronDown size={12} />
+        </button>
+      </HoverHint>
 
       {open && createPortal(
         <div
-          className="composer-model-popover"
+          className="composer-model-popover composer-popover"
           ref={popoverRef}
           role="dialog"
           aria-label="选择模型与思考深度"

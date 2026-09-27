@@ -1,3 +1,4 @@
+import { HintButton } from "../../components/ui/tooltip";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -407,7 +408,7 @@ function PracticeWorkbench() {
         <div className="question-practice-overview-title"><ClipboardCheck size={16} /><span><strong>问答练习</strong><small>{item.title}</small></span></div>
         <span className="question-practice-progress">{item.ordinal + 1}<small>/ {session.questionCount}</small></span>
         <span className="question-practice-clock"><Clock3 size={13} />{formatElapsed(elapsedSeconds)}</span>
-        <button className={queueOpen ? "question-practice-icon-button active" : "question-practice-icon-button"} type="button" aria-label={queueOpen ? "收起题目进度" : "展开题目进度"} title={queueOpen ? "收起题目进度" : "展开题目进度"} onClick={() => setQueueOpen((open) => !open)}><ListChecks size={15} /></button>
+        <HintButton className={queueOpen ? "question-practice-icon-button active" : "question-practice-icon-button"} type="button" aria-label={queueOpen ? "收起题目进度" : "展开题目进度"} hint={queueOpen ? "收起题目进度" : "展开题目进度"} onClick={() => setQueueOpen((open) => !open)}><ListChecks size={15} /></HintButton>
         <button className="question-practice-end-button" type="button" disabled={Boolean(mutation) || draftStatus === "saving"} onClick={() => setConfirmEnd(true)}><Pause size={13} />结束</button>
       </header>
       <div className="question-practice-mobile-tabs" role="tablist"><button type="button" role="tab" aria-selected={mobilePane === "question"} className={mobilePane === "question" ? "active" : ""} onClick={() => setMobilePane("question")}>题目</button><button type="button" role="tab" aria-selected={mobilePane === "answer"} className={mobilePane === "answer" ? "active" : ""} onClick={() => setMobilePane("answer")}>{item.review ? "参考与自评" : "我的回答"}</button></div>

@@ -1,0 +1,12 @@
+.browser-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; color: var(--text); background: var(--bg-panel); font: calc(12px + var(--ui-font-adjust))/1.5 var(--font-ui); }
+.browser-heading { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 5px 10px; border-bottom: 1px solid var(--border); }
+.browser-heading > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-panel button { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border: 0; border-radius: 6px; color: var(--text-soft); background: transparent; }
+.browser-panel button:hover:not(:disabled) { color: var(--text); background: var(--bg-hover); }
+.browser-panel button:disabled { opacity: .4; cursor: default; }
+.browser-toolbar { display: flex; align-items: center; gap: 3px; padding: 6px; border-bottom: 1px solid var(--border); }
+.browser-toolbar input { flex: 1; min-width: 0; height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px; color: var(--text); background: var(--bg-app); font: inherit; }
+.browser-panel button:focus-visible, .browser-toolbar input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.browser-error { padding: 8px 12px; color: var(--red); overflow-wrap: anywhere; }
+.browser-empty { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 24px 12px; color: var(--text-muted); }
+.browser-surface { flex: 1; min-height: 0; min-width: 0; }

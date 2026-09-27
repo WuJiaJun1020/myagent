@@ -1,3 +1,4 @@
+import { HintButton } from "../../components/ui/tooltip";
 import {
   AlertTriangle,
   Box,
@@ -196,9 +197,9 @@ export function OnlinePackageCatalog({
           <option value="downloads">本页下载量</option>
           <option value="recent">本页最新</option>
         </select>
-        <button type="button" className="catalog-refresh" title="刷新" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}>
+        <HintButton type="button" className="catalog-refresh" hint="刷新" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}>
           {loading ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}
-        </button>
+        </HintButton>
       </form>
 
       <div className="catalog-scope-row">

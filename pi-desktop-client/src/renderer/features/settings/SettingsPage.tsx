@@ -55,7 +55,6 @@ export function SettingsPage() {
 
   const active = sections.find((section) => section.id === activeSection) ?? sections[0];
   const ActiveContent = sectionContent[active.id];
-  const ActiveIcon = active.icon;
 
   return (
     <AnimatePresence>
@@ -101,7 +100,6 @@ export function SettingsPage() {
                 </button>
               )}
               <header className="settings-page-heading">
-                <span><ActiveIcon size={19} /></span>
                 <div>
                   <h1 id="settings-page-title">{active.label}</h1>
                   <p>{active.description}</p>

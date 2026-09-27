@@ -1,3 +1,4 @@
+import { HintButton, HoverHint } from "../../components/ui/tooltip";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronsUpDown, LoaderCircle } from "lucide-react";
 import { memo, useMemo, useRef } from "react";
@@ -128,10 +129,10 @@ const DiffContentRow = memo(function DiffContentRow({
   if (line.kind === "hunk") {
     if (!line.collapsedLines && !onExpandContext) return null;
     return (
-      <button
+      <HintButton
         className="diff-context-separator"
         type="button"
-        title={onExpandContext ? `展开更多上下文（${line.text}）` : line.text}
+        hint={onExpandContext ? `展开更多上下文（${line.text}）` : line.text}
         disabled={!onExpandContext || expandingContext}
         onClick={onExpandContext}
       >
@@ -141,13 +142,13 @@ const DiffContentRow = memo(function DiffContentRow({
           : line.collapsedLines
             ? onExpandContext ? `${line.collapsedLines} 行未修改，点击展开` : `${line.collapsedLines} 行未修改`
             : "展开更多上下文"}</span>
-      </button>
+      </HintButton>
     );
   }
 
   return (
     <div className={`diff-line ${line.kind}`}>
-      <span className="diff-line-number" aria-label={lineNumberLabel(line)} title={lineNumberLabel(line)}>{displayLineNumber(line) ?? ""}</span>
+      <HoverHint content={lineNumberLabel(line)}><span className="diff-line-number" aria-label={lineNumberLabel(line)} >{displayLineNumber(line) ?? ""}</span></HoverHint>
       <span className="diff-line-marker" aria-hidden="true">{line.kind === "add" ? "+" : line.kind === "remove" ? "−" : ""}</span>
       {highlighted === undefined
         ? <code>{text}</code>

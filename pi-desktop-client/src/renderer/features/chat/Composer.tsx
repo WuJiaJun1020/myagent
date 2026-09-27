@@ -1,11 +1,8 @@
 import {
-  ChevronDown,
-  CircleGauge,
   CornerDownRight,
   Mic,
   Plus,
   Send,
-  ShieldCheck,
   Square,
   Trash2,
   WandSparkles,
@@ -13,7 +10,9 @@ import {
 } from "lucide-react";
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ClipboardEvent,
   type DragEvent,
@@ -25,9 +24,12 @@ import { agentGateway } from "../../services/agent-gateway";
 import { workspaceGateway } from "../../services/workspace-gateway";
 import { restoreQueuedMessages } from "../../lib/queued-messages";
 import { useAgentStore } from "../../stores/agent-store";
+import { usePendingPrompts } from "../../stores/pending-prompts";
 import { useSessionStore } from "../../stores/session-store";
 import { useUiStore } from "../../stores/ui-store";
+import { ComposerApprovalControl } from "./ComposerApprovalControl";
 import { ComposerModelControls } from "./ComposerModelControls";
+import { HintButton, HoverHint } from "../../components/ui/tooltip";
 
 type ComposerCommand = Omit<SlashCommand, "source"> & {
   source: SlashCommand["source"] | "desktop";
@@ -59,6 +61,7 @@ function formatTokens(tokens: number): string {
 }
 
 export function Composer() {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [commandIndex, setCommandIndex] = useState(0);
   const [queueMutation, setQueueMutation] = useState<string | null>(null);
   const [selectingImages, setSelectingImages] = useState(false);
@@ -116,11 +119,36 @@ export function Composer() {
   const contextPercent = context?.percent === null || context?.percent === undefined
     ? null
     : Math.max(0, Math.min(100, context.percent));
+  const contextHint = context
+    ? context.tokens === null
+      ? `上下文窗口 ${formatTokens(context.contextWindow)}，压缩后等待下次响应重新估算`
+      : `上下文已使用 ${context.tokens.toLocaleString()} / ${context.contextWindow.toLocaleString()} tokens${contextPercent === null ? "" : `（${contextPercent.toFixed(1)}%）`}`
+    : "";
   const queuedCount = queue.steering.length + queue.followUp.length;
   const queuedTasks = useMemo(() => [
     ...queue.steering.map((text, index) => ({ source: "steer" as const, index, text })),
     ...queue.followUp.map((text, index) => ({ source: "followUp" as const, index, text })),
   ], [queue.followUp, queue.steering]);
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const resize = () => {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(180, Math.max(82, textarea.scrollHeight))}px`;
+    };
+    resize();
+    let width = textarea.clientWidth;
+    let resizeFrame = 0;
+    const observer = new ResizeObserver(() => {
+      if (textarea.clientWidth === width) return;
+      width = textarea.clientWidth;
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(resize);
+    });
+    observer.observe(textarea);
+    return () => { observer.disconnect(); cancelAnimationFrame(resizeFrame); };
+  }, [input]);
 
   useEffect(() => {
     if (composerDraft === null || !session) return;
@@ -200,8 +228,10 @@ export function Composer() {
   async function send(): Promise<void> {
     const message = input.trim();
     if (!message || status.state !== "running" || !sessionReady || bashRunning || stopping) return;
+    if (useUiStore.getState().sessionComposerDrafts[session.id]?.text !== input) return;
     setSessionComposerDraft(session.id, { text: "", attachments });
     setError(null);
+    let pendingId: string | undefined;
     try {
       if (message.startsWith("!")) {
         if (session.mode === "chat") throw new Error("纯聊天会话不能执行终端命令");
@@ -225,10 +255,14 @@ export function Composer() {
         if (await executeDesktopCommand(command, args)) return;
       }
       requestChatFollow();
-      await agentGateway.sendPrompt(message, attachments.map((attachment) => attachment.id), busy ? "followUp" : undefined);
+      if (!message.startsWith("/")) pendingId = usePendingPrompts.getState().add(session.id, message, busy);
       setSessionComposerDraft(session.id, { text: "", attachments: [] });
+      await agentGateway.sendPrompt(message, attachments.map((attachment) => attachment.id), busy ? "followUp" : undefined);
+      if (busy && pendingId) usePendingPrompts.getState().remove(pendingId);
     } catch (reason) {
-      setSessionComposerDraft(session.id, { text: message, attachments });
+      if (pendingId) usePendingPrompts.getState().remove(pendingId);
+      const draft = useUiStore.getState().sessionComposerDrafts[session.id];
+      setSessionComposerDraft(session.id, { text: draft?.text ? `${message}\n${draft.text}` : message, attachments: [...attachments, ...(draft?.attachments ?? []).filter(item => !attachments.some(original => original.id === item.id))] });
       setError(reason instanceof Error ? reason.message : String(reason));
     }
   }
@@ -459,28 +493,28 @@ export function Composer() {
                 return (
                   <div className="queued-task-row" key={`${task.source}:${task.index}:${task.text}`}>
                     <span className="queued-task-order" aria-hidden="true"><CornerDownRight size={13} />{order + 1}</span>
-                    <span className="queued-task-text" title={task.text}>{task.text}</span>
-                    <button
+                    <HoverHint content={task.text}><span className="queued-task-text">{task.text}</span></HoverHint>
+                    <HintButton
                       className={`queued-task-steer ${steering ? "active" : ""}`}
                       type="button"
                       disabled={queueMutation !== null}
-                      title={steering ? "改为当前任务完成后执行" : "在当前回合结束后引导 Agent 转向"}
+                      hint={steering ? "改为当前任务完成后执行" : "在当前回合结束后引导 Agent 转向"}
                       aria-label={steering ? `将排队任务 ${order + 1} 改为后续任务` : `将排队任务 ${order + 1} 改为引导任务`}
                       onClick={() => void updateQueuedTask(task.source, task.index, steering ? "followUp" : "steer")}
                     >
                       <CornerDownRight size={13} />
                       <span>引导</span>
-                    </button>
-                    <button
+                    </HintButton>
+                    <HintButton
                       className="queued-task-delete"
                       type="button"
                       disabled={queueMutation !== null}
-                      title="删除排队任务"
+                      hint="删除排队任务"
                       aria-label={`删除排队任务 ${order + 1}`}
                       onClick={() => void updateQueuedTask(task.source, task.index, "delete")}
                     >
                       <Trash2 size={13} />
-                    </button>
+                    </HintButton>
                   </div>
                 );
               })}
@@ -491,12 +525,13 @@ export function Composer() {
               {attachments.map((attachment) => (
                 <span key={attachment.id}>
                   <img src={attachment.previewDataUrl} alt={attachment.name} />
-                  <button type="button" title={`移除 ${attachment.name}`} aria-label={`移除 ${attachment.name}`} onClick={() => removeAttachment(attachment)}><X size={11} /></button>
+                  <HintButton type="button" hint={`移除 ${attachment.name}`} aria-label={`移除 ${attachment.name}`} onClick={() => removeAttachment(attachment)}><X size={11} /></HintButton>
                 </span>
               ))}
             </div>
           )}
           <textarea
+            ref={textareaRef}
             value={input}
             onChange={(event) => {
               if (session) setSessionComposerDraft(session.id, { text: event.target.value, attachments });
@@ -528,48 +563,45 @@ export function Composer() {
           />
           <div className="composer-toolbar">
             <div className="composer-tools">
-              <button className="composer-tool" type="button" disabled={!session?.model?.supportsImages || selectingImages || attachments.length >= 4} title={session?.model?.supportsImages ? "添加图片（暂仅支持图片）" : "当前模型不支持图片输入"} aria-label="添加图片附件" onClick={() => void selectImages()}>
+              <HintButton className="composer-tool" type="button" disabled={!session?.model?.supportsImages || selectingImages || attachments.length >= 4} hint={session?.model?.supportsImages ? "添加图片（暂仅支持图片）" : "当前模型不支持图片输入"} aria-label="添加图片附件" onClick={() => void selectImages()}>
                 <Plus size={17} />
-              </button>
+              </HintButton>
               {!chatMode && session && (
-                <label className={`approval-select ${session.approvalPolicy}`} title="控制 Pi 调用工具前是否需要确认">
-                  <span className="approval-select-icon"><ShieldCheck size={13} /></span>
-                  <select
-                    value={session.approvalPolicy}
-                    disabled={busy || sessionMutation !== null}
-                    onChange={(event) => void setApprovalPolicy(event.target.value as "ask" | "auto")}
-                    aria-label="工具批准策略"
-                  >
-                    <option value="ask">请求批准</option>
-                    <option value="auto">自动批准</option>
-                  </select>
-                  <ChevronDown size={11} />
-                </label>
+                <ComposerApprovalControl
+                  value={session.approvalPolicy}
+                  disabled={busy || sessionMutation !== null}
+                  onChange={(value) => void setApprovalPolicy(value)}
+                />
               )}
               {context && (
-                <span
-                  className="context-usage"
-                  title={context.tokens === null ? "上下文窗口 " + formatTokens(context.contextWindow) + "，压缩后等待下次响应重新估算" : "已使用 " + context.tokens.toLocaleString() + " / " + context.contextWindow.toLocaleString() + " tokens"}
-                >
-                  <CircleGauge size={13} />
-                  <span>{context.tokens === null ? "待估算" : formatTokens(context.tokens) + " / " + formatTokens(context.contextWindow)}</span>
-                  <i><b style={{ width: String(contextPercent ?? 0) + "%" }} /></i>
-                </span>
+                <HoverHint content={contextHint}>
+                  <span
+                    className="context-usage"
+                    tabIndex={0}
+                    aria-label={contextHint}
+                  >
+                    <svg className="context-ring" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                      <circle cx="9" cy="9" r="7" />
+                      <circle className="context-ring-value" cx="9" cy="9" r="7" pathLength="100" strokeDasharray={`${contextPercent ?? 0} 100`} />
+                    </svg>
+                    <span className="context-usage-label">{context.tokens === null ? "待估算" : formatTokens(context.tokens) + " / " + formatTokens(context.contextWindow)}</span>
+                  </span>
+                </HoverHint>
               )}
             </div>
             <div className="composer-submit">
               <ComposerModelControls />
-              <button className="composer-voice-button" type="button" disabled title="语音输入暂未开放" aria-label="语音输入暂未开放">
+              <HintButton className="composer-voice-button" type="button" disabled hint="语音输入暂未开放" aria-label="语音输入暂未开放">
                 <Mic size={16} />
-              </button>
+              </HintButton>
               {busy || bashRunning ? (
-                <button className="stop-button" type="button" disabled={stopping} title={bashRunning ? "中止 Shell 命令" : "中止当前任务并恢复排队消息"} onClick={() => void (bashRunning ? abortBash() : abortCurrentTask())}>
+                <HintButton className="stop-button" type="button" disabled={stopping} aria-label={bashRunning ? "中止 Shell 命令" : "中止当前任务并恢复排队消息"} hint={bashRunning ? "中止 Shell 命令" : "中止当前任务并恢复排队消息"} onClick={() => void (bashRunning ? abortBash() : abortCurrentTask())}>
                   <Square size={14} fill="currentColor" />
-                </button>
+                </HintButton>
               ) : (
-                <button className="send-button" type="button" title="发送任务" disabled={!canSend} onClick={() => void send()}>
+                <HintButton className="send-button" type="button" hint="发送任务" aria-label="发送任务" disabled={!canSend} onClick={() => void send()}>
                   <Send size={15} />
-                </button>
+                </HintButton>
               )}
             </div>
           </div>

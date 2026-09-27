@@ -1,3 +1,4 @@
+import { HintButton, HoverHint } from "../../components/ui/tooltip";
 import { AlertTriangle, ChevronDown, ChevronRight, FileDiff, RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { FileChange } from "../../../shared/contracts/workspace";
@@ -134,14 +135,14 @@ export function AgentChangeReview({ changes }: { changes: FileChange[] }) {
               </button>
             </>
           ) : (
-            <button
+            <HintButton
               type="button"
               disabled={busy || undone || containsTruncatedChange}
-              title={containsTruncatedChange ? "存在内容被截断的变更，无法安全撤销" : "需要再次确认；只撤销当前轮次的文件变更"}
+              hint={containsTruncatedChange ? "存在内容被截断的变更，无法安全撤销" : "需要再次确认；只撤销当前轮次的文件变更"}
               onClick={() => setConfirmingRevert(true)}
             >
               <RotateCcw size={13} />{busy ? "撤销中" : undone ? "已撤销" : "撤销"}
-            </button>
+            </HintButton>
           )}
           <button type="button" onClick={() => setAgentView("review")}>审查</button>
         </div>
@@ -162,7 +163,7 @@ export function AgentChangeReview({ changes }: { changes: FileChange[] }) {
         <div className="agent-change-review-files">
           {visibleFiles.map((file) => (
             <div key={file.path}>
-              <span title={file.path}>{file.path}</span>
+              <HoverHint content={file.path}><span >{file.path}</span></HoverHint>
               <small><i>+{file.additions}</i> <b>-{file.deletions}</b></small>
             </div>
           ))}

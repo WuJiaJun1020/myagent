@@ -1,9 +1,11 @@
-import { Check, ChevronDown, ChevronRight, CircleAlert, LoaderCircle, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ChevronDown, CircleAlert, LoaderCircle, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { AgentMessage } from "../../../shared/contracts/agent-events";
 import type { ToolCallState } from "../../lib/event-reducer";
 import { useUiStore } from "../../stores/ui-store";
-import { resolveToolRenderer, ToolCategoryIcon } from "../tools/ToolRenderer";
+import { resolveToolRenderer, ToolCategoryIcon, ToolDetailRenderer } from "../tools/ToolRenderer";
+
+import { MarkdownContent } from "../chat/MarkdownContent";
 
 export type TaskActivityItem =
   | { type: "assistant"; messageId: string }
@@ -30,110 +32,91 @@ function formatDuration(milliseconds: number): string {
   return `${hours}时 ${String(minutes).padStart(2, "0")}分 ${String(seconds).padStart(2, "0")}秒`;
 }
 
-function ThinkingRows({ message }: { message: AgentMessage }) {
-  const blocks = message.content.filter((block) => block.type === "thinking");
-  return blocks.map((block) => (
-    <details className="task-thinking-row" key={block.contentIndex}>
-      <summary><Sparkles size={13} /><span>思考</span><ChevronRight size={13} /></summary>
-      <p>{block.redacted ? "该思考内容已由模型提供方隐藏。" : block.text}</p>
-    </details>
-  ));
+export function groupActivityItems(items: TaskActivityItem[]): Array<TaskActivityItem | { type: "tools"; toolIds: string[] }> {
+  const groups: Array<TaskActivityItem | { type: "tools"; toolIds: string[] }> = [];
+  for (const item of items) {
+    const previous = groups.at(-1);
+    if (item.type !== "tool") groups.push(item);
+    else if (previous?.type === "tools") previous.toolIds.push(item.toolId);
+    else groups.push({ type: "tools", toolIds: [item.toolId] });
+  }
+  return groups;
 }
 
-export function TaskActivityGroup({
-  items,
-  messagesById,
-  toolCallsById,
-  startedAt,
-  endedAt,
-  settled,
-}: TaskActivityGroupProps) {
+function ToolActivity({ tools }: { tools: ToolCallState[] }) {
+  const selectToolCall = useUiStore(state => state.selectToolCall);
+  const [expanded, setExpanded] = useState(false);
+  if (!tools.length) return null;
+  if (tools.length === 1) return <InlineToolCall tool={tools[0]} onInspect={() => selectToolCall(tools[0].id)} />;
+  const running = tools.some(tool => tool.status === "running");
+  const failed = tools.filter(tool => tool.status === "error").length;
+  const labels = [...new Set(tools.map(tool => {
+    const category = resolveToolRenderer(tool).present(tool).category;
+    return ({ terminal: "运行命令", read: "读取文件", edit: "编辑文件", search: "搜索", generic: `调用 ${tool.name}` })[category];
+  }))];
+  return <div className="task-tool-group">
+    <button className="task-operation-toggle" type="button" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
+      {running ? <LoaderCircle size={15} className="spin" /> : <ToolCategoryIcon category={resolveToolRenderer(tools[0]).present(tools[0]).category} />}
+      <span>{running ? "正在" : "已"}{labels.join("、")}</span>
+      {failed > 0 && <em className="error">{failed} 项失败</em>}
+      <ChevronDown size={13} className={expanded ? "open" : ""} />
+    </button>
+    {expanded && <div className="task-tool-calls">{tools.map(tool => <InlineToolCall key={tool.id} tool={tool} onInspect={() => selectToolCall(tool.id)} />)}</div>}
+  </div>;
+}
+
+function InlineToolCall({ tool, onInspect }: { tool: ToolCallState; onInspect: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const presentation = resolveToolRenderer(tool).present(tool);
+  const action = ({ terminal: "运行命令", read: "读取文件", edit: "编辑文件", search: "搜索", generic: `调用 ${tool.name}` })[presentation.category];
+  return <div className={`task-inline-call ${tool.status}`}>
+    <button className="task-call-toggle" type="button" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
+      {tool.status === "running" ? <LoaderCircle size={15} className="spin" /> : <ToolCategoryIcon category={presentation.category} />}
+      <span>{tool.status === "running" ? "正在" : tool.status === "error" ? "失败：" : "已"}{action} · {presentation.summary}</span>
+      <ChevronDown size={13} className={expanded ? "open" : ""} />
+    </button>
+    {expanded && <div className="task-inline-detail">
+      <header><span>{presentation.category === "terminal" ? "Shell" : tool.name}</span><button type="button" onClick={onInspect}>在检查器中查看</button></header>
+      <div className="task-inline-output"><ToolDetailRenderer tool={tool} compact /></div>
+    </div>}
+  </div>;
+}
+
+export function TaskActivityGroup({ items, messagesById, toolCallsById, startedAt, endedAt, settled }: TaskActivityGroupProps) {
   const [expanded, setExpanded] = useState(!settled);
+  const manuallyToggled = useRef(false);
   const [now, setNow] = useState(Date.now());
-  const selectToolCall = useUiStore((state) => state.selectToolCall);
-
-  useEffect(() => {
-    setExpanded(!settled);
-  }, [settled]);
-
+  useEffect(() => { if (!manuallyToggled.current) setExpanded(!settled); }, [settled]);
   useEffect(() => {
     if (settled) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [settled]);
-
-  const tools = items
-    .filter((item): item is Extract<TaskActivityItem, { type: "tool" }> => item.type === "tool")
-    .map((item) => toolCallsById[item.toolId])
-    .filter((tool): tool is ToolCallState => Boolean(tool));
-  const thinkingCount = items.reduce((count, item) => {
-    if (item.type === "tool") return count;
-    return count + (messagesById[item.messageId]?.content.filter((block) => block.type === "thinking").length ?? 0);
-  }, 0);
-  const failedCount = tools.filter((tool) => tool.status === "error").length;
-  const runningCount = tools.filter((tool) => tool.status === "running").length;
+  const failedCount = items.filter(item => item.type === "tool" && toolCallsById[item.toolId]?.status === "error").length;
   const duration = formatDuration((endedAt ?? now) - startedAt);
-
-  return (
-    <section className={`task-activity ${expanded ? "expanded" : "collapsed"} ${settled ? "settled" : "running"}`}>
-      <button
-        className="task-activity-toggle"
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-      >
-        {settled ? <Sparkles size={14} /> : <LoaderCircle className="spin" size={14} />}
-        <strong>{settled ? `用时 ${duration}` : `正在处理 · ${duration}`}</strong>
-        <span>
-          {thinkingCount > 0 && `思考 ${thinkingCount} 次`}
-          {thinkingCount > 0 && tools.length > 0 && " · "}
-          {tools.length > 0 && `运行 ${tools.length} 个工具`}
-        </span>
-        {failedCount > 0 && <em className="error"><CircleAlert size={12} />{failedCount}</em>}
-        {failedCount === 0 && runningCount === 0 && tools.length > 0 && <em className="done"><Check size={12} />{tools.length}</em>}
-        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-      </button>
-      {expanded && (
-        <div className="task-activity-items">
-          {items.map((item, index) => {
-            if (item.type === "tool") {
-              const tool = toolCallsById[item.toolId];
-              if (!tool) return null;
-              const presentation = resolveToolRenderer(tool).present(tool);
-              const statusIcon = tool.status === "running"
-                ? <LoaderCircle className="spin" size={12} />
-                : tool.status === "error"
-                  ? <CircleAlert size={12} />
-                  : <Check size={12} />;
-              return (
-                <button
-                  className={`task-tool-row ${tool.status}`}
-                  type="button"
-                  key={`${tool.id}:${index}`}
-                  onClick={() => selectToolCall(tool.id)}
-                  title="在右侧检查器中查看完整调用信息"
-                >
-                  <ToolCategoryIcon category={presentation.category} />
-                  <span><strong>{tool.status === "running" ? "正在运行" : "已运行"} {presentation.label}</strong><small>{presentation.summary}</small></span>
-                  {statusIcon}
-                </button>
-              );
-            }
-
-            const message = messagesById[item.messageId];
-            if (!message) return null;
-            const text = item.type === "assistant"
-              ? message.content.filter((block) => block.type === "text").map((block) => block.text).join("\n\n")
-              : "";
-            return (
-              <div className="task-message-activity" key={`${item.type}:${message.id}:${index}`}>
-                <ThinkingRows message={message} />
-                {text && <p className="task-process-note">{text}</p>}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
+  return <section className={`task-activity ${expanded ? "expanded" : "collapsed"} ${settled ? "settled" : "running"}`}>
+    <button className="task-activity-toggle" type="button" aria-expanded={expanded} onClick={() => { manuallyToggled.current = true; setExpanded(value => !value); }}>
+      {!settled && <LoaderCircle className="spin" size={14} />}
+      <span>{settled ? `用时 ${duration}` : `正在处理 · ${duration}`}</span>
+      <ChevronDown size={14} className={expanded ? "open" : ""} />
+      {failedCount > 0 && <em className="error"><CircleAlert size={12} />{failedCount} 项失败</em>}
+    </button>
+    {expanded && <div className="task-activity-items">{groupActivityItems(items).map(item => {
+      if (item.type === "tools") return <ToolActivity key={`tools:${item.toolIds[0]}`} tools={item.toolIds.map(id => toolCallsById[id]).filter((tool): tool is ToolCallState => Boolean(tool))} />;
+      if (item.type === "tool") return null;
+      const message = messagesById[item.messageId];
+      if (!message) return null;
+      return <div className="task-message-activity" key={`${item.type}:${message.id}`}>
+        {message.content.map(block => {
+          if (block.type === "thinking") return <details className="task-thinking-row" key={block.contentIndex}>
+            <summary><Sparkles size={14} /><span>{message.streaming ? "正在思考" : "思考"}</span><ChevronDown size={13} /></summary>
+            <div className="task-thinking-content">{block.redacted ? "该思考内容已由模型提供方隐藏。" : block.text || "等待思考内容…"}</div>
+          </details>;
+          if (item.type === "assistant" && block.type === "text" && block.text) return <div className="task-process-note" key={block.contentIndex}>{message.streaming ? block.text : <MarkdownContent content={block.text} />}</div>;
+          return null;
+        })}
+        {item.type === "assistant" && message.errorMessage && <div className="message-error"><CircleAlert size={14} />{message.errorMessage}</div>}
+      </div>;
+    })}</div>}
+  </section>;
 }

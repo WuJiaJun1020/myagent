@@ -1,4 +1,4 @@
-import { Bot, CircleAlert, UserRound } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 import type { AgentMessage } from "../../../shared/contracts/agent-events";
 import { ThinkingBlock } from "../agent/ThinkingBlock";
 import { MarkdownContent } from "./MarkdownContent";
@@ -25,14 +25,12 @@ export function MessageItem({ message, hideThinking = false }: MessageItemProps)
             {textBlocks.map((block) => <p key={block.contentIndex}>{block.text}</p>)}
           </div>
         </div>
-        <div className="message-avatar user"><UserRound size={15} /></div>
       </article>
     );
   }
 
   return (
     <article className="timeline-message assistant-message">
-      <div className="message-avatar assistant"><Bot size={16} /></div>
       <div className="message-column">
         <div className="message-meta">
           <strong>Pi</strong>

@@ -5,3 +5,4 @@ resources/python/
 .cache/
 *.log
 .DS_Store
+docs/AGENT_WORKSPACE_PREVIEW.html

@@ -1,7 +1,6 @@
-import CodeMirror from "@uiw/react-codemirror";
-import { python } from "@codemirror/lang-python";
+import { HoverHint, HintButton } from "../../components/ui/tooltip";
+import { PythonCodeEditor } from "../../components/ui/PythonCodeEditor";
 import {
-  ArrowLeft,
   BookOpen,
   Check,
   CheckCircle2,
@@ -45,7 +44,6 @@ import {
   type AlgorithmWorkbenchView,
 } from "../../stores/algorithm-practice-store";
 
-const PYTHON_EXTENSIONS = [python()];
 
 const DIFFICULTY_LABELS: Record<AlgorithmDifficulty, string> = {
   easy: "简单",
@@ -81,18 +79,6 @@ function formatTime(value?: number): string {
   return value < 1 ? "< 1 ms" : `${Math.round(value)} ms`;
 }
 
-function useEditorTheme(): "dark" | "light" {
-  const readTheme = () => document.documentElement.dataset.theme === "light" ? "light" : "dark";
-  const [theme, setTheme] = useState<"dark" | "light">(readTheme);
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => setTheme(readTheme()));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => observer.disconnect();
-  }, []);
-
-  return theme;
-}
 
 function signatureFor(problem: AlgorithmProblemDetail): string {
   const method = problem.leetcode.methodName ?? "solve";
@@ -216,8 +202,8 @@ function ProblemNavigator({ problems, categories, selectedSlug, onSelect }: Prob
                     <small data-difficulty={problem.difficulty}>{DIFFICULTY_LABELS[problem.difficulty]}</small>
                   </span>
                   <span className="algorithm-mode-badges" aria-label="完成状态">
-                    <i className={problem.progress.leetcode.solved ? "solved" : ""} title="LeetCode 模式">力</i>
-                    <i className={problem.progress.acm.solved ? "solved" : ""} title="ACM 模式">A</i>
+                    <HoverHint content="LeetCode 模式"><i className={problem.progress.leetcode.solved ? "solved" : ""} >力</i></HoverHint>
+                    <HoverHint content="ACM 模式"><i className={problem.progress.acm.solved ? "solved" : ""} >A</i></HoverHint>
                   </span>
                 </button>
               ))}
@@ -358,10 +344,9 @@ type ReferenceWorkspaceProps = {
   answers: AlgorithmReferenceAnswer[];
   selectedFile: string | null;
   onSelect: (file: string) => void;
-  editorTheme: "dark" | "light";
 };
 
-function ReferenceWorkspace({ answers, selectedFile, onSelect, editorTheme }: ReferenceWorkspaceProps) {
+function ReferenceWorkspace({ answers, selectedFile, onSelect }: ReferenceWorkspaceProps) {
   const selected = answers.find((answer) => answer.file === selectedFile) ?? answers[0] ?? null;
   if (!selected) {
     return (
@@ -384,24 +369,17 @@ function ReferenceWorkspace({ answers, selectedFile, onSelect, editorTheme }: Re
         <small>只读 · 可直接运行验证</small>
       </div>
       <div className="algorithm-editor-surface readonly">
-        <CodeMirror
+        <PythonCodeEditor
           className="algorithm-code-editor"
           value={selected.code}
-          extensions={PYTHON_EXTENSIONS}
-          theme={editorTheme}
-          editable={false}
-          basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: false }}
+          readOnly
         />
       </div>
     </>
   );
 }
 
-type AlgorithmPracticeProps = {
-  onBack: () => void;
-};
-
-export function AlgorithmPractice({ onBack }: AlgorithmPracticeProps) {
+export function AlgorithmPractice() {
   const snapshot = useAlgorithmPracticeStore((state) => state.snapshot);
   const initialized = useAlgorithmPracticeStore((state) => state.initialized);
   const loading = useAlgorithmPracticeStore((state) => state.loading);
@@ -427,7 +405,6 @@ export function AlgorithmPractice({ onBack }: AlgorithmPracticeProps) {
   const resetDraft = useAlgorithmPracticeStore((state) => state.resetDraft);
   const run = useAlgorithmPracticeStore((state) => state.run);
   const clearRunResult = useAlgorithmPracticeStore((state) => state.clearRunResult);
-  const editorTheme = useEditorTheme();
   const workbenchRef = useRef<HTMLDivElement>(null);
   const navigationSequenceRef = useRef(0);
   const [navigatorWidth, setNavigatorWidth] = useState(260);
@@ -518,16 +495,6 @@ export function AlgorithmPractice({ onBack }: AlgorithmPracticeProps) {
       await selectProblem(slug);
     } catch {
       // Keep the current problem visible when its draft could not be persisted.
-    }
-  }
-
-  async function returnToInterview(): Promise<void> {
-    navigationSequenceRef.current += 1;
-    try {
-      await flushCurrentDraft();
-      onBack();
-    } catch {
-      // Keep the workbench open when the latest draft could not be persisted.
     }
   }
 
@@ -623,12 +590,9 @@ export function AlgorithmPractice({ onBack }: AlgorithmPracticeProps) {
   return (
     <section className="algorithm-practice-page" aria-label="算法练习工作台">
       <header className="algorithm-overview">
-        <button className="algorithm-back-button" type="button" onClick={() => void returnToInterview()} title="返回智能面试">
-          <ArrowLeft size={14} />返回智能面试
-        </button>
         <div className="algorithm-overview-title">
           <Code2 size={16} />
-          <span><strong>{snapshot?.collection.title ?? "算法题库"}</strong><small>{snapshot?.collection.description}</small></span>
+          <span><strong>{snapshot?.collection.title ?? "算法题库"}</strong></span>
         </div>
         <div className="algorithm-progress-summary">
           <span><i>力</i><strong>{snapshot?.solved.leetcode ?? 0}</strong><small>/ {snapshot?.problems.length ?? 0}</small></span>
@@ -638,24 +602,24 @@ export function AlgorithmPractice({ onBack }: AlgorithmPracticeProps) {
           <i />{snapshot?.runtime.available ? snapshot.runtime.displayName : "Python 不可用"}
         </span>
         <div className="algorithm-pane-toggles">
-          <button
+          <HintButton
             type="button"
             className={navigatorOpen ? "active" : ""}
             onClick={() => setNavigatorOpen((open) => !open)}
-            title={navigatorOpen ? "收起题目列表" : "展开题目列表"}
+            hint={navigatorOpen ? "收起题目列表" : "展开题目列表"}
             aria-label={navigatorOpen ? "收起题目列表" : "展开题目列表"}
           >
             {navigatorOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
-          </button>
-          <button
+          </HintButton>
+          <HintButton
             type="button"
             className={statementOpen ? "active" : ""}
             onClick={() => setStatementOpen((open) => !open)}
-            title={statementOpen ? "收起题目描述" : "展开题目描述"}
+            hint={statementOpen ? "收起题目描述" : "展开题目描述"}
             aria-label={statementOpen ? "收起题目描述" : "展开题目描述"}
           >
             {statementOpen ? <EyeOff size={15} /> : <Eye size={15} />}
-          </button>
+          </HintButton>
         </div>
       </header>
 
@@ -749,21 +713,21 @@ export function AlgorithmPractice({ onBack }: AlgorithmPracticeProps) {
                         {currentStatus === "saved" && <Check size={12} />}
                         {saveStatusLabel(currentStatus)}
                       </span>
-                      <button type="button" onClick={() => void resetCurrentDraft()} disabled={currentStatus === "saving"} title="恢复初始模板">
+                      <HintButton type="button" onClick={() => void resetCurrentDraft()} disabled={currentStatus === "saving"} hint="恢复初始模板">
                         <RotateCcw size={14} />重置
-                      </button>
+                      </HintButton>
                     </>
                   )}
-                  <button
+                  <HintButton
                     type="button"
                     className="algorithm-run-button"
                     disabled={running || !snapshot?.runtime.available || (view === "answers" && !selectedAnswer)}
                     onClick={runCurrent}
-                    title="运行代码（Ctrl + Enter）"
+                    hint="运行代码（Ctrl + Enter）"
                   >
                     {runningMatches ? <LoaderCircle className="spin" size={14} /> : <Play size={14} />}
                     {runningMatches ? "运行中" : "运行"}
-                  </button>
+                  </HintButton>
                 </div>
               </header>
 
@@ -777,7 +741,6 @@ export function AlgorithmPractice({ onBack }: AlgorithmPracticeProps) {
                   <ReferenceWorkspace
                     answers={problem.answers}
                     selectedFile={selectedAnswerFile}
-                    editorTheme={editorTheme}
                     onSelect={(file) => {
                       clearRunResult();
                       setSelectedAnswerFile(file);
@@ -785,14 +748,11 @@ export function AlgorithmPractice({ onBack }: AlgorithmPracticeProps) {
                   />
                 ) : (
                   <div className="algorithm-editor-surface">
-                    <CodeMirror
+                    <PythonCodeEditor
                       key={`${problem.slug}:${activeMode}`}
                       className="algorithm-code-editor"
                       value={problem.drafts[activeMode]}
-                      extensions={PYTHON_EXTENSIONS}
-                      theme={editorTheme}
                       onChange={(value) => updateDraft(activeMode, value)}
-                      basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: true }}
                     />
                   </div>
                 )}
@@ -801,7 +761,6 @@ export function AlgorithmPractice({ onBack }: AlgorithmPracticeProps) {
               <section className="algorithm-results-panel" aria-label="运行结果">
                 <header>
                   <span><Terminal size={14} /><strong>运行结果</strong></span>
-                  <small>本地 Python 进程设有时间与输出限制，但不是完整安全沙箱。</small>
                 </header>
                 <div className="algorithm-results-scroll">
                   <JudgeResults running={runningMatches} result={visibleResult} error={visibleError} />

@@ -1,3 +1,5 @@
+import { useInterviewDeleteConfirmation } from "./use-interview-delete-confirmation";
+import { HintButton } from "../../components/ui/tooltip";
 import { ClipboardList, Trash2, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { InterviewStatus } from "../../../shared/contracts/interview";
@@ -14,6 +16,7 @@ const STATUS_LABELS: Record<InterviewStatus, string> = {
 };
 
 export function InterviewSidebarSummary() {
+  const { confirm, confirmationDialog } = useInterviewDeleteConfirmation();
   const interviews = useInterviewStore((state) => state.interviews);
   const selectedId = useInterviewStore((state) => state.selectedId);
   const loading = useInterviewStore((state) => state.loading);
@@ -26,7 +29,7 @@ export function InterviewSidebarSummary() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function removeInterview(id: string, title: string): Promise<void> {
-    if (!window.confirm(`确定永久删除面试“${title}”吗？简历、对话和调试记录会一并删除，无法撤销。`)) return;
+    if (!await confirm(title)) return;
     setDeleteError(null);
     try {
       await deleteInterview(id);
@@ -41,6 +44,8 @@ export function InterviewSidebarSummary() {
   }, [initialize]);
 
   return (
+    <>
+      {confirmationDialog}
     <section className="interview-sidebar" aria-label="面试记录">
       <header><span className="section-label">最近面试</span><small>{interviews.length}</small></header>
       <div className="interview-sidebar-list">
@@ -49,10 +54,10 @@ export function InterviewSidebarSummary() {
           <div className="interview-sidebar-empty"><ClipboardList size={17} /><span>尚未创建面试</span></div>
         ) : interviews.map((interview) => (
           <div className="interview-sidebar-row" key={interview.id}>
-            <button
+            <HintButton
               className={interview.id === selectedId ? "active" : ""}
               type="button"
-              title={interview.title}
+              hint={interview.title}
               onClick={() => {
                 selectInterview(interview.id);
                 setInterviewView("session");
@@ -60,14 +65,15 @@ export function InterviewSidebarSummary() {
             >
               <UserRound size={14} />
               <span><strong>{interview.title}</strong><small>{interview.candidateName} · {STATUS_LABELS[interview.status]}</small></span>
-            </button>
-            <button className="interview-sidebar-delete" type="button" title={`删除面试：${interview.title}`}
+            </HintButton>
+            <HintButton className="interview-sidebar-delete" type="button" hint={`删除面试：${interview.title}`}
               aria-label={`删除面试：${interview.title}`}
               disabled={mutation || chattingInterviewId === interview.id}
-              onClick={() => void removeInterview(interview.id, interview.title)}><Trash2 size={13} /></button>
+              onClick={() => void removeInterview(interview.id, interview.title)}><Trash2 size={13} /></HintButton>
           </div>
         ))}
       </div>
     </section>
+    </>
   );
 }

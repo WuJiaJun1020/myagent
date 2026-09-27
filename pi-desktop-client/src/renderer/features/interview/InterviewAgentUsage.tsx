@@ -1,3 +1,4 @@
+import { HoverHint } from "../../components/ui/tooltip";
 import { CircleGauge } from "lucide-react";
 import type { InterviewChatModelInfo, InterviewSession } from "../../../shared/contracts/interview";
 import { readInterviewCacheUsage, readInterviewContextUsage } from "./interview-context-usage";
@@ -25,21 +26,21 @@ export function InterviewAgentUsage({ session, actor, models }: {
     ? "本场尚无可计算的缓存用量；缺少输入或缓存读取计数的调用不会当作 0%。"
     : `本场累计：缓存读取 ${cache.cachedInputTokens!.toLocaleString()} / 已统计输入 ${cache.cacheTotalInputTokens!.toLocaleString()} tokens；覆盖 ${cache.measuredAttempts} 次调用，另有 ${cache.unmeasuredAttempts} 次缺少完整计数。含格式修复和未采用的草稿。`;
   return <div className="interview-agent-usage" aria-label="本场累计输入、最新一轮完整上下文与缓存命中率">
-    <div className="interview-agent-usage-row" title={inputDescription}>
+    <HoverHint content={inputDescription}><div className="interview-agent-usage-row" >
       <span>本场累计输入</span><strong>{input.totalInputTokens === null ? "待获取" : input.totalInputTokens.toLocaleString()}
         <em> tokens</em></strong>
-    </div>
-    <div className="interview-agent-usage-row" title={latestDescription}>
+    </div></HoverHint>
+    <HoverHint content={latestDescription}><div className="interview-agent-usage-row" >
       <span><CircleGauge size={13} />最新一轮完整上下文</span>
       <strong>{input.latestInputTokens === null ? "待获取" : input.latestInputTokens.toLocaleString()}
         <em> / {input.latestContextWindowTokens ? input.latestContextWindowTokens.toLocaleString() : "窗口未知"}</em></strong>
-    </div>
+    </div></HoverHint>
     <div className="interview-agent-usage-bar" role="progressbar" aria-label="最新一轮上下文占用比例" aria-valuemin={0}
       aria-valuemax={100} aria-valuenow={input.latestContextPercent === null ? undefined : contextPercent}>
       <span style={{ width: `${contextPercent}%` }} /></div>
-    <div className="interview-agent-usage-row" title={cacheDescription}>
+    <HoverHint content={cacheDescription}><div className="interview-agent-usage-row" >
       <span>本场缓存命中率</span><strong>{cachePercent === null ? "未提供" : `${cachePercent.toFixed(1)}%`}</strong>
-    </div>
+    </div></HoverHint>
     {(input.partialInputAttempts > 0 || input.unmeasuredInputAttempts > 0 || cache.unmeasuredAttempts > 0)
       && <small>{[input.unmeasuredInputAttempts > 0 && `${input.unmeasuredInputAttempts} 次缺少输入计数`,
         input.partialInputAttempts > 0 && `${input.partialInputAttempts} 次输入计数不完整`,
@@ -54,7 +55,7 @@ export function InterviewUsageSummary({ session, models }: {
   const cache = readInterviewCacheUsage(session);
   const description = cache.cacheHitRate === null ? "本场尚无可计算的缓存用量。"
     : `全部 Agent 共 ${cache.measuredAttempts} 次有完整计数的模型调用：缓存读取 ${cache.cachedInputTokens!.toLocaleString()} / 输入总计 ${cache.cacheTotalInputTokens!.toLocaleString()} tokens。${cache.unmeasuredAttempts} 次调用缺少完整计数，未纳入缓存比例。`;
-  return <div className="interview-agent-usage" aria-label="整场面试模型用量" title={description}>
+  return <HoverHint content={description}><div className="interview-agent-usage" aria-label="整场面试模型用量" >
     <div className="interview-agent-usage-row"><span>整场累计输入</span>
       <strong>{input.totalInputTokens === null ? "待获取" : input.totalInputTokens.toLocaleString()}<em> tokens</em></strong></div>
     <div className="interview-agent-usage-row"><span>整场缓存命中率</span>
@@ -63,5 +64,5 @@ export function InterviewUsageSummary({ session, models }: {
       {input.unmeasuredInputAttempts > 0 && ` · ${input.unmeasuredInputAttempts} 次缺少输入计数`}
       {input.partialInputAttempts > 0 && ` · ${input.partialInputAttempts} 次输入计数不完整`}
       {cache.unmeasuredAttempts > 0 && ` · ${cache.unmeasuredAttempts} 次缺少缓存计数`}</small>
-  </div>;
+  </div></HoverHint>;
 }

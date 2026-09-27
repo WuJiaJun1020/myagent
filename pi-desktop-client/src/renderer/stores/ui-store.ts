@@ -23,6 +23,7 @@ export type SessionChatScroll = {
 type UiStore = {
   sidebarOpen: boolean;
   detailPanelOpen: boolean;
+  agentDetailPanelOpen: boolean;
   settingsOpen: boolean;
   providerSettingsOpen: boolean;
   sessionOverviewOpen: boolean;
@@ -43,6 +44,7 @@ type UiStore = {
   toggleTerminalPanel: () => void;
   setActiveModule: (moduleId: ProductModuleId) => void;
   setAgentView: (view: AgentView) => void;
+  toggleAgentReview: () => void;
   setInterviewView: (view: InterviewView) => void;
   setKnowledgeStudioView: (view: KnowledgeStudioView) => void;
   setResourceCenterTab: (tab: ResourceCenterTab) => void;
@@ -149,7 +151,8 @@ const initialNavigation = readNavigation();
 
 export const useUiStore = create<UiStore>((set) => ({
   sidebarOpen: true,
-  detailPanelOpen: true,
+  detailPanelOpen: false,
+  agentDetailPanelOpen: initialNavigation.moduleViews.agent === "review",
   settingsOpen: false,
   providerSettingsOpen: false,
   sessionOverviewOpen: false,
@@ -163,7 +166,9 @@ export const useUiStore = create<UiStore>((set) => ({
   sessionChatScroll: {},
   chatFollowRequest: 0,
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
-  toggleDetailPanel: () => set((state) => ({ detailPanelOpen: !state.detailPanelOpen })),
+  toggleDetailPanel: () => set((state) => state.activeModule === "agent"
+    ? { agentDetailPanelOpen: !state.agentDetailPanelOpen }
+    : { detailPanelOpen: !state.detailPanelOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setProviderSettingsOpen: (providerSettingsOpen) => set({ providerSettingsOpen }),
   setSessionOverviewOpen: (sessionOverviewOpen) => set({ sessionOverviewOpen }),
@@ -175,7 +180,13 @@ export const useUiStore = create<UiStore>((set) => ({
   setAgentView: (agentView) => set((state) => {
     const moduleViews = { ...state.moduleViews, agent: agentView };
     saveNavigation({ activeModule: state.activeModule, moduleViews, resourceCenterTab: state.resourceCenterTab });
-    return agentView === "review" ? { moduleViews, detailPanelOpen: true } : { moduleViews };
+    return agentView === "review" ? { moduleViews, agentDetailPanelOpen: true } : { moduleViews };
+  }),
+  toggleAgentReview: () => set((state) => {
+    const open = !(state.moduleViews.agent === "review" && state.agentDetailPanelOpen);
+    const moduleViews: ModuleViews = { ...state.moduleViews, agent: open ? "review" : "activity" };
+    saveNavigation({ activeModule: state.activeModule, moduleViews, resourceCenterTab: state.resourceCenterTab });
+    return { moduleViews, agentDetailPanelOpen: open };
   }),
   setInterviewView: (interviewView) => set((state) => {
     const moduleViews = { ...state.moduleViews, interview: interviewView };
@@ -209,7 +220,7 @@ export const useUiStore = create<UiStore>((set) => ({
     return { sessionComposerDrafts, sessionChatScroll };
   }),
   requestChatFollow: () => set((state) => ({ chatFollowRequest: state.chatFollowRequest + 1 })),
-  selectToolCall: (id) => set({ detailSelection: { type: "tool", id }, detailPanelOpen: true }),
-  selectFile: (path) => set({ detailSelection: { type: "file", path }, detailPanelOpen: true }),
+  selectToolCall: (id) => set({ detailSelection: { type: "tool", id }, agentDetailPanelOpen: true }),
+  selectFile: (path) => set({ detailSelection: { type: "file", path }, agentDetailPanelOpen: true }),
   clearDetailSelection: () => set({ detailSelection: null }),
 }));

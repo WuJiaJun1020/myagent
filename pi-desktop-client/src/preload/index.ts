@@ -69,6 +69,15 @@ const api: PiDesktopApi = {
   cancelProviderLogin: (flowId) => ipcRenderer.invoke("pi:cancel-provider-login", flowId),
   respondToProviderAuth: (response) => ipcRenderer.invoke("pi:provider-auth-response", response),
   openExternal: (url) => ipcRenderer.invoke("app:open-external", url),
+  browserGetState: () => ipcRenderer.invoke("browser:get-state"),
+  browserNavigate: (input) => ipcRenderer.invoke("browser:navigate", input),
+  browserSetBounds: (bounds) => ipcRenderer.invoke("browser:bounds", bounds),
+  browserAction: (action) => ipcRenderer.invoke("browser:action", action),
+  onBrowserState: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: import("../shared/contracts/browser").BrowserState) => listener(state);
+    ipcRenderer.on("browser:state", handler);
+    return () => ipcRenderer.removeListener("browser:state", handler);
+  },
   setWindowTitle: (title) => ipcRenderer.invoke("app:set-window-title", title),
   listWorkspaceDirectory: (path) => ipcRenderer.invoke("workspace:list-directory", path),
   searchWorkspaceFiles: (query) => ipcRenderer.invoke("workspace:search-files", query),

@@ -2,6 +2,8 @@ import { useRef, type CSSProperties, type ReactNode } from "react";
 import { useSettingsStore } from "../../stores/settings-store";
 import { useUiStore } from "../../stores/ui-store";
 import { PanelResizeHandle } from "./PanelResizeHandle";
+import { BrowserPanel } from "../../features/browser/BrowserPanel";
+import { useBrowserStore } from "../../stores/browser-store";
 
 type MainLayoutProps = {
   sidebar: ReactNode;
@@ -27,8 +29,11 @@ export function MainLayout({
   inactive = false,
 }: MainLayoutProps) {
   const shellRef = useRef<HTMLDivElement>(null);
+  const activeModule = useUiStore(state => state.activeModule);
+  const browserOpen = useBrowserStore(state => state.open) && activeModule === "agent" && !inactive;
+  if (browserOpen) detailVariant = "review";
   const sidebarOpen = useUiStore((state) => state.sidebarOpen);
-  const detailPanelOpen = useUiStore((state) => state.detailPanelOpen);
+  const detailPanelOpen = useUiStore((state) => state.activeModule === "agent" ? state.agentDetailPanelOpen : state.detailPanelOpen);
   const sidebarWidth = useSettingsStore((state) => state.sidebarWidth);
   const detailPanelWidth = useSettingsStore((state) => state.detailPanelWidth);
   const reviewPanelWidth = useSettingsStore((state) => state.reviewPanelWidth);
@@ -36,7 +41,7 @@ export function MainLayout({
   const setDetailPanelWidth = useSettingsStore((state) => state.setDetailPanelWidth);
   const setReviewPanelWidth = useSettingsStore((state) => state.setReviewPanelWidth);
   const effectiveSidebarOpen = sidebarOpen && !sidebarSuppressed;
-  const effectiveDetailPanelOpen = detailPanelOpen && !detailSuppressed;
+  const effectiveDetailPanelOpen = browserOpen || (detailPanelOpen && !detailSuppressed);
   const layoutStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
     "--detail-panel-width": `${detailPanelWidth}px`,
@@ -76,7 +81,7 @@ export function MainLayout({
           {effectiveDetailPanelOpen && (
             <>
               <PanelResizeHandle
-                label={detailVariant === "review" ? "调整代码审查面板" : "调整详情面板"}
+                label={browserOpen ? "调整浏览器面板" : detailVariant === "review" ? "调整代码审查面板" : "调整详情面板"}
                 value={detailVariant === "review" ? reviewPanelWidth : detailPanelWidth}
                 min={detailVariant === "review" ? 480 : 260}
                 max={detailVariant === "review" ? 1_100 : 520}
@@ -86,7 +91,7 @@ export function MainLayout({
                 previewProperty={detailVariant === "review" ? "--review-panel-width" : "--detail-panel-width"}
                 onCommit={detailVariant === "review" ? setReviewPanelWidth : setDetailPanelWidth}
               />
-              <div className="detail-slot">{detail}</div>
+              <div className="detail-slot">{browserOpen ? <BrowserPanel /> : detail}</div>
             </>
           )}
         </div>

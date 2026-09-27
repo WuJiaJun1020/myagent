@@ -1,3 +1,4 @@
+import { HintButton } from "../../components/ui/tooltip";
 import { Settings } from "lucide-react";
 import { InterviewSidebarSummary } from "../../features/interview/InterviewSidebarSummary";
 import { useUiStore } from "../../stores/ui-store";
@@ -13,9 +14,9 @@ export function InterviewSidebar() {
           <span className="connection-dot" />
           <span><strong>面试模块已就绪</strong><small>本地数据</small></span>
         </div>
-        <button className="icon-button" type="button" aria-label="打开设置" title="设置" onClick={() => setSettingsOpen(true)}>
+        <HintButton className="icon-button" type="button" aria-label="打开设置" hint="设置" onClick={() => setSettingsOpen(true)}>
           <Settings size={15} />
-        </button>
+        </HintButton>
       </div>
     </>
   );

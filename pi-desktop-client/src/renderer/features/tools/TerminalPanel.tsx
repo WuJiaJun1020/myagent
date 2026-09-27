@@ -1,7 +1,9 @@
+import { getTerminalTheme } from "../../lib/terminal-theme";
+import { HoverHint, HintButton } from "../../components/ui/tooltip";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { Terminal, type ITheme } from "@xterm/xterm";
+import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { ChevronDown, ChevronUp, RotateCw, Search, TerminalSquare, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -13,60 +15,14 @@ import { useSessionStore } from "../../stores/session-store";
 import { useSettingsStore } from "../../stores/settings-store";
 import { useUiStore } from "../../stores/ui-store";
 
-const TERMINAL_THEMES: Record<"dark" | "light", ITheme> = {
-  dark: {
-    background: "#0a0f15",
-    foreground: "#d3dae4",
-    cursor: "#e6e9ef",
-    cursorAccent: "#0a0f15",
-    selectionBackground: "#39445a",
-    black: "#1b222c",
-    red: "#ef7777",
-    green: "#54c995",
-    yellow: "#e3b35c",
-    blue: "#79a7ef",
-    magenta: "#ae91ef",
-    cyan: "#63c5da",
-    white: "#d3dae4",
-    brightBlack: "#707b8b",
-    brightRed: "#ff9292",
-    brightGreen: "#75dbaa",
-    brightYellow: "#f0c979",
-    brightBlue: "#9bc0f5",
-    brightMagenta: "#c4aaf5",
-    brightCyan: "#82d5e5",
-    brightWhite: "#f3f5f8",
-  },
-  light: {
-    background: "#f7f9fb",
-    foreground: "#303b48",
-    cursor: "#27303d",
-    cursorAccent: "#f7f9fb",
-    selectionBackground: "#c9d8ef",
-    black: "#303b48",
-    red: "#c34d54",
-    green: "#21875d",
-    yellow: "#a66c16",
-    blue: "#326bb3",
-    magenta: "#6e5bd2",
-    cyan: "#147d8f",
-    white: "#e8ecf1",
-    brightBlack: "#738091",
-    brightRed: "#d66067",
-    brightGreen: "#29986a",
-    brightYellow: "#b77b20",
-    brightBlue: "#417dc4",
-    brightMagenta: "#806dde",
-    brightCyan: "#208da0",
-    brightWhite: "#ffffff",
-  },
-};
 
 export function TerminalPanel() {
   const open = useUiStore((state) => state.terminalPanelOpen);
   const toggleOpen = useUiStore((state) => state.toggleTerminalPanel);
   const sessionMode = useSessionStore((state) => state.session?.mode);
   const status = useAgentStore((state) => state.processStatus);
+  const palette = useSettingsStore((state) => state.palette);
+  const accent = useSettingsStore((state) => state.accent);
   const resolvedTheme = useSettingsStore((state) => state.resolvedTheme);
   const codeFontFamily = useSettingsStore((state) => state.codeFontFamily);
   const codeFontSize = useSettingsStore((state) => state.codeFontSize);
@@ -108,8 +64,8 @@ export function TerminalPanel() {
 
   useEffect(() => {
     const terminal = terminalRef.current;
-    if (terminal) terminal.options.theme = TERMINAL_THEMES[resolvedTheme];
-  }, [resolvedTheme]);
+    if (terminal) terminal.options.theme = getTerminalTheme(palette, resolvedTheme, accent);
+  }, [resolvedTheme, palette, accent]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
@@ -153,6 +109,7 @@ export function TerminalPanel() {
     let pendingData: TerminalDataEvent[] = [];
     let pendingExit: TerminalExitEvent | undefined;
     let resizeObserver: ResizeObserver | undefined;
+    let resizeFrame = 0;
     const terminal = new Terminal({
       allowProposedApi: false,
       convertEol: false,
@@ -163,7 +120,7 @@ export function TerminalPanel() {
       lineHeight: 1.25,
       scrollback: 5_000,
       smoothScrollDuration: 80,
-      theme: TERMINAL_THEMES[resolvedTheme],
+      theme: getTerminalTheme(palette, resolvedTheme, accent),
     });
     const fitAddon = new FitAddon();
     const searchAddon = new SearchAddon();
@@ -242,8 +199,12 @@ export function TerminalPanel() {
       }
       resizeObserver = new ResizeObserver(() => {
         if (host.clientWidth < 2 || host.clientHeight < 2) return;
-        fitAddon.fit();
-        if (terminalId) terminalGateway.resize(terminalId, terminal.cols, terminal.rows);
+        cancelAnimationFrame(resizeFrame);
+        resizeFrame = requestAnimationFrame(() => {
+          if (disposed || host.clientWidth < 2 || host.clientHeight < 2) return;
+          fitAddon.fit();
+          if (terminalId) terminalGateway.resize(terminalId, terminal.cols, terminal.rows);
+        });
       });
       resizeObserver.observe(host);
       terminal.focus();
@@ -258,6 +219,7 @@ export function TerminalPanel() {
       inputSubscription.dispose();
       titleSubscription.dispose();
       resizeObserver?.disconnect();
+      cancelAnimationFrame(resizeFrame);
       if (terminalId) void terminalGateway.kill(terminalId);
       if (terminalRef.current === terminal) terminalRef.current = undefined;
       if (fitAddonRef.current === fitAddon) fitAddonRef.current = undefined;
@@ -295,16 +257,16 @@ export function TerminalPanel() {
       <header>
         <div className="terminal-tab">
           <TerminalSquare size={14} />
-          <strong title={terminalTitle || status.cwd}>{terminalTitle || terminalSession?.profile.name || "终端"}</strong>
+          <HoverHint content={terminalTitle || status.cwd}><strong >{terminalTitle || terminalSession?.profile.name || "终端"}</strong></HoverHint>
           {terminalSession && <small>PID {terminalSession.pid}</small>}
         </div>
         <div className="terminal-toolbar">
           <select value={profileId} onChange={(event) => setProfileId(event.target.value)} aria-label="终端 Shell">
             {profiles.map((profile) => <option value={profile.id} key={profile.id}>{profile.name}</option>)}
           </select>
-          <button type="button" onClick={openSearch} title="查找 (Ctrl+F)"><Search size={13} /></button>
-          <button type="button" onClick={clearTerminal} title="清空终端"><Trash2 size={13} /></button>
-          <button type="button" onClick={restartTerminal} title="重启终端"><RotateCw size={13} /></button>
+          <HintButton type="button" onClick={openSearch} hint="查找 (Ctrl+F)"><Search size={13} /></HintButton>
+          <HintButton type="button" onClick={clearTerminal} hint="清空终端"><Trash2 size={13} /></HintButton>
+          <HintButton type="button" onClick={restartTerminal} hint="重启终端"><RotateCw size={13} /></HintButton>
           <button type="button" onClick={toggleOpen} aria-label="收起终端"><ChevronDown size={16} /></button>
         </div>
       </header>
@@ -333,9 +295,9 @@ export function TerminalPanel() {
                 }
               }}
             />
-            <button type="button" onClick={() => searchAddonRef.current?.findPrevious(searchText)} title="上一个"><ChevronUp size={13} /></button>
-            <button type="button" onClick={() => searchAddonRef.current?.findNext(searchText)} title="下一个"><ChevronDown size={13} /></button>
-            <button type="button" onClick={closeSearch} title="关闭查找"><X size={13} /></button>
+            <HintButton type="button" onClick={() => searchAddonRef.current?.findPrevious(searchText)} hint="上一个"><ChevronUp size={13} /></HintButton>
+            <HintButton type="button" onClick={() => searchAddonRef.current?.findNext(searchText)} hint="下一个"><ChevronDown size={13} /></HintButton>
+            <HintButton type="button" onClick={closeSearch} hint="关闭查找"><X size={13} /></HintButton>
           </div>
         )}
       </div>

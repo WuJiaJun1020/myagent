@@ -1,3 +1,4 @@
+import { HoverHint } from "../../components/ui/tooltip";
 import { BriefcaseBusiness, ChevronRight, FileText, Info, ShieldCheck, Sparkles, UserRound } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import type { InterviewChatModelInfo, InterviewChatPrompts } from "../../../shared/contracts/interview";
@@ -18,7 +19,7 @@ import { saveInterviewScorePrompt, useInterviewScorePrompt,
   useInterviewScoreSettings } from "./interview-score-preferences";
 
 function InfoTip({ text }: { text: string }) {
-  return <span className="interview-insight-help" tabIndex={0} role="note" title={text} aria-label={text}><Info size={13} /></span>;
+  return <HoverHint content={text}><span className="interview-insight-help" tabIndex={0} role="note"  aria-label={text}><Info size={13} /></span></HoverHint>;
 }
 
 export function InterviewContextPanel() {
@@ -132,7 +133,7 @@ export function InterviewContextPanel() {
         <label className="interview-candidate-enabled"><input type="checkbox" checked={candidate.enabled} disabled={activeSession.interview.status === "completed"}
           onChange={(event) => selectedId && saveInterviewCandidatePreferences(selectedId, { ...candidate, enabled: event.target.checked })} />启用模拟候选人</label>
         <p className="interview-insight-setting">技术误答抽签：{candidate.errorRate}% · 只作用于 Agent 代答；同一问题重试沿用首次结果</p>
-        <p className="interview-insight-setting" title="实施情况来自候选人 JSON 自报，程序校验误答原文出现在回答中；不是独立技术事实核验。">已完成代答 {candidateOutcomes.length} 轮 · 抽中误答 {candidateOutcomes.filter((item) => item.requestedMode === "mistake").length} 轮 · 自报实际误答 {candidateOutcomes.filter((item) => item.mistakeMade).length} 轮</p>
+        <HoverHint content="实施情况来自候选人 JSON 自报，程序校验误答原文出现在回答中；不是独立技术事实核验。"><p className="interview-insight-setting" >已完成代答 {candidateOutcomes.length} 轮 · 抽中误答 {candidateOutcomes.filter((item) => item.requestedMode === "mistake").length} 轮 · 自报实际误答 {candidateOutcomes.filter((item) => item.mistakeMade).length} 轮</p></HoverHint>
         <InterviewAgentModelLine settings={candidate.settings} models={candidateModels} />
         <InterviewAgentUsage session={activeSession} actor="candidate" models={candidateModels} />
         <details className="interview-insight-document"><summary><FileText size={15} /><span>查看候选人提示词</span><ChevronRight size={14} /></summary><pre>{candidateSystemPrompt(candidate.prompt)}</pre></details>
@@ -168,8 +169,8 @@ export function InterviewContextPanel() {
         </form> : <button className="interview-prompt-edit-trigger" type="button" onClick={() => setEditingScorePrompt(true)}>编辑评分提示词</button>}
       </section>
     </div> : <div className="interview-insight-scroll">
-      <div className="interview-context-state" title="简历与面试记录保存在本机，不进入普通 Pi 会话。"><ShieldCheck size={20} /><strong>面试资料独立保存</strong></div>
+      <HoverHint content="简历与面试记录保存在本机，不进入普通 Pi 会话。"><div className="interview-context-state" ><ShieldCheck size={20} /><strong>面试资料独立保存</strong></div></HoverHint>
     </div>}
-    <footer title="面试记录独立保存在本机；开启算法考核时，完成算法题后才会发送岗位资料与简历开始对话。"><ShieldCheck size={14} />本地保存 <Info size={12} /></footer>
+    <HoverHint content="面试记录独立保存在本机；开启算法考核时，完成算法题后才会发送岗位资料与简历开始对话。"><footer ><ShieldCheck size={14} />本地保存 <Info size={12} /></footer></HoverHint>
   </aside>;
 }

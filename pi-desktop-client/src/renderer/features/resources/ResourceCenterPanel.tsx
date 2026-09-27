@@ -1,6 +1,6 @@
+import { HintButton, HoverHint } from "../../components/ui/tooltip";
 import {
   AlertTriangle,
-  Blocks,
   Box,
   FileText,
   ExternalLink,
@@ -134,9 +134,7 @@ export function ResourceCenterPanel() {
     <div className="resource-page-scroll">
       <main className="resource-page resource-center-page">
         <header className="resource-page-header">
-          <div className="resource-page-mark"><Blocks size={21} /></div>
           <div>
-            <span className="eyebrow">PI NATIVE RESOURCES</span>
             <h1>资源中心</h1>
             <p>管理 Pi Packages、Skills、Extensions、Prompt Templates 和 Tool Registry。</p>
           </div>
@@ -218,8 +216,8 @@ export function ResourceCenterPanel() {
                       <span>{pkg.scope === "project" ? "项目级" : "用户级"}{pkg.filtered ? " · 已配置资源过滤" : " · 加载全部资源"}</span>
                     </div>
                     <div className="package-actions">
-                      <button type="button" title="更新" disabled={disabled || !pkg.installed} onClick={() => void updatePackage(pkg.source, pkg.scope)}><RotateCw size={14} />更新</button>
-                      <button type="button" className="danger" title="移除" disabled={disabled} onClick={() => void removePackage(pkg.source, pkg.scope)}><Trash2 size={14} />移除</button>
+                      <HintButton type="button" hint="更新" disabled={disabled || !pkg.installed} onClick={() => void updatePackage(pkg.source, pkg.scope)}><RotateCw size={14} />更新</HintButton>
+                      <HintButton type="button" className="danger" hint="移除" disabled={disabled} onClick={() => void removePackage(pkg.source, pkg.scope)}><Trash2 size={14} />移除</HintButton>
                     </div>
                   </article>
                 ))}
@@ -252,7 +250,7 @@ export function ResourceCenterPanel() {
                             {detail.toolNames.map((name) => <span key={`tool:${name}`}>Tool · {name}</span>)}
                             {detail.commandNames.map((name) => <span key={`command:${name}`}>/{name}</span>)}
                             {detail.shortcuts.map((shortcut) => (
-                              <span key={`shortcut:${shortcut.shortcut}`} title={shortcut.description}>快捷键 · {shortcut.shortcut}</span>
+                              <HoverHint content={shortcut.description} key={`shortcut:${shortcut.shortcut}`}><span  >快捷键 · {shortcut.shortcut}</span></HoverHint>
                             ))}
                             {detail.toolNames.length === 0 && detail.commandNames.length === 0 && detail.shortcuts.length === 0 && <span>扩展已加载，未注册 Tool、命令或快捷键</span>}
                           </div>

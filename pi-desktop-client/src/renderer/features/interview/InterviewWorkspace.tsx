@@ -1,3 +1,5 @@
+import { useInterviewDeleteConfirmation } from "./use-interview-delete-confirmation";
+import { HintButton } from "../../components/ui/tooltip";
 import {
   ArrowRight,
   BriefcaseBusiness,
@@ -44,6 +46,8 @@ import { saveInterviewChatPrompts } from "./interview-prompt-preferences";
 import { saveInterviewChatSettings } from "./interview-chat-preferences";
 import { saveInterviewCandidatePreferences } from "./interview-candidate-preferences";
 import { saveInterviewDirectorPreferences } from "./interview-director-preferences";
+import { InterviewCreateDialog } from "./InterviewCreateDialog";
+import { InterviewJobPicker } from "./InterviewJobPicker";
 import { InterviewCreateAgentSettings } from "./InterviewCreateAgentSettings";
 import { DEFAULT_INTERVIEW_SCORE_PROMPT } from "../../../shared/interview-score";
 import { saveInterviewScorePrompt, saveInterviewScoreSettings } from "./interview-score-preferences";
@@ -92,6 +96,7 @@ function formatDate(value: string): string {
 }
 
 export function InterviewWorkspace() {
+  const { confirm, confirmationDialog } = useInterviewDeleteConfirmation();
   const interviews = useInterviewStore((state) => state.interviews);
   const counts = useInterviewStore((state) => state.counts);
   const initialized = useInterviewStore((state) => state.initialized);
@@ -111,7 +116,7 @@ export function InterviewWorkspace() {
   const section = useUiStore((state) => state.moduleViews.interview);
   const setInterviewView = useUiStore((state) => state.setInterviewView);
   const [form, setForm] = useState<InterviewCreateRequest>(INITIAL_FORM);
-  const [jobQuery, setJobQuery] = useState("");
+  const [editor, setEditor] = useState<"resume" | "models" | "interviewer" | "candidate" | "director" | "score" | null>(null);
   const [promptDraft, setPromptDraft] = useState<InterviewChatPrompts>(DEFAULT_INTERVIEW_CHAT_PROMPTS);
   const [candidatePromptDraft, setCandidatePromptDraft] = useState(DEFAULT_INTERVIEW_CANDIDATE_PROMPT);
   const [promptError, setPromptError] = useState<string | null>(null);
@@ -130,14 +135,6 @@ export function InterviewWorkspace() {
     [interviews, selectedId],
   );
   const selectedJob = jobs.find((job) => job.id === form.jobPostingId);
-  const jobOptions = useMemo(() => {
-    const query = jobQuery.trim().toLocaleLowerCase();
-    const filtered = jobs.filter((job) => !query || [job.title, job.company, job.city, job.category]
-      .some((value) => value.toLocaleLowerCase().includes(query))).slice(0, 100);
-    const selectedOption = jobs.find((job) => job.id === form.jobPostingId);
-    return selectedOption && !filtered.some((job) => job.id === selectedOption.id)
-      ? [selectedOption, ...filtered] : filtered;
-  }, [jobs, jobQuery, form.jobPostingId]);
   const focusedView = section === "algorithms" || section === "question-bank";
 
   useEffect(() => {
@@ -166,6 +163,7 @@ export function InterviewWorkspace() {
       setPromptError("请先从岗位库选择目标岗位。");
       return;
     }
+    if (!form.resumeText.trim()) { setPromptError("请填写候选人简历。"); setEditor("resume"); return; }
     if (!promptDraft.systemPrompt.trim() || !promptDraft.startInstruction.trim() || !promptDraft.replyInstruction.trim()) {
       setPromptError("基础系统提示词、开场控制词和续谈控制词都不能为空。");
       return;
@@ -203,7 +201,6 @@ export function InterviewWorkspace() {
       setCandidateSettings(DEFAULT_CANDIDATE_CHAT_SETTINGS);
       setDirectorSettings(DEFAULT_DIRECTOR_CHAT_SETTINGS);
       setScoreSettings(DEFAULT_SCORE_CHAT_SETTINGS);
-      setJobQuery("");
       setPromptDraft(DEFAULT_INTERVIEW_CHAT_PROMPTS);
       setCandidatePromptDraft(DEFAULT_INTERVIEW_CANDIDATE_PROMPT);
       setInterviewView("session");
@@ -213,7 +210,7 @@ export function InterviewWorkspace() {
   }
 
   async function removeInterview(id: string, title: string): Promise<void> {
-    if (!window.confirm(`确定永久删除面试“${title}”吗？简历、对话和调试记录会一并删除，无法撤销。`)) return;
+    if (!await confirm(title)) return;
     try {
       await deleteInterview(id);
     } catch {
@@ -227,13 +224,14 @@ export function InterviewWorkspace() {
       jobPostingId: job.id,
       positionTitle: job.title,
     });
-    setJobQuery("");
     setInterviewView("dashboard");
   }
 
   if (section === "session") return <InterviewRoom />;
 
   return (
+    <>
+      {confirmationDialog}
     <div key={section} className={`interview-page-scroll${focusedView ? " interview-focus-host" : ""}`}>
       <main className={`interview-page${focusedView ? " interview-focus-page" : ""}`}>
         <nav className="interview-section-tabs" aria-label="智能面试功能">
@@ -245,41 +243,35 @@ export function InterviewWorkspace() {
         </nav>
 
         {section === "jobs" ? <JobLibrary onUseJob={useCollectedJob} />
-          : section === "question-bank" ? <InterviewQuestionBank onBack={() => setInterviewView("records")} />
-            : section === "algorithms" ? <AlgorithmPractice onBack={() => setInterviewView("records")} />
+          : section === "question-bank" ? <InterviewQuestionBank />
+            : section === "algorithms" ? <AlgorithmPractice />
               : section === "dashboard" ? <form className="interview-create-card" onSubmit={(event) => void submit(event)}>
             <header>
-              <div><span className="eyebrow">NEW INTERVIEW</span><h2>新建面试</h2><p>已预填一份虚构的 Agent 应用开发测试简历；开启算法考核时先完成限时题，再进入简历对话。</p></div>
+              <h2>新建面试</h2>
             </header>
 
             <div className="interview-form-grid">
               <label><span>候选人姓名</span><input required maxLength={100} value={form.candidateName} onChange={(event) => setField("candidateName", event.target.value)} placeholder="例如：张三" /></label>
-              <div className="interview-job-picker"><label><span>目标岗位 <small>从本地岗位库选择</small></span><input value={jobQuery} onChange={(event) => setJobQuery(event.target.value)} placeholder="搜索岗位、公司、城市或方向" /></label>
-                <select required aria-label="选择目标岗位" value={form.jobPostingId ?? ""} onChange={(event) => {
-                  const job = jobs.find((item) => item.id === event.target.value);
-                  setForm((current) => ({ ...current, jobPostingId: job?.id, positionTitle: job?.title ?? "" }));
-                }}><option value="">{jobsLoading ? "正在读取岗位库…" : "请选择目标岗位"}</option>
-                  {jobOptions.map((job) => <option key={job.id} value={job.id}>{job.company} · {job.title}{job.city ? ` · ${job.city}` : ""}</option>)}
-                </select>
-                {selectedJob && <small className="interview-job-picker-selected">已选：{selectedJob.company} · {selectedJob.title}；创建时会保存岗位资料快照。</small>}
-                {!jobsLoading && jobs.length === 0 && <button type="button" onClick={() => setInterviewView("jobs")}>岗位库为空，先去采集岗位</button>}
-                {jobsError && <small className="interview-form-error">岗位库读取失败：{jobsError}</small>}
+              <div className="interview-job-picker"><span>目标岗位</span>
+                <InterviewJobPicker jobs={jobs} value={form.jobPostingId} loading={jobsLoading} onChange={job => setForm(current => ({ ...current, jobPostingId: job.id, positionTitle: job.title }))} />
+                {!jobsLoading && jobs.length === 0 && <button type="button" onClick={() => setInterviewView("jobs")}>去岗位库添加岗位</button>}
+                {jobsError && <small className="interview-form-error">{jobsError}</small>}
               </div>
-              <label className="wide"><span>面试名称 <small>可选</small></span><input maxLength={160} value={form.title ?? ""} onChange={(event) => setField("title", event.target.value)} placeholder="留空时自动使用岗位与候选人名称" /></label>
-              <label className="wide"><span>简历内容 <small>虚构测试数据，可编辑</small></span><textarea required value={form.resumeText} onChange={(event) => setField("resumeText", event.target.value)} placeholder="粘贴候选人简历，数据仅保存在本机…" /></label>
-              <label className="wide interview-algorithm-toggle"><input type="checkbox" checked={form.algorithmEnabled ?? false}
-                onChange={(event) => setField("algorithmEnabled", event.target.checked)} />
-                <span>正式对话前考核一道算法题 <small>默认关闭 · 随机抽题 · 限时 10 分钟 · 力扣或 ACM 任一模式通过即可</small></span></label>
-              <label className="wide interview-algorithm-toggle"><input type="checkbox" checked={candidateEnabled}
-                onChange={(event) => setCandidateEnabled(event.target.checked)} />
-                <span>启用模拟候选人 Agent <small>默认开启 · 可手动回答、代答一轮或连续代答；创建后仍可调整</small></span></label>
-              {candidateEnabled && <label><span>模拟候选人技术误答概率 <small>每个问题独立抽签；0% 表示关闭</small></span>
-                <input type="number" min={0} max={100} step={1} value={candidateErrorRate}
-                  onChange={(event) => setCandidateErrorRate(Number(event.target.value))} />
-                <small>默认 20%；只作用于 Agent 代答。模型若遇到非技术问题会正常回答。</small></label>}
-              <label className="wide interview-algorithm-toggle"><input type="checkbox" checked={directorEnabled}
-                onChange={(event) => setDirectorEnabled(event.target.checked)} />
-                <span>启用面试导演 Agent <small>默认开启 · 只在创建时选择，面试中不能切换；重复追问时才引导换话题或收尾</small></span></label>
+              <label><span>面试名称 <small>可选</small></span><input maxLength={160} value={form.title ?? ""} onChange={(event) => setField("title", event.target.value)} placeholder="留空时自动使用岗位与候选人名称" /></label>
+              <div className="interview-create-resume"><span>候选人简历</span><button type="button" onClick={() => setEditor("resume")}><FileText size={16} /><span>{form.resumeText.trim() ? "查看 / 编辑简历" : "添加简历"}</span><small>{form.resumeText.length} 字</small><ArrowRight size={14} /></button></div>
+              <section className="wide interview-create-options" aria-label="面试选项">
+                <div><label><span>算法考核 <small>1 题 · 10 分钟</small></span><input type="checkbox" checked={form.algorithmEnabled ?? false} onChange={event => setField("algorithmEnabled", event.target.checked)} /></label></div>
+                <div><label><span>模拟候选人</span><input type="checkbox" checked={candidateEnabled} onChange={event => setCandidateEnabled(event.target.checked)} /></label>
+                  {candidateEnabled && <label className="interview-create-error-rate"><span>技术误答概率</span><span><input aria-label="技术误答概率" type="number" min={0} max={100} step={1} value={candidateErrorRate} onChange={event => setCandidateErrorRate(Number(event.target.value))} /> %</span></label>}
+                </div>
+                <div><label><span>面试导演 <small>创建后固定</small></span><input type="checkbox" checked={directorEnabled} onChange={event => setDirectorEnabled(event.target.checked)} /></label></div>
+              </section>
+              <section className="wide interview-create-config" aria-label="Agent 配置">
+                <button type="button" onClick={() => setEditor("models")}><span>模型与思考深度</span><ArrowRight size={14} /></button>
+                <div className="interview-create-prompt-links"><span>提示词</span><button type="button" onClick={() => setEditor("interviewer")}>面试官</button><button type="button" onClick={() => setEditor("candidate")}>模拟候选人</button><button type="button" onClick={() => setEditor("director")}>面试导演</button><button type="button" onClick={() => setEditor("score")}>面试评分</button></div>
+              </section>
+              {editor === "resume" && <InterviewCreateDialog title="候选人简历" onClose={() => setEditor(null)}><label>简历内容<textarea aria-label="简历内容" value={form.resumeText} onChange={event => setField("resumeText", event.target.value)} placeholder="粘贴候选人简历" /></label></InterviewCreateDialog>}
+              {editor === "models" && <InterviewCreateDialog title="模型与思考深度" onClose={() => setEditor(null)}>
               <InterviewCreateAgentSettings settings={{ interviewer: interviewerSettings, candidate: candidateSettings,
                 director: directorSettings, score: scoreSettings }} models={availableModels} onChange={(actor, settings) => {
                   if (actor === "interviewer") setInterviewerSettings(settings);
@@ -287,11 +279,10 @@ export function InterviewWorkspace() {
                   else if (actor === "director") setDirectorSettings(settings);
                   else setScoreSettings(settings);
                 }} />
+              </InterviewCreateDialog>}
             </div>
 
-            <details className="interview-create-prompts">
-              <summary>面试 Agent 提示词（可在面试中继续编辑）</summary>
-              <p>创建后自动开场将使用这里的文本；每条规则独占一行。</p>
+            {editor === "interviewer" && <InterviewCreateDialog title="面试官提示词" onClose={() => setEditor(null)}>
               <label>基础系统提示词<textarea maxLength={100_000} rows={16} value={promptDraft.systemPrompt}
                 onChange={(event) => { setPromptError(null); setPromptDraft((current) => ({ ...current, systemPrompt: event.target.value })); }} /></label>
               <label>开场控制词<textarea maxLength={20_000} rows={5} value={promptDraft.startInstruction}
@@ -299,31 +290,25 @@ export function InterviewWorkspace() {
               <label>续谈控制词<textarea maxLength={20_000} rows={5} value={promptDraft.replyInstruction}
                 onChange={(event) => { setPromptError(null); setPromptDraft((current) => ({ ...current, replyInstruction: event.target.value })); }} /></label>
               <button type="button" onClick={() => setPromptDraft(DEFAULT_INTERVIEW_CHAT_PROMPTS)}>恢复默认提示词</button>
-            </details>
+            </InterviewCreateDialog>}
 
-            <details className="interview-create-prompts">
-              <summary>模拟候选人 Agent 提示词（可在面试中继续编辑）</summary>
-              <p>启用代答时使用这里的文本；允许在虚构简历已有经历内补足合理细节。程序固定追加 JSON 输出协议，逐轮抽签控制作为独立消息发送，不修改系统提示词。每条规则独占一行。</p>
+            {editor === "candidate" && <InterviewCreateDialog title="模拟候选人提示词" onClose={() => setEditor(null)}>
               <label>候选人系统提示词<textarea maxLength={100_000} rows={18} value={candidatePromptDraft}
                 onChange={(event) => { setPromptError(null); setCandidatePromptDraft(event.target.value); }} /></label>
               <button type="button" onClick={() => { setPromptError(null); setCandidatePromptDraft(DEFAULT_INTERVIEW_CANDIDATE_PROMPT); }}>恢复默认提示词</button>
-            </details>
+            </InterviewCreateDialog>}
 
-            <details className="interview-create-prompts">
-              <summary>面试导演 Agent 提示词（仅启用时调用）</summary>
-              <p>导演只审查尚未发送的面试官草稿，不直接与候选人交谈。模型与思考深度在上方设置；思考深度创建后固定。</p>
+            {editor === "director" && <InterviewCreateDialog title="面试导演提示词" onClose={() => setEditor(null)}>
               <label>导演系统提示词<textarea maxLength={100_000} rows={18} value={directorPromptDraft}
                 onChange={(event) => { setPromptError(null); setDirectorPromptDraft(event.target.value); }} /></label>
               <button type="button" onClick={() => setDirectorPromptDraft(DEFAULT_INTERVIEW_DIRECTOR_PROMPT)}>恢复默认提示词</button>
-            </details>
+            </InterviewCreateDialog>}
 
-            <details className="interview-create-prompts">
-              <summary>面试评分 Agent 提示词（结束后调用）</summary>
-              <p>对话表现：技术理解 40 分、实际工作与解决问题 45 分、回答与沟通 15 分；算法题单独按通过 100 / 未通过 0 计分。</p>
+            {editor === "score" && <InterviewCreateDialog title="评分提示词" onClose={() => setEditor(null)}>
               <label>评分提示词<textarea maxLength={100_000} rows={16} value={scorePromptDraft}
                 onChange={(event) => { setPromptError(null); setScorePromptDraft(event.target.value); }} /></label>
               <button type="button" onClick={() => setScorePromptDraft(DEFAULT_INTERVIEW_SCORE_PROMPT)}>恢复默认评分提示词</button>
-            </details>
+            </InterviewCreateDialog>}
 
             {(promptError || error) && <p className="interview-form-error" role="alert">{promptError || error}</p>}
             <footer><button className="primary" type="submit" disabled={mutation}>{mutation ? <LoaderCircle className="spin" size={14} /> : <Database size={14} />}{mutation ? "正在创建" : "创建并开始"}</button></footer>
@@ -362,10 +347,10 @@ export function InterviewWorkspace() {
                     <span className="interview-record-copy"><strong>{interview.title}</strong><small>{interview.candidateName} · {interview.positionTitle}</small></span>
                     <span className="interview-record-meta"><em data-status={interview.status}>{STATUS_LABELS[interview.status]}</em><small>{formatDate(interview.updatedAt)}</small><ArrowRight size={15} /></span>
                   </button>
-                  <button className="interview-record-delete" type="button" title={`删除面试：${interview.title}`}
+                  <HintButton className="interview-record-delete" type="button" hint={`删除面试：${interview.title}`}
                     aria-label={`删除面试：${interview.title}`}
                     disabled={mutation || chattingInterviewId === interview.id}
-                    onClick={() => void removeInterview(interview.id, interview.title)}><Trash2 size={16} /></button>
+                    onClick={() => void removeInterview(interview.id, interview.title)}><Trash2 size={16} /></HintButton>
                 </div>
               ))}
             </div>
@@ -374,5 +359,6 @@ export function InterviewWorkspace() {
         </div>}
       </main>
     </div>
+    </>
   );
 }

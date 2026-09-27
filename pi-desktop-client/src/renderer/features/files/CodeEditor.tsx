@@ -1,3 +1,4 @@
+import { HoverHint, HintButton } from "../../components/ui/tooltip";
 import { Check, GitBranch, RotateCcw, Save, Search } from "lucide-react";
 import { useRef, useState } from "react";
 import type { WorkspaceTextFile } from "../../../shared/contracts/workspace";
@@ -31,12 +32,12 @@ export function CodeEditor({ file }: { file: WorkspaceTextFile }) {
       <header>
         <div><strong>{file.name}</strong><small>{dirty ? "未保存" : "已保存"}</small></div>
         <div className="code-editor-actions">
-          <label title="在当前文件中搜索">
+          <HoverHint content="在当前文件中搜索"><label >
             <Search size={13} />
             <input value={query} placeholder="搜索" onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && findNext()} />
-          </label>
-          <button type="button" title="返回 Git 审查" onClick={closeActiveFile}><GitBranch size={13} />Git</button>
-          <button type="button" disabled={!dirty || disabled} title="还原为打开文件时的内容" onClick={() => discardDraft(file.path)}><RotateCcw size={13} />还原</button>
+          </label></HoverHint>
+          <HintButton type="button" hint="返回 Git 审查" onClick={closeActiveFile}><GitBranch size={13} />Git</HintButton>
+          <HintButton type="button" disabled={!dirty || disabled} hint="还原为打开文件时的内容" onClick={() => discardDraft(file.path)}><RotateCcw size={13} />还原</HintButton>
           <button type="button" className="primary" disabled={!dirty || disabled} onClick={() => void saveFile(file.path)}><Save size={13} />{draft?.saving ? "保存中" : "保存"}</button>
         </div>
       </header>

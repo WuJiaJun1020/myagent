@@ -28,9 +28,13 @@ import { MainModuleHost } from "../platform/main/main-module-host";
 import { createPiModelGateway } from "../platform/main/ai/pi-model-gateway";
 import { KnowledgeStudioMainModule } from "./knowledge-studio/knowledge-studio-main-module";
 import { captureWebPageSnapshot } from "./knowledge-studio/web-page-snapshot";
+import { PREVIEW_SCHEME, registerBrowserIpc } from "./browser/browser-service";
 
 const KNOWLEDGE_SOURCE_SCHEME = "knowledge-source";
 protocol.registerSchemesAsPrivileged([{
+  scheme: PREVIEW_SCHEME,
+  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
+}, {
   scheme: KNOWLEDGE_SOURCE_SCHEME,
   privileges: { standard: true, secure: true, corsEnabled: true, supportFetchAPI: true },
 }]);
@@ -225,6 +229,7 @@ function createWindow(): BrowserWindow {
 }
 
 function registerIpc(): void {
+  registerBrowserIpc(() => mainWindow, () => pi.getStatus().cwd);
   ipcMain.handle("app:window-minimize", () => mainWindow?.minimize());
   ipcMain.handle("app:window-toggle-maximize", () => {
     if (!mainWindow) return false;

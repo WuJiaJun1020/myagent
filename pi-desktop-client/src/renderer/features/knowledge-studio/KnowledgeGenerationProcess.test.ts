@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup } from "../../test-utils/render";
 import type { KnowledgeGenerationBatch, KnowledgeGenerationEvent } from "../../../shared/contracts/knowledge-studio";
 import { buildGenerationStory, KnowledgeGenerationProcess } from "./KnowledgeGenerationProcess";
 

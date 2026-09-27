@@ -7,13 +7,12 @@ export { InterviewSidebar } from "./InterviewSidebar";
 
 export function InterviewTopBar() {
   const view = useUiStore((state) => state.moduleViews.interview);
-  const focused = view === "algorithms" || view === "question-bank";
   return (
     <TopBar
-      heading="Interview Studio"
+      heading="智慧面试"
       section={view === "algorithms" ? "算法练习" : view === "question-bank" ? "面试问答题库"
         : view === "dashboard" ? "新建面试" : view === "records" ? "面试记录" : "智能面试"}
-      detailAvailable={!focused}
+      detailAvailable={view === "session"}
     />
   );
 }
