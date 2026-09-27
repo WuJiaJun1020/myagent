@@ -1,83 +1,73 @@
 # Pi Desktop Client
 
-> [!WARNING]
-> 当前 `0.1.1` 仍为开发测试版（Beta），功能、数据格式和 Agent 行为可能继续调整。请勿用于生产环境或未备份的重要项目。
+基于 Electron、React 和 TypeScript 的 Pi 桌面客户端，包含 Agent 工作区、智慧面试和知识工坊。当前版本为 `0.6.0`，仍在持续开发。
 
-一个基于 Electron、React 和 TypeScript 的最小 Pi RPC 桌面客户端。
+功能概览与首次安装步骤见[仓库首页](../README.md)。本目录依赖同仓库内已构建的 Pi Agent，不能只安装客户端依赖就跳过运行时准备。
 
-## 运行
+## 本地运行
 
-要求 Node.js 22.19 或更高版本。
+要求 Node.js 22.19.0 或更高版本。完成仓库首页的安装步骤后，在本目录执行：
 
 ```powershell
-npm.cmd install
-npm.cmd run dev
+npm.cmd run dev    # 开发模式
+npm.cmd start      # 构建后启动
 ```
 
-修改本地 Pi 核心后，需要先重新生成它的 RPC bundle：
+需要准备算法判题的内置 Python 时执行 `npm.cmd run prepare:python:win`。该脚本下载并校验 Windows x64 Python 嵌入式运行时，打包命令会自动执行此步骤。
+
+## 模型配置与数据
+
+打开“设置 → 模型与 Agent”管理提供商。支持 Pi 提供商注册表中的 API Key、OAuth / 订阅登录及设备码等认证方式，具体可用方式由提供商决定。
+
+- Agent 沿用 Pi 的模型目录、认证和会话管理，界面通过 IPC 与主进程通信，再由主进程通过 JSONL RPC 连接 Pi。
+- Pi 保存的认证信息位于用户目录的 `~/.pi/agent/auth.json`；客户端不把密钥写入前端设置或 `localStorage`。
+- 智慧面试和知识工坊的数据由客户端本地管理。升级或迁移前应保留所需的用户数据。
+- 新电脑仍需配置自己的模型账号，安装包不包含开发者的凭据和会话。
+
+## 界面与能力边界
+
+- 三个模块复用主题与公共控件；外观设置支持浅色、深色、跟随系统，以及配色、强调色和字体调整。
+- Agent 的聊天与工作模式独立；会话过程根据真实消息和工具事件显示，支持折叠与轮次跳转。
+- 内置浏览器支持网页与本地 HTML 预览，使用隔离的网页视图；目前没有多标签、下载管理或持久登录功能。
+- 算法编辑采用 Monaco；Python 补全包括内置名称和文档词汇，未接入语言服务器或 AI 补全。
+- 语音输入尚未实现。
+
+前端修改遵循 [AGENTS.md](AGENTS.md)，详细主题规范见[主题接入说明](docs/WORKSPACE_THEME_GUIDE.md)。
+
+## 检查与界面验收
 
 ```powershell
-cd ..\pi-agent\packages\coding-agent
+npm.cmd run typecheck
+npm.cmd test
 npm.cmd run build
-cd ..\..\..\pi-desktop-client
+npm.cmd run verify:renderer
 ```
 
-## 打包为独立 Windows EXE
+专项界面验收使用隔离测试数据；截图和结果保存在 `.cache/`，不代表真实模型或发布流程已完成端到端验证。
+
+| 范围 | 命令 |
+| --- | --- |
+| 主题与工作区 | `npm.cmd run verify:themes` |
+| 智慧面试与算法界面 | `npm.cmd run verify:interview-ui` |
+| 知识工坊 | `npm.cmd run verify:knowledge-ui` |
+| 会话过程 | `node scripts/verify-activity-ui.mjs` |
+| 消息发送与轮次导航 | `node scripts/verify-chat-ui.mjs` |
+| 内置浏览器 | `node scripts/verify-browser-ui.mjs` |
+
+后三项需先完成生产构建；不要与构建并行运行。视觉样板可用 `npm.cmd run preview:workspace` 生成，不能替代实际交互验收。
+
+## Windows x64 打包
 
 ```powershell
-npm.cmd run dist:win
+npm.cmd run dist:win        # 便携版
+npm.cmd run dist:win:setup  # 安装版
 ```
 
-产物位于 `release/Pi-Desktop-0.1.1-x64.exe`。这是便携版单文件 EXE，已包含 Electron 的 Node 运行时和 Pi CLI，目标 Windows x64 电脑不需要另外安装 Node.js 或 Pi。首次使用仍需配置 Pi 支持的模型账号或 API Key。
+产物位于 `release/`，文件名中的版本号来自 `package.json`：
 
-打包后可验证随包运行时与 Pi RPC：
+- `Pi-Desktop-<version>-x64.exe`
+- `Pi-Desktop-Setup-<version>-x64.exe`
 
-```powershell
-npm.cmd run verify:package
-```
+打包包含 Electron、Pi 运行时和算法判题所需的 Python。目标电脑无需另行安装 Node.js 或 Pi，在线模型仍需网络及有效认证。
 
-在可交互的 Windows 桌面会话中，还可以运行完整便携外壳自检：
-
-```powershell
-npm.cmd run verify:portable
-```
-
-项目把 `@earendil-works/pi-coding-agent` 安装为本地依赖，Electron 主进程会启动：
-
-```text
-pi --mode rpc
-```
-
-React 渲染进程通过安全的 Electron IPC 与主进程通信，主进程通过 stdin/stdout JSONL 与 Pi 通信。
-
-## 配置模型提供商
-
-启动客户端后，打开“设置 → Agent 模型 → 管理模型提供商”。页面会读取 Pi 当前注册的完整 Provider Registry，而不是维护一份只包含 GPT 的固定列表。
-
-- API Key：点击对应提供商的“配置 API Key”，按 Pi Provider 给出的字段完成配置。
-- OAuth/订阅：点击“账号/订阅登录”，客户端会打开授权页面或显示设备验证码。
-- 凭据删除：只删除 Pi `auth.json` 中保存的凭据，不会修改系统环境变量或 `models.json`。
-- 模型刷新：认证成功后自动刷新该 Provider 的线上模型目录和顶部模型选择器。
-
-密钥由 Pi 写入用户目录下的 `~/.pi/agent/auth.json`。Renderer 只能获得认证状态、来源和模型数量，不能读取已经保存的密钥明文。
-
-## 已实现
-
-- 选择本地工作区并重启 Pi
-- 发送 prompt 和 follow_up
-- 流式显示 assistant 文本
-- 显示工具开始、增量输出、结束与错误状态
-- 中止当前 Agent 运行
-- 响应 extension 的 select、confirm、input、editor UI 请求
-- 严格按 LF 解析 Pi JSONL，不使用 Node readline
-- 浏览并配置 Pi 当前注册的全部模型提供商
-- 支持 Provider 原生 API Key 表单、OAuth/订阅登录、设备码、注销和模型目录刷新
-- 独立的纯聊天与工作模式；聊天模式不加载项目上下文、不向模型暴露本地 Tool，工作模式恢复原工具集合
-- 会话历史支持重命名和移入系统回收站，删除当前会话时自动创建同模式的替代会话
-- 模型与 Thinking Level 选择、文件树、Diff、Terminal、MCP/Tool Runtime 和上下文 Memory 页面
-
-## 当前边界
-
-运行时使用 Pi 自己的 Provider、凭据、模型目录和会话存储。桌面端不会把 API Key 保存到前端设置或 `localStorage`。
-
-便携 EXE 当前面向 Windows x64。首次运行到新电脑时，需要在该电脑上完成模型配置；用户配置和会话不会硬编码进安装包。
+打包后可执行 `npm.cmd run verify:package` 检查随包运行时；在可交互的 Windows 桌面会话中执行 `npm.cmd run verify:portable` 检查便携外壳。
