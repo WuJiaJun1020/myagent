@@ -9,6 +9,7 @@ export type ModuleViews = {
   agent: AgentView;
   interview: InterviewView;
   "knowledge-studio": KnowledgeStudioView;
+  "smart-library": "library";
 };
 
 export type ModuleView<ModuleId extends ProductModuleId = ProductModuleId> = ModuleViews[ModuleId];

@@ -1,6 +1,7 @@
+import { shareSessionHtml } from "./agent/session-share";
 import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from "electron";
 import { existsSync } from "node:fs";
-import { readFile, realpath, writeFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
 import type { ExtensionUiResponse, RpcCommand } from "../shared/rpc";
 import type { TerminalCreateRequest } from "../shared/contracts/terminal";
@@ -30,6 +31,9 @@ import { KnowledgeStudioMainModule } from "./knowledge-studio/knowledge-studio-m
 import { captureWebPageSnapshot } from "./knowledge-studio/web-page-snapshot";
 import { PREVIEW_SCHEME, registerBrowserIpc } from "./browser/browser-service";
 
+import { LibraryModule } from "./smart-library/library-module";
+import { DesktopPetService } from "./desktop-pet/desktop-pet-service";
+
 const KNOWLEDGE_SOURCE_SCHEME = "knowledge-source";
 protocol.registerSchemesAsPrivileged([{
   scheme: PREVIEW_SCHEME,
@@ -40,6 +44,7 @@ protocol.registerSchemesAsPrivileged([{
 }]);
 
 let mainWindow: BrowserWindow | null = null;
+let desktopPet: DesktopPetService | undefined;
 let pi: PiProcess;
 let workspaceFiles: WorkspaceFileService;
 let workspaceGit: WorkspaceGitService;
@@ -160,6 +165,7 @@ function createWindow(): BrowserWindow {
     backgroundColor: "#0d1118",
     show: false,
     title: "Pi Desktop",
+    icon: join(__dirname, "../renderer/app-icon.png"),
     frame: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -301,6 +307,20 @@ function registerIpc(): void {
     imageAttachments.release(imageIds);
   });
 
+  let sharingSession = false;
+  ipcMain.handle("pi:read-changelog", () => readFile(join(app.getAppPath(), "node_modules", "@earendil-works", "pi-coding-agent", "CHANGELOG.md"), "utf8"));
+  ipcMain.handle("pi:share-session", async (_event, sessionId: unknown) => {
+    if (sharingSession) throw Error("会话分享正在进行，请勿重复提交");
+    sharingSession = true;
+    try {
+      return await shareSessionHtml(async path => {
+        const session = await sessionService.getSessionState();
+        if (typeof sessionId !== "string" || session.id !== sessionId) throw Error("会话已切换，请重新确认分享");
+        if (session.isStreaming || session.isCompacting) throw Error("请等待当前任务结束再分享");
+        return sessionService.exportCurrentSession(path, "html");
+      });
+    } finally { sharingSession = false; }
+  });
   ipcMain.handle("pi:get-session-overview", () => sessionService.getSessionOverview());
   ipcMain.handle("pi:new-session", async (_event, mode: unknown, directory: unknown) => {
     fileChangeTracker.clear();
@@ -473,36 +493,12 @@ function getSmokeResultPath(): string | undefined {
   return existsSync(requestPath) ? join(portableDir, ".portable-smoke-result.json") : undefined;
 }
 
-async function runPackagedSmokeTest(resultPath: string): Promise<void> {
-  pi = new PiProcess(process.cwd(), app.getAppPath());
-
-  try {
-    await pi.start();
-    const response = await pi.send({ type: "get_state" }, 30_000);
-    await writeFile(resultPath, JSON.stringify({
-      success: true,
-      command: response.command,
-      model: (response.data as { model?: { id?: string } } | undefined)?.model?.id,
-      appPath: app.getAppPath(),
-    }, null, 2), "utf8");
-    await pi.stop();
-    app.exit(0);
-  } catch (error) {
-    await writeFile(resultPath, JSON.stringify({
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-      appPath: app.getAppPath(),
-    }, null, 2), "utf8");
-    await pi.stop();
-    app.exit(1);
-  }
-}
-
 app.whenReady().then(async () => {
   protocol.handle(KNOWLEDGE_SOURCE_SCHEME, handleKnowledgeSourceRequest);
   const smokeResultPath = getSmokeResultPath();
   if (smokeResultPath) {
-    await runPackagedSmokeTest(smokeResultPath);
+    const { runPackagedSmokeTest } = require(join(__dirname, "../testing/packaged-smoke.cjs"));
+    await runPackagedSmokeTest(smokeResultPath, app);
     return;
   }
 
@@ -540,6 +536,11 @@ app.whenReady().then(async () => {
     console.error("初始化共享模型网关失败；不依赖模型的模块仍可使用", error);
     return undefined;
   });
+  mainModuleHost.register(new LibraryModule(join(app.getPath("userData"), "modules", "smart-library"), ipcMain, async () => {
+    const options: Electron.OpenDialogOptions = { title: "导入图书", properties: ["openFile", "multiSelections"], filters: [{ name: "图书", extensions: ["txt", "epub"] }] };
+    const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
+    return result.canceled ? [] : result.filePaths;
+  }, app.getAppPath(), sharedModelGateway, { packaged: app.isPackaged, resourcesPath: process.resourcesPath }));
   const interviewModule = new InterviewMainModule({
     dataDirectory: join(app.getPath("userData"), "interview"),
     algorithmResourceDirectory: app.isPackaged
@@ -608,6 +609,13 @@ app.whenReady().then(async () => {
   for (const failure of moduleStartFailures) {
     console.error(`业务模块 ${failure.moduleId} 启动失败，已隔离`, failure.error);
   }
+  desktopPet = new DesktopPetService({
+    dataDirectory: join(app.getPath("userData"), "desktop-pet"),
+    resourceDirectory: app.isPackaged ? join(process.resourcesPath, "desktop-pets", "han-li") : join(app.getAppPath(), "resources", "desktop-pets", "han-li"),
+    preloadFile: join(__dirname, "../preload/desktop-pet.cjs"),
+    getMainWindow: () => mainWindow,
+  });
+  try { await desktopPet.initialize(); } catch (error) { console.error("桌宠启动失败", error); }
   mainWindow = createWindow();
   await pi.start();
 
@@ -620,11 +628,22 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
+// Only the development supervisor can request a graceful process restart.
+// app.quit() follows the same module/terminal/Pi cleanup as a normal exit.
+if (!app.isPackaged && process.env.PI_CLIENT_DEV_MANAGED === "1" && process.send) {
+  process.on("message", (message: unknown) => {
+    if (message && typeof message === "object" && "type" in message
+      && message.type === "pi-desktop-dev:quit") app.quit();
+  });
+  process.on("disconnect", () => app.quit());
+}
+
 app.on("before-quit", (event) => {
   if (shutdownComplete) return;
   event.preventDefault();
   if (shutdownStarted) return;
   shutdownStarted = true;
+  desktopPet?.dispose();
 
   try {
     terminalService?.disposeAll();

@@ -13,6 +13,7 @@
 
 .activity-stream { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; }
 .chat-panel-with-navigation { position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; }
+.chat-panel-with-navigation::after { position: absolute; z-index: 1; right: 12px; bottom: 0; left: 24px; height: 48px; max-height: 25%; content: ""; background: linear-gradient(to bottom, transparent, var(--bg-app)); pointer-events: none; }
 .chat-turn-navigation { position: absolute; z-index: 3; left: 2px; top: 22px; bottom: 22px; width: 22px; display: flex; flex-direction: column; justify-content: center; overflow-y: auto; scrollbar-width: none; }
 .chat-turn-navigation button { display: flex; align-items: center; justify-content: center; flex: 0 1 12px; min-height: 5px; width: 22px; padding: 0; border: 0; background: transparent; cursor: pointer; }
 .chat-turn-navigation button span { width: 7px; height: 2px; border-radius: 2px; background: var(--text-muted); opacity: .45; transition: width .12s, opacity .12s; }
@@ -38,7 +39,6 @@
 .timeline-message.user-message { grid-template-columns: minmax(0, 1fr) 30px; display: flex; justify-content: flex-end; }
 .message-column { min-width: 0; padding-top: 1px; }
 .user-message .message-column { display: flex; flex-direction: column; align-items: flex-end; }
-.user-message .message-meta { justify-content: flex-end; }
 .message-meta { display: flex; min-height: 20px; align-items: center; gap: 8px; margin-bottom: 10px; }
 .message-meta strong { color: var(--text-soft); font-size: calc(12px + var(--ui-font-adjust)); font-weight: 600; }
 .message-meta > span { color: var(--text-muted); font-size: calc(11px + var(--ui-font-adjust)); }
@@ -179,9 +179,8 @@
 .tool-chevron { align-self: center; color: var(--text-muted); }
 
 .composer-wrap { position: relative; z-index: 2; width: min(var(--conversation-width), calc(100% - 64px)); margin: 0 auto; padding: 12px 0 16px; flex: 0 0 auto; }
-.composer-wrap::before { position: absolute; z-index: -1; right: -70px; bottom: 0; left: -70px; height: 86px; content: ""; background: var(--bg-panel); pointer-events: none; display: none; }
 .composer-shell { position: relative; container: composer / inline-size; }
-.composer { overflow: hidden; background: var(--bg-panel); border: 1px solid var(--border-strong); border-radius: 16px; box-shadow: none; transition: border-color .15s ease, box-shadow .15s ease; }
+.composer { overflow: hidden; background: var(--bg-composer, var(--bg-panel)); border: 1px solid var(--border-strong); border-radius: 16px; box-shadow: none; transition: border-color .15s ease, box-shadow .15s ease; }
 .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .composer-attachments { display: flex; gap: 7px; margin: 10px 13px 0; overflow-x: auto; }
 .composer-attachments > span { position: relative; display: block; width: 54px; height: 42px; flex: 0 0 auto; overflow: hidden; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 6px; }
@@ -301,3 +300,16 @@
 .task-inline-output .terminal-command code { font: inherit; color: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
 .task-inline-output .terminal-output pre { padding: 0; }
 .task-inline-output .terminal-output { border-radius: 0; }
+
+.slash-command-dialog { margin: auto; inset: 0; font-size: calc(13px + var(--ui-font-adjust)); font-weight: 400; width: min(640px, calc(100vw - 40px)); max-height: min(720px, calc(100vh - 64px)); padding: 0; color: var(--text); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-popover); }
+.slash-command-dialog::backdrop { background: rgb(0 0 0 / 35%); }
+.slash-command-dialog > header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.slash-command-body { padding: 18px; max-height: calc(100vh - 160px); overflow: auto; overflow-wrap: anywhere; }
+.slash-command-body p { line-height: 1.7; }
+.slash-command-dialog button, .slash-command-dialog input { color: var(--text); background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.slash-command-dialog button:hover:not(:disabled) { background: var(--bg-hover); }
+.slash-command-dialog button:disabled { opacity: .5; cursor: default; }
+.slash-command-dialog input { width: 100%; margin-bottom: 12px; }
+.slash-command-choices { display: grid; gap: 8px; }
+.slash-command-choices button { display: grid; gap: 4px; text-align: left; min-width: 0; overflow-wrap: anywhere; }
+.slash-command-choices small { color: var(--text-muted); }

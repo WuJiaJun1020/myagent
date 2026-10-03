@@ -1,3 +1,4 @@
+import { DesktopPetControl } from "../../features/desktop-pet/DesktopPetControl";
 import { useEffect, useRef, useState } from "react";
 import { HintButton } from "../../components/ui/tooltip";
 import {
@@ -120,9 +121,9 @@ export function AgentSidebar() {
             <strong>{statusLabel}</strong>
           </span>
         </div>
-        <HintButton className="icon-button" type="button" aria-label="打开设置" hint="设置" onClick={() => setSettingsOpen(true)}>
+        <div className="sidebar-footer-actions"><DesktopPetControl /><HintButton className="icon-button" type="button" aria-label="打开设置" hint="设置" onClick={() => setSettingsOpen(true)}>
           <Settings size={15} />
-        </HintButton>
+        </HintButton></div>
       </div>
     </>
   );

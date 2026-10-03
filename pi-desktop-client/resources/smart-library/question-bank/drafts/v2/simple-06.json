@@ -1,0 +1,391 @@
+[
+  {
+    "sample_id": "S061",
+    "question_type": "计划目的与安全性",
+    "anchor_chapter_id": "C1226",
+    "event_key": "han_li_seeks_mustard_space_for_hidden_magnetic_lightning_training",
+    "question": "韩立想把坠魔谷中的空间残骸炼成芥子空间，主要打算用它做什么，又准备怎样与外界相连？",
+    "answer": "韩立看中那里适合修炼元磁神光，打算把它炼成自己的隐秘修炼空间，只留一处由自己控制的隐秘传送阵与外界相连。空间弥合后，外人若不知道具体切入点，即使能撕裂空间也难以找到它。",
+    "reasoning": "原文交代了选中这处空间的修炼用途、与外界相连的方式，以及空间弥合后不易被外人找到的理由。",
+    "answer_points": [
+      "该空间适合韩立修炼元磁神光。",
+      "他想将其炼成专属芥子空间，只留下自己能控制的隐秘传送阵。",
+      "空间弥合后，外人不知道切入点便难以找到。"
+    ],
+    "difficulty": "简单",
+    "stratum": 6,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1226",
+        "quote": "韩立现在突然想到此事，自然不会真是想自己留什么后路之类的理由，而是觉得那里是一处修炼元磁神光的绝佳之地。若是能炼制成自己的芥子空间，只和外界留下一处隐秘传送阵相连的话，他只要控制住空间内的传送阵，就算是化神级的对手找到了那里，恐怕也只能干瞪眼而已。",
+        "supports": "韩立说明芥子空间的修炼用途和保留隐秘传送阵的设想。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1226",
+        "quote": "反倒是在空间外面的修士，即使也有能力撕裂空间，不知道具体的空间切入点的话，也不可能找到已经弥合的芥子空间。",
+        "supports": "说明空间弥合后外人不知道切入点便无法找到。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S062",
+    "question_type": "法器使用条件与局限",
+    "anchor_chapter_id": "C1282",
+    "event_key": "body_refiners_spirit_tools_activation_and_limits",
+    "question": "灵具怎样让炼体士使用法器，它有哪些限制？",
+    "answer": "炼体士借助灵戒、灵镯等激发装置，把装置上的灵石之力引入灵具，不必自身拥有法力也能暂时激发其威能。但灵具只能靠灵石供能，不能祭炼或持久作战，耗费灵石很大；威力最高也不过顶阶灵器，所以高阶炼体士往往不屑使用。",
+    "reasoning": "原文分别说明灵具的激发方式、供能和持续时间限制，以及威力上限，足以概括其用途与局限。",
+    "answer_points": [
+      "灵戒、灵镯等激发装置可把灵石之力导入灵具，使无自身法力的炼体士暂时使用。",
+      "灵具依赖灵石、不能祭炼且难以持久作战，耗费灵石大。",
+      "灵具威力最高仅到顶阶灵器，高阶炼体士更信赖自身肉体。"
+    ],
+    "difficulty": "简单",
+    "stratum": 6,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1282",
+        "quote": "他已经知道，这些所谓的灵具，其实就是修仙者专为炼体士设计的一种特殊法器，借用特制的“灵戒”“灵镯”等激发装置，可不需体内拥有法力，就可直径将装置上的灵石引入到灵具之中，暂时激发它们的威能。",
+        "supports": "解释激发装置如何让没有法力的炼体士使用灵具。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1282",
+        "quote": "灵具的威力虽然不错，但只能借助灵石之力，无法祭炼，也无法持久作战的，对灵石的耗费也非比寻常。故而不是一般炼体士能够使用的。",
+        "supports": "说明灵具依赖灵石、不能祭炼或持久作战且耗费大。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1282",
+        "quote": "不过也因为灵具的威能最多也不过到达顶阶灵器的地步，远不及真正的宝物。所以真正的高阶炼体士，反而对这些灵具不屑一顾的。",
+        "supports": "说明威力上限及高阶炼体士不屑使用的原因。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S063",
+    "question_type": "异常判断与处置边界",
+    "anchor_chapter_id": "C1287",
+    "event_key": "fang夫人_team_leaves_unusual_four_wave_siege_to_tianyuan_city",
+    "question": "方夫人等人发现安远城遭四路兽群同时攻击很反常后，为什么没有自行查明原因？",
+    "answer": "他们认为小城遭四路兽群攻击确实蹊跷，但无法确定是否有高阶妖兽插手，也可能只是巧合；无论真相如何，都不是他们这个层次能够插手调查的，应交由天元城的前辈查明。",
+    "reasoning": "答案保留了众人对兽潮异常的怀疑和不确定性，并按秦姓男子的说法交代了调查权限的边界。",
+    "answer_points": [
+      "四路兽群攻击小城让方夫人觉得反常。",
+      "众人不能确定是否有高阶妖兽插手，也承认可能是巧合。",
+      "他们认为此事超出自身层次，交由天元城前辈调查。"
+    ],
+    "difficulty": "简单",
+    "stratum": 6,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1287",
+        "quote": "“韩领队能在兽群中安然无事，还真让妾身有些意外的。不过这一次，竟然有四波兽群同时攻击区区一个安远城，我怎么觉得有些不对劲的。”等锦袍男子等人方一入座，方夫人却黛眉微皱的说道。",
+        "supports": "方夫人指出四波兽群同时攻击小城不寻常。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1287",
+        "quote": "“这个不好说，也有可能真是巧合而已，不过不管此事真相如何，都不是我们这等层次可以插手的，自有天元城的前辈来调查此事。”锦袍男子摇摇头的回道。",
+        "supports": "秦姓男子说明原因未定且应由天元城前辈调查。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S064",
+    "question_type": "线索识别与追踪",
+    "anchor_chapter_id": "C1299",
+    "event_key": "yellow_liang_detects_phantom_fire_moth_eavesdropper",
+    "question": "黄粱灵君如何看出密室中的偷听者并非真正的万魂丝攻击，又怎样判断其来历？",
+    "answer": "灰丝在众人防御前突然变淡消失，黄粱灵君据此认出是幻术；他又检查晶手上的银色粉末，发现其颜色变化后凭空消失，判断那是成熟体幻焰蛾分身自爆留下的蛾粉。由于粉末带有妖气，他推断飞蛾由妖族饲养，且刚才的谈话很可能已被偷听。",
+    "reasoning": "先以灰丝消失作为幻术线索，再以蛾粉特性识别幻焰蛾并推断窃听者来历；答案将推测保留为黄粱灵君的判断。",
+    "answer_points": [
+      "漫天灰丝在众人防御前变淡消失，黄粱灵君判断这是幻术。",
+      "晶手上的银色粉末变色后消失，被识别为成熟体幻焰蛾分身的蛾粉。",
+      "蛾粉带有妖气，黄粱灵君据此推测它由妖族饲养，谈话可能已泄露。"
+    ],
+    "difficulty": "简单",
+    "stratum": 6,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1299",
+        "quote": "就在所有人都打算硬接这一记意想不到的大杀招时，漫天灰丝在众人的防御之前灵光一闪，全都变淡的消失不见了。",
+        "supports": "灰丝在防御之前消失，众人意识到并非真实攻击。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1299",
+        "quote": "仔细瞅了一眼，只见晶手表面多出一些银色的粉末，磷光一般的闪动不停。",
+        "supports": "黄粱灵君在晶手上发现闪动的银色粉末。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1299",
+        "quote": "“是成熟体的幻焰蛾分身，竟舍得自爆掉。也只有此灵虫可以将身体短时间变成无形，才可以侵入此地。但应该有一缕分神借机逃遁掉了，其本体一定就在落日城附近。刚才我们的谈话，估计被偷听了不少。对了，这些蛾粉上有其他的妖气，应该是妖族之人饲养的此灵虫。”黄粱灵君脸沉似水的说道。",
+        "supports": "黄粱灵君根据蛾粉认出幻焰蛾分身，并推断妖族偷听。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S065",
+    "question_type": "战斗配合与结果",
+    "anchor_chapter_id": "C1332",
+    "event_key": "han_li_rope_and_spirit_fire_bird_stop_and_burn_behemoth",
+    "question": "蛮兽巨人被银色火鸟逼退后，韩立怎样阻止它逃跑并将它消灭？",
+    "answer": "巨人见银色火鸟显出惧意并转身逃跑时，韩立预埋的红丝化为火索缠住它的双足，使它无法前进；随后银色火鸟扑到它背上，银焰迅速蔓延，连巨人用来灭火的黄色飓风也被点燃，最终将巨人烧尽。",
+    "reasoning": "证据呈现先逼退、再缠住双足、最后火焰扩散并焚尽巨人的连续行动，回答限于原文中的战斗过程。",
+    "answer_points": [
+      "巨人惧怕银色火鸟并试图逃跑。",
+      "韩立预埋的红丝化为火索，缠住巨人双足使其无法前进。",
+      "银焰在巨人背上蔓延，连黄色飓风也被引燃，最终将其焚尽。"
+    ],
+    "difficulty": "简单",
+    "stratum": 6,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1332",
+        "quote": "说也奇怪，看似威猛无比的巨人，一见银色火鸟，碧绿瞳孔骤然一缩，脸上竟现出了惧怕的表情。方一站稳的身形，就毫不犹豫的掉头向后狂奔而走。",
+        "supports": "巨人因惧怕银色火鸟而掉头逃跑。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1332",
+        "quote": "但巨人才方一跑出两步，附近的地面下突然“噗噗”之声传来，十余根红丝激射而出，围着巨人两只巨足猛然一缠后，红光大放的化为了粗大火索，将巨人双足一下绑在了一起。",
+        "supports": "韩立的红丝化为火索缠住巨人双足。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1332",
+        "quote": "但就在此刻，身后的银色火鸟却根本不给其机会，闪电般的一窜下，就化为一团银色火焰的扑到了巨人背上。",
+        "supports": "银色火鸟扑到巨人背上，银焰开始蔓延。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1332",
+        "quote": "但是让人心惊的一幕出现了，黄色飓风一和银焰接触，不但没有将银火卷入其中，反而也被点燃起来。只是几个呼吸工夫，就将这只山岳般高的巨人，彻底淹没进了火光中。",
+        "supports": "黄色飓风也被银焰点燃，巨人被火光吞没。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S066",
+    "question_type": "伪装与脱身手段",
+    "anchor_chapter_id": "C1349",
+    "event_key": "han_li_uses_chemical_talisman_decoy_and_magnetic_light_to_follow_gold_avatar",
+    "question": "翡翠蛟龙先行离开后，韩立怎样瞒过金色小人并搭上它的遁光？",
+    "answer": "韩立让化灵符幻化成自己的替身留在原处，自己暗中借风雷翅瞬移到光球附近；他再以元磁神光黏住金色小人的遁光，使小人一时无法甩开，只得面对是否带他同行的局面。",
+    "reasoning": "原文明确区分了留在原地的化灵符替身和暗中移动的韩立，并解释元磁神光让他黏住对方遁光的效果。",
+    "answer_points": [
+      "韩立留下化灵符幻化的替身。",
+      "他暗中借风雷翅瞬移到光球附近。",
+      "他用元磁神光贴住金色小人的遁光，使其一时无法摆脱。"
+    ],
+    "difficulty": "简单",
+    "stratum": 6,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1349",
+        "quote": "金色小人一愣，目光朝韩立原站立之处一扫，只见那里明明还站着另一位“韩立”。",
+        "supports": "金色小人发现原地仍有一个韩立替身。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1349",
+        "quote": "原来韩立一见这两名炼虚修士想要动手破壁而出，当即心中一动下，竟然将那化灵符幻化成了替身，自己则暗中用风雷翅悄悄的遁入了虚空中，一下瞬移到了光球附近。",
+        "supports": "韩立以化灵符作替身，并借风雷翅瞬移到光球附近。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1349",
+        "quote": "结果被韩立抓住机会，竟动用元磁神光仿佛膏药般的一下粘在了金色小人遁光之后，寸步不离的样子。",
+        "supports": "韩立以元磁神光黏住金色小人的遁光。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1349",
+        "quote": "“嘿嘿，若是前辈是本体亲临，晚辈自然无法抵挡前辈的莫大法力，现在只是分身在此的话，前辈想要轻易甩开晚辈的元磁神光，没有一时半刻却是休想之事了。前辈真愿意和晚辈在此逗留如此长时间吗？”韩立却在灰霞中发出阵阵的轻笑。",
+        "supports": "韩立说明分身状态下的金色小人无法马上甩脱元磁神光。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S067",
+    "question_type": "誓约内容与后果",
+    "anchor_chapter_id": "C1433",
+    "event_key": "han_li_signs_tianpeng_oath_with_true_name_and_spiritual_blood",
+    "question": "韩立在“天鹏之誓”卷轴上署名时，为什么必须用真名，签署后感受到什么？",
+    "answer": "金悦提醒他必须用自己的真名，否则会遭誓约反噬且无人能救。韩立以精血在空白处写下名字，名字随后融入卷轴，他感到元神像被什么东西注视了一下；他据此认为这份誓约能约束天鹏族长老，降低他们日后反悔的可能。",
+    "reasoning": "回答依次对应真名要求、以精血署名后的可见变化和韩立对誓约约束作用的判断；最后一点保留为韩立自己的推断。",
+    "answer_points": [
+      "必须使用真名，否则会遭誓约反噬且无人能救。",
+      "韩立以精血署名，名字融入卷轴，元神感到被注视。",
+      "韩立认为誓约能约束天鹏族长老，令其难以过河拆桥。"
+    ],
+    "difficulty": "简单",
+    "stratum": 6,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1433",
+        "quote": "“你用自己的精血，在上面署名吧。一定要用自己真名，否则被誓约反噬的话，谁也无法救你的。”金悦将铜镜一收，冲韩立大有深意的说道。",
+        "supports": "金悦说明必须用真名以及错误署名的反噬风险。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1433",
+        "quote": "这时，韩立凑到了卷轴跟前，在一处空白处，用手指飞快书写上了自己的名字。",
+        "supports": "韩立在卷轴空白处用精血书写姓名。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1433",
+        "quote": "与此同时，韩立隐隐感到元神仿佛被什么东西注视了一下，但此马上就消失的无影无踪。",
+        "supports": "名字融入卷轴后，韩立感到元神被注视。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1433",
+        "quote": "有此东西束缚，想来天鹏族这些长老，想要过河拆桥，也大为不易的。",
+        "supports": "韩立判断誓约可以约束长老，降低其过河拆桥的可能。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S068",
+    "question_type": "器物效果判断",
+    "anchor_chapter_id": "C1437",
+    "event_key": "lei_lan_gold_gourd_amplifies_purple_lightning_arcs",
+    "question": "雷兰身上的银色电弧为什么会逐渐变成威力更强的淡紫色？",
+    "answer": "韩立用灵目看出，雷兰脖颈上的金色小葫芦不断射出紫色电丝；电丝融入鹏鸟自身的银色电弧后，使护身雷电由银白逐渐变为淡紫色。",
+    "reasoning": "韩立观察到紫色电丝来自金色小葫芦，并非鹏鸟自身产生；紧接着的描述明确说明电丝融入银弧后改变了雷电颜色。",
+    "answer_points": [
+      "紫色电丝来自雷兰颈间的金色小葫芦。",
+      "电丝融入鹏鸟自身银弧，使其由银白变成淡紫色。"
+    ],
+    "difficulty": "简单",
+    "stratum": 6,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1437",
+        "quote": "但在他灵目中下，却看的清清楚楚，那所谓紫色电弧根本不是鹏鸟体中自行产生，而是脖颈处那个寸许大金色葫芦中，不时射出来一丝丝紫色电丝之力。这些电丝一和鹏鸟本身生出的银狐接触，立刻融入其中不见了踪影。",
+        "supports": "韩立看出金色小葫芦释放紫色电丝并融入鹏鸟银弧。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1437",
+        "quote": "有此举动，鹏鸟护身银色电弧才由银白色渐渐化为了淡紫色的。",
+        "supports": "银弧因此从银白色逐渐变成淡紫色。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S069",
+    "question_type": "危险识别与信息保留",
+    "anchor_chapter_id": "C1446",
+    "event_key": "han_li_diverts_around_threatening_ghost_force_without_revealing_qihun_secret",
+    "question": "韩立为什么改道绕过山脉，又为何没有向白璧和雷兰细说原因？",
+    "answer": "啼魂感到山脉深处有连它也觉得危险的强大阴魂之力，韩立据此打消进入山脉的念头，选择绕远路。他认为这涉及啼魂的隐秘，只用含糊理由应付白璧和雷兰，没有向他们详细解释。",
+    "reasoning": "原文明确交代了啼魂感知到的危险、韩立绕行的决定，以及他对同伴隐瞒具体缘由的考虑。",
+    "answer_points": [
+      "啼魂感知到山脉深处有令它也感到威胁的强大阴魂之力。",
+      "韩立因此放弃穿越山脉，宁愿绕远路。",
+      "因涉及啼魂隐秘，他只含糊应付，没有细说。"
+    ],
+    "difficulty": "简单",
+    "stratum": 6,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1446",
+        "quote": "啼魂兽已经开启了灵智，韩立略一沟通下才知道，此兽忽然在山脉深处感应到了一股可怕的阴魂之力，似乎有什么鬼物强大到连它都大感威胁，变得暴躁不安。",
+        "supports": "啼魂感应到深处阴魂之力并因此暴躁不安。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1446",
+        "quote": "故而他马上打消了进入山脉的意图，宁愿多花费时间从其他路线远远绕过去。",
+        "supports": "韩立打消进入山脉的念头，决定绕行。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1446",
+        "quote": "这些事情，涉及到啼魂兽的隐秘，韩立当然不会向雷兰二人仔细说明什么，才用一些似是而非的理由含糊应付过去。",
+        "supports": "他不向同伴细说，因为此事涉及啼魂的隐秘。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S070",
+    "question_type": "安排与约束条件",
+    "anchor_chapter_id": "C1465",
+    "event_key": "four_demon_kings_divide_thunder_training_and_bind_han_li_to_six_year_task",
+    "question": "四名妖王怎样安排韩立学习驱雷之道，又用什么期限和手段约束他？",
+    "answer": "六足安排韩立先跟木青学习两年，再到蓝道友处两年，最后留两年自行领悟；妖王给他六年时间，若能掌握辟邪神雷真正威力便带他去有机缘之处，若不能则以威胁相逼。随后四名妖王分别在他体内留下标记，使他更难逃走。",
+    "reasoning": "答案按六年学习安排、达标奖惩和标记限制三个环节概括，均来自当场协商及韩立的观察。",
+    "answer_points": [
+      "先跟随木青两年，再去蓝道友处两年，最后两年自行领悟。",
+      "六年内掌握辟邪神雷真正威力可获带往神秘地点的机会，失败则面临威胁。",
+      "四位妖王分别在韩立体内留下标记，使他更难逃走。"
+    ],
+    "difficulty": "简单",
+    "stratum": 6,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1465",
+        "quote": "“不错，冥河禁制纵然厉害的，但是在如此多神雷狂击下，绝对无法维持住的。好了，人没有问题，下面该讨论韩道友的去留问题。我和地血道友，对神雷之术不太了解，就不参与此事了。关键，现在是木仙子和蓝道友都想让韩道友跟随学习驱雷之道，这可有些棘手的。我看这样吧，现在距离大事还有数年时间。前两年先让他跟随木仙子学习驱雷之道，后两年再到蓝道友门下。最后两年时间，再让韩道友自己领悟修炼。两位道友应该没意见了吧！”六足丝毫感情没有的说道。",
+        "supports": "六足提出前两年跟木青、后两年跟蓝道友、最后两年自行领悟的安排。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1465",
+        "quote": "“好，这些原本就是小事，一切都应以我等图谋大事为主才是。韩道友，给你六年时间，六年内若是能将我等传授的驱雷之道修炼成功，发挥出辟邪神雷真正威力。我等自会带你去一个神秘地方，那里有天大的好处等着你。但是相反，你若是在这六年内无法掌握神雷真正威能，到时！嘿嘿……”一名血袍人一笑，又冲韩立半威胁半诱惑的说出几句话来。",
+        "supports": "六年期限、掌握真正雷威后的机缘及未达成时的威胁。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1465",
+        "quote": "藏入他体内的东西，只是四种类似标记的存在，并无什么大害。但是相对的，有了这些东西后，以后想要再找机会逃走，可是千难万难了。",
+        "supports": "韩立确认体内四种标记虽无大害，却令逃走困难。",
+        "required": true
+      }
+    ]
+  }
+]

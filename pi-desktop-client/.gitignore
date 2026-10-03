@@ -3,6 +3,12 @@ dist/
 release/
 resources/python/
 .cache/
+# Generated test artifacts; test source code remains versioned.
+coverage/
+test-results/
+playwright-report/
+models/smart-library/
+__pycache__/
 *.log
 .DS_Store
 docs/AGENT_WORKSPACE_PREVIEW.html

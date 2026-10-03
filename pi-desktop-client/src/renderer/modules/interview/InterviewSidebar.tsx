@@ -1,3 +1,4 @@
+import { DesktopPetControl } from "../../features/desktop-pet/DesktopPetControl";
 import { HintButton } from "../../components/ui/tooltip";
 import { Settings } from "lucide-react";
 import { InterviewSidebarSummary } from "../../features/interview/InterviewSidebarSummary";
@@ -14,9 +15,9 @@ export function InterviewSidebar() {
           <span className="connection-dot" />
           <span><strong>面试模块已就绪</strong><small>本地数据</small></span>
         </div>
-        <HintButton className="icon-button" type="button" aria-label="打开设置" hint="设置" onClick={() => setSettingsOpen(true)}>
+        <div className="sidebar-footer-actions"><DesktopPetControl /><HintButton className="icon-button" type="button" aria-label="打开设置" hint="设置" onClick={() => setSettingsOpen(true)}>
           <Settings size={15} />
-        </HintButton>
+        </HintButton></div>
       </div>
     </>
   );

@@ -1,0 +1,42 @@
+import type { WorkerRequest } from "../../../platform/main/workers/worker-client";
+import type { LibraryStrategyProfile } from "../../../shared/contracts/library-strategy";
+import type { EvaluationSpan } from "../../../shared/contracts/library-evaluation";
+import type { LibraryEvidence, LibraryEvidenceReference, LibraryIndexChunk, LibraryIndexStatus, LibraryLocalModels, LibraryQaHistory, LibraryQaRange, LibraryQaSession, LibraryQaTurn, LibrarySearchRequest, LibrarySearchResult } from "../../../shared/contracts/smart-library";
+
+export type QaSessionAction = "list" | "create" | "clear" | "delete" | "rename" | "range" | "strategy";
+export type QaSessionRequest = { action: QaSessionAction; sessionId?: string; title?: string; range?: LibraryQaRange | null; strategyId?: string };
+type Input = { book: string; profile?: LibraryStrategyProfile; settings?: LibraryLocalModels; ordinal?: number; payload?: unknown };
+type Op<P extends object, R> = { input: Input & P; output: R };
+export type IndexMethods = {
+  busy: { input: { book?: never; profile?: never; settings?: never; ordinal?: never; payload?: never }; output: boolean };
+  status: Op<object, LibraryIndexStatus>;
+  pause: Op<object, LibraryIndexStatus>;
+  prepare: Op<{ settings: LibraryLocalModels }, LibraryIndexStatus>;
+  rebuild: Op<{ settings: LibraryLocalModels }, LibraryIndexStatus>;
+  start: Op<{ settings: LibraryLocalModels }, LibraryIndexStatus>;
+  chunk: Op<{ ordinal: number }, LibraryIndexChunk | null>;
+  search: Op<{ settings: LibraryLocalModels; payload: LibrarySearchRequest }, LibrarySearchResult>;
+  "cancel-search": Op<{ payload: string }, void>;
+  evidence: Op<{ payload: LibraryEvidenceReference }, LibraryEvidence>;
+  "context-evidence": Op<{ payload: { reference: LibraryEvidenceReference; expandChars: number } }, LibraryEvidence>;
+  "evaluation-evidence": Op<{ payload: EvaluationSpan & { version: string; source: string } }, LibraryEvidence>;
+  "qa-sessions": Op<{ payload: QaSessionRequest }, LibraryQaSession[]>;
+  "qa-list": Op<{ payload: { before?: number; sessionId?: string } }, LibraryQaHistory>;
+  "qa-get": Op<{ payload: string }, LibraryQaTurn | null>;
+  "qa-save": Op<{ payload: LibraryQaTurn }, LibraryQaTurn>;
+};
+export type IndexRequest = WorkerRequest<IndexMethods>;
+export type IndexArgs = {
+  status: []; pause: [];
+  prepare: [settings: LibraryLocalModels]; rebuild: [settings: LibraryLocalModels]; start: [settings: LibraryLocalModels];
+  chunk: [settings: undefined, ordinal: number];
+  search: [settings: LibraryLocalModels, ordinal: undefined, payload: LibrarySearchRequest];
+  "cancel-search": [settings: undefined, ordinal: undefined, payload: string];
+  evidence: [settings: undefined, ordinal: undefined, payload: LibraryEvidenceReference];
+  "context-evidence": [settings: undefined, ordinal: undefined, payload: { reference: LibraryEvidenceReference; expandChars: number }];
+  "evaluation-evidence": [settings: undefined, ordinal: undefined, payload: EvaluationSpan & { version: string; source: string }];
+  "qa-sessions": [settings: undefined, ordinal: undefined, payload: QaSessionRequest];
+  "qa-list": [settings: undefined, ordinal: undefined, payload: { before?: number; sessionId?: string }];
+  "qa-get": [settings: undefined, ordinal: undefined, payload: string];
+  "qa-save": [settings: undefined, ordinal: undefined, payload: LibraryQaTurn];
+};

@@ -1,0 +1,12 @@
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { resolveLibraryModelPaths } from '../../src/platform/main/runtime/library-model-paths.mjs';
+const appRoot = fileURLToPath(new URL('../../', import.meta.url));
+const dataRoot = process.env.PI_LIBRARY_DATA_ROOT || join(process.env.APPDATA || join(homedir(), '.config'), 'pi-desktop-client', 'modules', 'smart-library');
+const paths = await resolveLibraryModelPaths({ appRoot, dataRoot });
+const child = spawn(paths.pythonExe, ['-u', paths.serverScript], { stdio: 'inherit', windowsHide: true, cwd: paths.workingDirectory, env: { ...process.env, PI_LIBRARY_MODELS: paths.modelsDirectory } });
+child.on('error', () => { console.error('请先运行 scripts/library-models/setup.ps1 准备 GPU 模型环境。'); process.exitCode = 1; });
+child.on('exit', code => { process.exitCode = code ?? 1; });
+for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => child.kill(signal));

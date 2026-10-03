@@ -1,0 +1,35 @@
+// Real LanceDB maintenance in an isolated fixture; no GPU or user data.
+const { connect } = require('@lancedb/lancedb');
+const { optimizeVectorStorage, storageSize } = require('../../dist/main/library-vector-storage.cjs');
+const { mkdir, writeFile, stat } = require('node:fs/promises');
+const { resolve, join } = require('node:path');
+const assert = require('node:assert/strict');
+const root = resolve('.cache/library-storage-test/' + Date.now());
+const row = ordinal => ({ id: 'id-' + ordinal, ordinal, bookId: 'fixture', version: 'fixture', sourceVersion: 'source', chapter: 0, vector: Array.from({ length: 8 }, (_, i) => Math.sin((ordinal + 1) * (i + 2))) });
+(async () => {
+  await mkdir(root, { recursive: true });
+  let connection = await connect(root), table = await connection.createTable('chunks', [row(0),row(1)]);
+  for (let i=2;i<128;i+=2) await table.add([row(i),row(i+1)]);
+  const oldVersion = await table.version();
+  const beforeVersions = (await table.listVersions()).length;
+  const beforeHits = await table.vectorSearch(row(73).vector).limit(8).select(['id','_distance']).toArray();
+  const sentinel = join(root, 'chunks.lance', 'data', 'unverified-test.lance');
+  await writeFile(sentinel, 'simulated unfinished transaction');
+  table.close(); connection.close();
+  const before = await storageSize(root);
+  await assert.rejects(optimizeVectorStorage(root,128),/没有其他读写连接/);
+  const report = await optimizeVectorStorage(root, 128, {exclusive:true});
+  connection = await connect(root); table = await connection.openTable('chunks');
+  const versions = await table.listVersions();
+  assert.equal(versions.length,1,'Keep only the current manifest');
+  assert(!versions.some(v=>v.version===oldVersion),'Old snapshots must be removed');
+  assert.equal(report.rows,128); assert.equal(report.beforeBytes,before.bytes);
+  await assert.rejects(stat(sentinel),{code:'ENOENT'});
+  const afterHits = await table.vectorSearch(row(73).vector).limit(8).select(['id','_distance']).toArray();
+  assert.deepEqual(afterHits.map(r=>r.id),beforeHits.map(r=>r.id));
+  assert.equal(await table.countRows(),128);
+  const currentVersion=await table.version();table.close();connection.close();
+  await assert.rejects(optimizeVectorStorage(root,127,{exclusive:true}),/数量与索引记录不同/);
+  connection=await connect(root);table=await connection.openTable('chunks');assert.equal(await table.version(),currentVersion);table.close();connection.close();
+  console.log('PASS storage: exact rows/vectors, identical top-8 retrieval, compaction, exactly one manifest, orphan cleanup, exclusive-owner requirement, invalid-count refusal',JSON.stringify(report));
+})().catch(error=>{console.error(error);process.exitCode=1;});

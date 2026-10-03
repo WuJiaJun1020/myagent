@@ -25,6 +25,7 @@ type UiStore = {
   detailPanelOpen: boolean;
   agentDetailPanelOpen: boolean;
   settingsOpen: boolean;
+  settingsSection: "appearance" | "agent" | "behavior" | "runtime" | "security";
   providerSettingsOpen: boolean;
   sessionOverviewOpen: boolean;
   terminalPanelOpen: boolean;
@@ -86,14 +87,14 @@ export type PersistedNavigation = {
 
 const DEFAULT_NAVIGATION: PersistedNavigation = {
   activeModule: "agent",
-  moduleViews: { agent: "activity", interview: "dashboard", "knowledge-studio": "studio" },
+  moduleViews: { agent: "activity", interview: "dashboard", "knowledge-studio": "studio", "smart-library": "library" },
   resourceCenterTab: "online",
 };
 
 export function parsePersistedNavigation(input: unknown): PersistedNavigation {
   const fallback: PersistedNavigation = {
     activeModule: "agent",
-    moduleViews: { agent: "activity", interview: "dashboard", "knowledge-studio": "studio" },
+    moduleViews: { agent: "activity", interview: "dashboard", "knowledge-studio": "studio", "smart-library": "library" },
     resourceCenterTab: "online",
   };
   if (!input || typeof input !== "object" || Array.isArray(input)) return fallback;
@@ -116,6 +117,7 @@ export function parsePersistedNavigation(input: unknown): PersistedNavigation {
   return {
     activeModule: isProductModuleId(value.activeModule) ? value.activeModule : legacyModule,
     moduleViews: {
+      "smart-library": "library",
       agent: isAgentView(storedModuleViews?.agent) ? storedModuleViews.agent : legacyAgentView,
       interview: isInterviewView(storedModuleViews?.interview) ? storedModuleViews.interview : fallback.moduleViews.interview,
       "knowledge-studio": isKnowledgeStudioView(storedModuleViews?.["knowledge-studio"])
@@ -154,6 +156,7 @@ export const useUiStore = create<UiStore>((set) => ({
   detailPanelOpen: false,
   agentDetailPanelOpen: initialNavigation.moduleViews.agent === "review",
   settingsOpen: false,
+  settingsSection: "appearance",
   providerSettingsOpen: false,
   sessionOverviewOpen: false,
   terminalPanelOpen: false,

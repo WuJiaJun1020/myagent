@@ -18,12 +18,12 @@ export function normalizeAccent(value: unknown): AccentId {
   return accentOptions.some(option => option.value === value) ? value as AccentId : "theme";
 }
 const keys = ["bg-app", "bg-sidebar", "bg-panel", "bg-elevated", "bg-hover", "bg-selected", "border", "border-strong", "text", "text-soft", "text-muted", "accent", "accent-strong"] as const;
-type TokenName = typeof keys[number] | "accent-ink" | "accent-soft" | "green" | "amber" | "red";
+type TokenName = typeof keys[number] | "bg-composer" | "accent-ink" | "accent-soft" | "green" | "amber" | "red";
 export type ThemeTokens = Record<TokenName, string>;
 const colors: Record<PaletteId, Record<ThemeMode, string[]>> = {
   gray: {
     light: ["#ffffff", "#f5f5f4", "#f7f7f6", "#ffffff", "#e7e8ea", "#dcdfe3", "#e3e4e6", "#cfd1d5", "#24262b", "#535963", "#636a75", "#355fa2", "#274c88"],
-    dark: ["#202123", "#191a1c", "#292a2d", "#303135", "#323438", "#3a3d42", "#35373c", "#494c52", "#eceef1", "#b7bcc5", "#959ca7", "#83a9ed", "#abc6f5"],
+    dark: ["#2c2c2a", "#242828", "#333331", "#3b3b39", "#383836", "#414340", "#3e403d", "#535550", "#eeeee9", "#c7c7c0", "#b0b0a8", "#a8c7ed", "#c5dcf5"],
   },
   sand: {
     light: ["#fcfaf6", "#f2eee7", "#f7f3ec", "#fffdf9", "#e8e1d6", "#ded4c5", "#e3dbce", "#cfc2af", "#302b25", "#61574b", "#706455", "#875331", "#6e4025"],
@@ -43,6 +43,7 @@ export function getThemeTokens(palette: PaletteId, mode: ThemeMode, accent: Acce
   const tokens = Object.fromEntries(keys.map((key, index) => [key, colors[palette][mode][index]])) as ThemeTokens;
   if (accent !== "theme") [tokens.accent, tokens["accent-strong"]] = accents[accent][mode];
   return { ...tokens,
+    "bg-composer": palette === "gray" && mode === "dark" ? "#464644" : tokens["bg-panel"],
     "accent-ink": mode === "light" ? "#ffffff" : "#17212b",
     "accent-soft": `color-mix(in srgb, ${tokens.accent} ${mode === "light" ? 9 : 13}%, transparent)`,
     green: mode === "light" ? "#237b56" : "#74c7a1",
@@ -57,7 +58,7 @@ export function workspaceThemeCss(): string {
   return paletteOptions.flatMap(({ value: palette }) => (["light", "dark"] as const).flatMap(mode =>
     accentOptions.map(({ value: accent }) => {
       const declarations = Object.entries(themeStyle(palette, mode, accent)).map(([key, value]) => `${key}:${value}`).join(";");
-      return ["agent", "interview", "knowledge-studio"].map(workspace => `html[data-workspace="${workspace}"][data-palette="${palette}"][data-theme="${mode}"][data-accent="${accent}"]{${declarations};color-scheme:${mode}}`).join("\n");
+      return ["agent", "interview", "knowledge-studio", "smart-library"].map(workspace => `html[data-workspace="${workspace}"][data-palette="${palette}"][data-theme="${mode}"][data-accent="${accent}"]{${declarations};color-scheme:${mode}}`).join("\n");
     }),
   )).join("\n");
 }

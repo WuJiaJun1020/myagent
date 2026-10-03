@@ -1,0 +1,206 @@
+{
+  "version": 1,
+  "name": "韩立 · 青竹小轩",
+  "actions": [
+    {
+      "id": "reading",
+      "title": "阅读",
+      "sourceTitle": "阅读 · 三层动画（8帧）",
+      "sourceProjectSha256": "00a6d2baef067cffc08225ec513716d7909bc4834750d584a107ca0faaa2f487",
+      "width": 1254,
+      "height": 1254,
+      "displayWidth": 256,
+      "displayHeight": 256,
+      "loop": true,
+      "poster": "reading/poster.png",
+      "frames": [
+        {
+          "file": "reading/01.png",
+          "durationMs": 1400,
+          "sha256": "aad14ef6064153f56069fd2151ef97a6e3c743d11c217ae3e7ccdcf3ee9cd903"
+        },
+        {
+          "file": "reading/02.png",
+          "durationMs": 90,
+          "sha256": "31b9dc2a64710e484c3456173f5eeaf74d67df8d4c86e4bcdf721e4dad580d1c"
+        },
+        {
+          "file": "reading/03.png",
+          "durationMs": 100,
+          "sha256": "41d7a0f047e25d16fa6446cceff20f36605da17d94c0486a3f9c740700d0a360"
+        },
+        {
+          "file": "reading/04.png",
+          "durationMs": 90,
+          "sha256": "7f79fb6847b0f2e56a2825d68042830fcf95b9c71ef82d5bd521a91bd2cbf6bb"
+        },
+        {
+          "file": "reading/05.png",
+          "durationMs": 90,
+          "sha256": "e16d0511ccabd7e9522597eda6b94d7d83e8b0aa4a998959b7d57dad9cc8aad1"
+        },
+        {
+          "file": "reading/06.png",
+          "durationMs": 120,
+          "sha256": "057d41ca895498865c446c502e0156b685c182e542eabe40b4ece0f7bd57ad5b"
+        },
+        {
+          "file": "reading/07.png",
+          "durationMs": 160,
+          "sha256": "cbcb8f45da7804d0f51dbdf6d4cf2d787293560f47d7f1e228c5644891f4afd8"
+        },
+        {
+          "file": "reading/08.png",
+          "durationMs": 1000,
+          "sha256": "aad14ef6064153f56069fd2151ef97a6e3c743d11c217ae3e7ccdcf3ee9cd903"
+        }
+      ],
+      "contentBounds": {
+        "x": 0,
+        "y": 21,
+        "width": 1241,
+        "height": 1233
+      }
+    },
+    {
+      "id": "chess",
+      "title": "下棋",
+      "sourceTitle": "下棋 · 黑色描边（8帧）",
+      "sourceProjectSha256": "be3a030589e9d79ecd3383befc8f86f2e1bcf1fd4c08866662c9df9cc770ac33",
+      "width": 256,
+      "height": 128,
+      "displayWidth": 256,
+      "displayHeight": 128,
+      "loop": false,
+      "poster": "chess/poster.png",
+      "frames": [
+        {
+          "file": "chess/01.png",
+          "durationMs": 550,
+          "sha256": "540514f51d945c0b3f7a55adbcfb3a096a8cfa5ee5adcc76113631cdbb5daf00"
+        },
+        {
+          "file": "chess/02.png",
+          "durationMs": 240,
+          "sha256": "5e9eec86600970336031b3d9886b6fec80290f8c765e71833c81463a286c1c36"
+        },
+        {
+          "file": "chess/03.png",
+          "durationMs": 280,
+          "sha256": "0c12ac914ca9555269596cbe01cbc33cab866f8b62aba2c9dc38f5643b96323e"
+        },
+        {
+          "file": "chess/04.png",
+          "durationMs": 500,
+          "sha256": "d6b4a8f21f25d36589a24632efd2e8de899f85779d046816ff02e8a9595a29fa"
+        },
+        {
+          "file": "chess/05.png",
+          "durationMs": 350,
+          "sha256": "f1c27151eb30c3ad79f295e392475526f9cc8196c9931e12a30836298112e5ef"
+        },
+        {
+          "file": "chess/06.png",
+          "durationMs": 240,
+          "sha256": "4f65be63e16285abcb103207abc0d34ae0be343d692f3b159f15fd0326d15e58"
+        },
+        {
+          "file": "chess/07.png",
+          "durationMs": 280,
+          "sha256": "83129710073a8bceca229bf5200e506610c43512bf5248bde6d45e804cc7c8d8"
+        },
+        {
+          "file": "chess/08.png",
+          "durationMs": 1100,
+          "sha256": "6d9d0dcab90069409c4ea7f7ab26495044cbe9f41534007468454d53fead1ff3"
+        }
+      ],
+      "contentBounds": {
+        "x": 9,
+        "y": 0,
+        "width": 239,
+        "height": 128
+      }
+    },
+    {
+      "id": "bamboo",
+      "title": "种金雷竹",
+      "sourceTitle": "种金雷竹 · 倒液与生长（12帧）",
+      "sourceProjectSha256": "0ea75b559acec32c30d2b38f8daff1050f43ae3f6c5484b565074d5f5e3c11f1",
+      "width": 1500,
+      "height": 1254,
+      "displayWidth": 306,
+      "displayHeight": 256,
+      "loop": true,
+      "poster": "bamboo/poster.png",
+      "frames": [
+        {
+          "file": "bamboo/01.png",
+          "durationMs": 650,
+          "sha256": "c73f6ec0ef8dbc79199feb393a4d1782087d7076636700b198b325613c9dc8bf"
+        },
+        {
+          "file": "bamboo/02.png",
+          "durationMs": 160,
+          "sha256": "c8d8d53c8126c06bf243eeb9362ba0ad4a7ba998e892beaff6cfe2e792d7b9b8"
+        },
+        {
+          "file": "bamboo/03.png",
+          "durationMs": 180,
+          "sha256": "6b79aebac36ae0949715965e09c7e8f80cba565f6e5bb8326483aa6dd12733e5"
+        },
+        {
+          "file": "bamboo/04.png",
+          "durationMs": 240,
+          "sha256": "2492fc54acde3ecebb8508b8f8f05da308f5b61cbdc84a6811bf046ad7147d10"
+        },
+        {
+          "file": "bamboo/05.png",
+          "durationMs": 240,
+          "sha256": "cd465ce39b69578e323b656cf73d424dd9aa483fff8bd8497a7669fd3ac800b4"
+        },
+        {
+          "file": "bamboo/06.png",
+          "durationMs": 240,
+          "sha256": "350bd7d5f40b535fddd58d6015eb29e0ba74794994b683a7e67b9de0d61a611f"
+        },
+        {
+          "file": "bamboo/07.png",
+          "durationMs": 180,
+          "sha256": "ec7cb1f0fd76029dc4ce774227bc4394c466c5202b6fcb6f23cfa3d52ce2e28d"
+        },
+        {
+          "file": "bamboo/08.png",
+          "durationMs": 180,
+          "sha256": "24a166e4106e0934656c8e5c9a939c5a012b7e182bee017d6603b7620fb0751c"
+        },
+        {
+          "file": "bamboo/09.png",
+          "durationMs": 220,
+          "sha256": "81bfdaff3f2dd88d2779161b1f8875c2b2580a9b26086b862e5d3b370b5124e7"
+        },
+        {
+          "file": "bamboo/10.png",
+          "durationMs": 300,
+          "sha256": "b68c0b7791b9bd26db04f84dab3c48a8f133ca49238e3c528431c405f67ca56d"
+        },
+        {
+          "file": "bamboo/11.png",
+          "durationMs": 280,
+          "sha256": "51140ecfd3bd23e02faf25274889ae094f1e3485c3711addfd8de9a4a943dd83"
+        },
+        {
+          "file": "bamboo/12.png",
+          "durationMs": 1200,
+          "sha256": "b67530288981c0635ee0719083c27502af3831ec7bbcf8eeba85eb99aa6782c0"
+        }
+      ],
+      "contentBounds": {
+        "x": 0,
+        "y": 19,
+        "width": 1339,
+        "height": 1235
+      }
+    }
+  ]
+}

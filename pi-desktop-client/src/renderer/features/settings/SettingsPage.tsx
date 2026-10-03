@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Bot, ListChecks, MonitorCog, Palette, ShieldCheck } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useUiStore } from "../../stores/ui-store";
 import { AgentSettings } from "./AgentSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
@@ -31,7 +31,8 @@ export function SettingsPage() {
   const providerSettingsOpen = useUiStore((state) => state.providerSettingsOpen);
   const sidebarOpen = useUiStore((state) => state.sidebarOpen);
   const setOpen = useUiStore((state) => state.setSettingsOpen);
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>("appearance");
+  const activeSection = useUiStore(state => state.settingsSection);
+  const setActiveSection = (settingsSection: SettingsSectionId) => useUiStore.setState({ settingsSection });
   const pageRef = useRef<HTMLElement>(null);
 
   useEffect(() => {

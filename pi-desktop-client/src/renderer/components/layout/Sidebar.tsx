@@ -15,6 +15,7 @@ export function Sidebar({ children }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="brand">
+        <img className="brand-icon" src="./app-icon.png" width={32} height={32} alt="" draggable={false} />
         <span className="brand-copy"><strong>Pi Desktop</strong></span>
       </div>
 

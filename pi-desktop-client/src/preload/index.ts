@@ -16,9 +16,44 @@ import { KNOWLEDGE_STUDIO_IPC, type KnowledgeGenerationProgress } from "../share
 import type { ExtensionUiResponse, PiDesktopApi, ProcessStatus, RpcCommand, RpcMessage } from "../shared/rpc";
 
 const api: PiDesktopApi = {
+  library: {
+    strategyProfiles: request => ipcRenderer.invoke("smart-library:strategy-profiles", request),
+    evaluationRuns: id => ipcRenderer.invoke("smart-library:evaluation-runs", id),
+    questionBank: (id, action) => ipcRenderer.invoke("smart-library:question-bank",id,action),
+    questionBankEvidence: (id, question, evidence) => ipcRenderer.invoke("smart-library:question-bank-evidence",id,question,evidence),
+    evaluate: (id, action, options) => ipcRenderer.invoke("smart-library:evaluate",id,action,options),
+    evaluationEvidence: (id, reference) => ipcRenderer.invoke("smart-library:evaluation-evidence",id,reference),
+    qaModels: () => ipcRenderer.invoke("smart-library:qa-models"),
+    qaStrategies: () => ipcRenderer.invoke("smart-library:qa-strategies"),
+    qaSessions: (id, action, sessionId, title, range, strategyId) => ipcRenderer.invoke("smart-library:qa-sessions", id, action, sessionId, title, range, strategyId),
+    qaHistory: (id, before, sessionId) => ipcRenderer.invoke("smart-library:qa-history", id, before, sessionId),
+    qaAsk: (id, request) => ipcRenderer.invoke("smart-library:qa-ask", id, request),
+    qaStop: (id, turn) => ipcRenderer.invoke("smart-library:qa-stop", id, turn),
+    qaEvidence: (id, turn, number) => ipcRenderer.invoke("smart-library:qa-evidence", id, turn, number),
+    onQaUpdate: listener => {
+      const handler = (_: Electron.IpcRendererEvent, turn: import("../shared/contracts/smart-library").LibraryQaTurn) => listener(turn);
+      ipcRenderer.on("smart-library:qa-update", handler);
+      return () => ipcRenderer.removeListener("smart-library:qa-update", handler);
+    },
+    getLocalModels: () => ipcRenderer.invoke("smart-library:local-models"),
+    modelRuntime: (action, profileId) => ipcRenderer.invoke("smart-library:model-runtime", action, profileId),
+    indexAction: (id, action, profileId) => ipcRenderer.invoke("smart-library:index", id, action, profileId),
+    indexChunk: (id, ordinal, profileId) => ipcRenderer.invoke("smart-library:index-chunk", id, ordinal, profileId),
+    search: (id, request) => ipcRenderer.invoke("smart-library:search", id, request),
+    cancelSearch: (id, token) => ipcRenderer.invoke("smart-library:cancel-search", id, token),
+    evidence: (id, reference) => ipcRenderer.invoke("smart-library:evidence", id, reference),
+    saveLocalModels: (settings) => ipcRenderer.invoke("smart-library:save-local-models", settings),
+    testLocalModel: (kind, settings, caseId) => ipcRenderer.invoke("smart-library:test-local-model", kind, settings, caseId),
+    list: () => ipcRenderer.invoke("smart-library:list"),
+    importBooks: () => ipcRenderer.invoke("smart-library:import"),
+    chapter: (id, chapter) => ipcRenderer.invoke("smart-library:chapter", id, chapter),
+    remember: (id, chapter) => ipcRenderer.invoke("smart-library:remember", id, chapter),
+  },
   rendererReady: (theme) => ipcRenderer.send("app:renderer-ready", theme),
   minimizeWindow: () => ipcRenderer.invoke("app:window-minimize") as Promise<void>,
   toggleWindowMaximize: () => ipcRenderer.invoke("app:window-toggle-maximize") as Promise<boolean>,
+  readPiChangelog: () => ipcRenderer.invoke("pi:read-changelog"),
+  shareCurrentSession: (sessionId: string) => ipcRenderer.invoke("pi:share-session", sessionId),
   closeWindow: () => ipcRenderer.invoke("app:window-close") as Promise<void>,
   getWindowMaximized: () => ipcRenderer.invoke("app:window-get-maximized") as Promise<boolean>,
   onWindowMaximized: (listener) => {
@@ -68,6 +103,12 @@ const api: PiDesktopApi = {
   logoutProvider: (providerId) => ipcRenderer.invoke("pi:logout-provider", providerId),
   cancelProviderLogin: (flowId) => ipcRenderer.invoke("pi:cancel-provider-login", flowId),
   respondToProviderAuth: (response) => ipcRenderer.invoke("pi:provider-auth-response", response),
+  getDesktopPet: () => ipcRenderer.invoke("pet:get-state"),
+  configureDesktopPet: (patch) => ipcRenderer.invoke("pet:configure", patch),
+  onDesktopPetState: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: import("../shared/contracts/desktop-pet").PetSnapshot) => listener(state);
+    ipcRenderer.on("pet:state-changed", handler);return () => ipcRenderer.removeListener("pet:state-changed", handler);
+  },
   openExternal: (url) => ipcRenderer.invoke("app:open-external", url),
   browserGetState: () => ipcRenderer.invoke("browser:get-state"),
   browserNavigate: (input) => ipcRenderer.invoke("browser:navigate", input),

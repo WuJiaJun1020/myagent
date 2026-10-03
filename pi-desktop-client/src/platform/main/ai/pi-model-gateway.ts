@@ -909,6 +909,8 @@ export class PiModelGateway implements ModelGateway {
       scope = new CallScope(request.metadata.budget.timeoutMs, options.signal);
       const resolved = await scope.race(this.resolveRequest(request, scope.signal, report));
       providerId = resolved.providerId;
+      try { options.onPreparedRequest?.({ systemPrompt: resolved.context.systemPrompt, messages: structuredClone(resolved.context.messages), model: {providerId: resolved.providerId, modelId: resolved.modelId}, estimatedInputTokens: estimateContextTokens(resolved.context), contextWindowTokens: resolved.model.contextWindow, maxOutputTokens: resolved.options.maxTokens, reasoning: resolved.options.reasoning, temperature: resolved.options.temperature, timeoutMs: resolved.options.timeoutMs }); } catch { /* Diagnostics must not change model execution. */ }
+
       Object.assign(diagnostics, {
         model: { providerId: resolved.providerId, modelId: resolved.modelId },
         runtimeTimeoutMs: resolved.options.timeoutMs,
@@ -961,7 +963,7 @@ export class PiModelGateway implements ModelGateway {
     }
   }
 
-  async *stream(request: ModelRequest, options: AiCallOptions = {}): AsyncIterable<ModelStreamEvent> {
+  async *stream(request: ModelRequest, options: ModelCallOptions = {}): AsyncIterable<ModelStreamEvent> {
     const startedAt = this.now();
     let scope: CallScope | undefined;
     let providerId: string | undefined;
@@ -971,6 +973,8 @@ export class PiModelGateway implements ModelGateway {
       scope = new CallScope(request.metadata.budget.timeoutMs, options.signal);
       const resolved = await scope.race(this.resolveRequest(request, scope.signal));
       providerId = resolved.providerId;
+      try { options.onPreparedRequest?.({ systemPrompt: resolved.context.systemPrompt, messages: structuredClone(resolved.context.messages), model: {providerId: resolved.providerId, modelId: resolved.modelId}, estimatedInputTokens: estimateContextTokens(resolved.context), contextWindowTokens: resolved.model.contextWindow, maxOutputTokens: resolved.options.maxTokens, reasoning: resolved.options.reasoning, temperature: resolved.options.temperature, timeoutMs: resolved.options.timeoutMs }); } catch { /* Diagnostics must not change model execution. */ }
+
       const requestId = this.createRequestId();
       const source = this.runtime.streamSimple(resolved.model, resolved.context, resolved.options);
       const iterator = source[Symbol.asyncIterator]();

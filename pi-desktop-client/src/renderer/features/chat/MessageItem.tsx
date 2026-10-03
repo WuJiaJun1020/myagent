@@ -18,9 +18,8 @@ export function MessageItem({ message, hideThinking = false }: MessageItemProps)
 
   if (message.role === "user") {
     return (
-      <article className="timeline-message user-message">
+      <article className="timeline-message user-message" aria-label="你的消息">
         <div className="message-column">
-          <div className="message-meta"><strong>你</strong></div>
           <div className="user-message-bubble">
             {textBlocks.map((block) => <p key={block.contentIndex}>{block.text}</p>)}
           </div>

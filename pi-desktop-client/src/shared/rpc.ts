@@ -133,10 +133,13 @@ export type ExtensionUiResponse = {
 };
 
 export interface PiDesktopApi {
+  library: import("./contracts/smart-library").LibraryApi;
   rendererReady(theme: "light" | "dark"): void;
   minimizeWindow(): Promise<void>;
   toggleWindowMaximize(): Promise<boolean>;
   closeWindow(): Promise<void>;
+  readPiChangelog(): Promise<string>;
+  shareCurrentSession(sessionId: string): Promise<string>;
   getWindowMaximized(): Promise<boolean>;
   onWindowMaximized(listener: (maximized: boolean) => void): () => void;
   getStatus(): Promise<ProcessStatus>;
@@ -181,6 +184,9 @@ export interface PiDesktopApi {
   logoutProvider(providerId: string): Promise<ProviderSnapshot>;
   cancelProviderLogin(flowId: string): Promise<void>;
   respondToProviderAuth(response: ProviderAuthResponse): Promise<void>;
+  getDesktopPet(): Promise<import("./contracts/desktop-pet").PetSnapshot>;
+  configureDesktopPet(patch: import("./contracts/desktop-pet").PetSettingsPatch): Promise<import("./contracts/desktop-pet").PetSnapshot>;
+  onDesktopPetState(listener: (state: import("./contracts/desktop-pet").PetSnapshot) => void): () => void;
   openExternal(url: string): Promise<void>;
   browserGetState(): Promise<import("./contracts/browser").BrowserState>;
   browserNavigate(input: string): Promise<void>;

@@ -1,0 +1,406 @@
+[
+  {
+    "sample_id": "S011",
+    "difficulty": "简单",
+    "question_type": "局部事实链",
+    "question": "韩立为什么不请师兄帮忙打开捡到的小瓶，最后又怎样把它藏起来？",
+    "answer": "他已把小瓶当成自己的宝物，不愿让外人知道；砸不开后，他把小瓶和母亲缝制的平安符一起装进防水防潮的皮袋，再把袋子挂回脖子上。",
+    "reasoning": "问题聚焦韩立对小瓶保密的考虑和实际收纳方式，两处分别由原文直接说明。",
+    "stratum": 1,
+    "anchor_chapter_id": "C0012",
+    "event_key": "hanli_hide_unbreakable_bottle",
+    "answer_points": [
+      "韩立不愿请师兄帮忙，因为不想让外人知道小瓶",
+      "他把小瓶与平安符装进母亲缝制的皮袋并随身藏好"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C0012",
+        "quote": "叫其他的师兄帮忙，也许能打开它。但韩立心底下，早已不知不觉地把此物当成了自己的宝物，是万分不肯再让其他外人知道的。",
+        "supports": "他不求助师兄的原因是把瓶子视为自己的宝物并要对外保密。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0012",
+        "quote": "韩立松开了皮袋口，把瓶子和平安符放到了一起，再勒紧袋口，接着又把袋子挂回了脖子上。",
+        "supports": "韩立把瓶子与平安符一起放进皮袋并随身收好。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S012",
+    "difficulty": "简单",
+    "question_type": "法术效果验证",
+    "question": "韩立验证火弹术威力时，火球碰到精钢兵刃和水面分别造成什么结果？这些结果让他怎样认识修仙者与凡人武者的差距？",
+    "answer": "火弹术击中精钢兵刃后，接触部位转眼熔成铁汁；韩立把火球抛到水面试验，水面也像油液一样被点燃，并没有被水克制。看到这样的威力，他认识到稍会法术的修仙者就能轻易击杀江湖高手，修为更高者更可横扫世俗武林。",
+    "reasoning": "原文先以精钢兵刃和水面两个试验说明火弹术的高温与不受水克特点，随后韩立据此理解修仙者与凡人武者的实力差距。",
+    "stratum": 1,
+    "anchor_chapter_id": "C0067",
+    "event_key": "han_li_tests_fireball_against_steel_and_water",
+    "answer_points": [
+      "火球击中精钢兵刃后，接触部位很快熔为铁汁",
+      "火球落到水面后水面如油液般被点燃，并未被大水克制",
+      "韩立据此认识到修仙者即使会低阶法术也能轻易击杀江湖高手，更强者与凡人武者差距悬殊"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C0067",
+        "quote": "即使是精钢打造的兵刃，被这火球打到后，也会让兵刃接触的部位眨眼间被熔为铁汁。",
+        "supports": "火弹术能把精钢兵刃接触处迅速熔成铁汁",
+        "required": true
+      },
+      {
+        "chapter_id": "C0067",
+        "quote": "见了这种非人的可怕威力后，韩立甚至把火球抛到水面上试验了一下，结果这一片水域如同油液一般马上被火球立刻点燃，一点也没露出可被大水给克制的倾向。",
+        "supports": "火球点燃水面且没有被水克制",
+        "required": true
+      },
+      {
+        "chapter_id": "C0067",
+        "quote": "想一下，一名稍会一点法术的修仙者，就可用像“火弹术”这样的小法术，轻易的击杀江湖中所谓的高手名家。那如果换了一位功力高深点的修仙者出手的话，那还不横扫整个江湖，天下无敌。",
+        "supports": "韩立由火弹术威力理解修仙者与世俗武者间巨大实力差距",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S013",
+    "difficulty": "简单",
+    "question_type": "法术用途与限制",
+    "question": "韩立试用天眼术后看到了什么，它的用途为何让他很快失去兴趣？",
+    "answer": "施术后他看见自己身上有淡淡白光，丹田附近更浓；天眼术只是辅助观察人体是否有法力及其深浅的法术。七玄门里几乎只有韩立算半个修仙者，他觉得没有别人可供观察，试了几次便不再感兴趣。",
+    "reasoning": "将原文关于法术功能、韩立观察到的现象以及他停止使用的缘由连在一起回答。",
+    "stratum": 1,
+    "anchor_chapter_id": "C0068",
+    "event_key": "hanli_tianyan_spell_utility",
+    "answer_points": [
+      "天眼术能观察人体有无法力及法力深浅",
+      "韩立观察自己时见到淡白光且丹田附近较浓",
+      "七玄门缺少可供观察的修仙者，韩立很快失去兴趣"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C0068",
+        "quote": "但它的作用却也和它的难易度相符，只是一种用来观察人体内是否拥有法力，以及法力的深厚与否的纯辅助型法术。",
+        "supports": "天眼术的功能是观察人体有无法力及法力深浅。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0068",
+        "quote": "韩立一开始对它倒也是兴致勃勃，不停地往自己双目上使用“天眼术”，然后再用施法后的眼睛观察自己身体的状况，结果看到了一层淡淡的白光笼罩在他身上，而且越是靠近丹田的地方，白光越显得浓厚。",
+        "supports": "韩立观察到自己身上有淡白光，丹田附近更浓。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0068",
+        "quote": "因为整个七玄门也就只有他一人算是半个修仙者，他用“天眼术”要去看谁？",
+        "supports": "韩立认为七玄门中没有足够的观察对象，解释了他失去兴趣的原因。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S014",
+    "difficulty": "简单",
+    "question_type": "战术安排",
+    "question": "贾天龙怎样迫使中小帮派跟随野狼帮，又打算怎样利用他们攻打最后一道哨卡？",
+    "answer": "贾天龙控制了这些帮派首领的家属子女，并许以重利来压住他们倒戈的念头；他把杂牌帮众推到最前面消耗守卡者的精力，再准备派野狼帮精锐用连弩拿下关卡。身边的红衣铁卫也用于震慑这些首领。",
+    "reasoning": "答案分为控制盟友、安排进攻顺序和精锐威慑三个相互关联的环节。",
+    "stratum": 1,
+    "anchor_chapter_id": "C0081",
+    "event_key": "jia_tianlong_coerce_allies_and_attack_checkpoint",
+    "answer_points": [
+      "扣押中小帮派首领家属并许以重利",
+      "先令杂牌帮众消耗守卡者，再以野狼帮精锐连弩突击",
+      "带红衣铁卫震慑中小帮派首领"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C0081",
+        "quote": "这批人一向都被他视若至宝，平时舍不得用在日常争斗中，但此时他却全部带在了身边，为的就是完全震慑住那些中小帮派的蠢蠢欲动，否则铁枪会、断水门等帮派的大小头目，哪能如此乖乖的俯首听命。",
+        "supports": "贾天龙带红衣铁卫震慑中小帮派头目。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0081",
+        "quote": "要不是贾天龙以迅雷不及掩耳之势，突然把这些头目的家属子女全部控制在了手上，外加上用重利加以许诺，这些中小帮派恐怕早就倒戈一击了。",
+        "supports": "他以控制家属子女和许诺重利迫使中小帮派服从。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0081",
+        "quote": "他本来也没指望这些人能够拿下落日峰这最后一道，也是最险恶的关卡，只是想让这些帮会之人多耗费些守关之人的精力，然后再派本帮的精锐之士用连弩一击而下。",
+        "supports": "贾天龙安排杂牌帮众消耗守军，再让本帮精锐使用连弩突击。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S015",
+    "difficulty": "简单",
+    "question_type": "人物反应与计划变化",
+    "question": "七玄门死斗开始前，韩立原本怎样安排厉飞雨和张袖儿，什么消息让厉飞雨突然失神？",
+    "answer": "韩立想趁野狼帮撤离时的混乱把张袖儿接出来，让厉飞雨带她远走高飞；厉飞雨却告诉韩立，张袖儿也在参加死契斗的人群里。得知她本人将置身死斗后，厉飞雨当场失神。",
+    "reasoning": "按本章先提出的脱身计划与随后发现的危险安排作答，不补写其后的战斗结果。",
+    "stratum": 1,
+    "anchor_chapter_id": "C0086",
+    "event_key": "li_feiyu_discovers_zhang_xiuer_in_death_duel",
+    "answer_points": [
+      "韩立计划趁野狼帮撤离时接出张袖儿并让二人远走",
+      "张袖儿也要参加死契斗的消息使厉飞雨失神"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C0086",
+        "quote": "等他们双方决斗完，我们就趁着野狼帮撤离时的混乱，把张姑娘偷偷的接出来。然后你们二人就远走高飞，找个他们找不到的地方躲起来，省得上面的人还要把你当成替罪羊，让你背那个你背不起的大黑锅。",
+        "supports": "韩立提出趁混乱救出张袖儿并让她和厉飞雨离开。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0086",
+        "quote": "袖儿……袖儿，她也在那里，她也要参加死契斗！",
+        "supports": "厉飞雨发现张袖儿也将参加死契斗，解释了他的震惊。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S016",
+    "difficulty": "简单",
+    "question_type": "危机期限与行动目标",
+    "question": "韩立读完墨大夫的遗书后，为什么急着弄清嘉元城的情况并取得暖阳宝玉？",
+    "answer": "遗书所载帮会及家人情况已有近十年，韩立认为现状可能大变，必须先调查再决定是否接触墨大夫的妻室或另作打算；同时他体内阴寒之毒正在凝结变大，按他的估计最多两个月便会爆发，所以他下定决心取得暖阳宝玉。",
+    "reasoning": "答案保留了韩立对旧情报时效性的判断，并区分城中调查与体内毒发带来的限时压力。",
+    "stratum": 1,
+    "anchor_chapter_id": "C0104",
+    "event_key": "hanli_investigate_jianyuan_and_seek_warming_jade",
+    "answer_points": [
+      "遗书记载的是近十年前的情况，韩立认为现状可能大变",
+      "他需调查后再决定如何处置墨大夫留下的关系和基业",
+      "阴寒之毒持续变大，韩立估计约两个月后会爆发",
+      "韩立因此决心取得暖阳宝玉"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C0104",
+        "quote": "遗书上写得很仔细，不但把墨大夫所创立的基业——惊蛟会，交待的一清二楚，还把他所有妻室的性情，也给粗说了一遍，让韩立心中有了些底。",
+        "supports": "遗书提供惊蛟会和墨大夫妻室的情报。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0104",
+        "quote": "不过遗书上所说的东西，都是近十年前的事了，现在情况肯定有了天翻地覆的变化。",
+        "supports": "韩立认为遗书情报已经过时、需要核实。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0104",
+        "quote": "具体要怎么去做？是否要接触墨大夫的妻室，还是偷了宝玉逃之夭夭？这都要在韩立了解到详细情况后，才能做出决定。",
+        "supports": "韩立要调查后决定接触妻室还是取宝玉离开。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0104",
+        "quote": "据韩立自己估计，顶多再有两个月的时间，这股阴毒就会彻底爆发出来。",
+        "supports": "韩立估计阴毒最多两个月后爆发，构成紧迫期限。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S017",
+    "difficulty": "简单",
+    "question_type": "制作条件",
+    "question": "苦桑和尚告诉韩立，绘制灵符时符纸、丹砂和笔分别要满足什么条件？",
+    "answer": "符纸须以特殊原料炼制，丹砂要用含灵气的妖兽之血调制；笔可以用妖兽灵毛制成的毛笔或天才地宝制成的炭笔，这类笔能提高成功率和符箓威力。条件不足时也能用世俗普通笔，但成功率很低。",
+    "reasoning": "依和尚的说明分述三类材料的要求，并保留普通笔可用但成功率低的限制。",
+    "stratum": 1,
+    "anchor_chapter_id": "C0136",
+    "event_key": "kusang_talisman_material_requirements",
+    "answer_points": [
+      "符纸须用特殊原料炼制",
+      "丹砂须由蕴含灵气的妖兽之血调制",
+      "灵毛笔或天材地宝炭笔有助提升制符成功率和威力",
+      "普通笔也可用但成功率很低"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C0136",
+        "quote": "想要成功绘制一道灵符，除了必须用特殊原料炼制的符纸外，也须用蕴含灵气的妖兽之血调制的丹砂才行，至于笔则视情况而定了！",
+        "supports": "符纸和丹砂的材料要求，且笔的选择视情况而定。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0136",
+        "quote": "我们修仙者绘制灵符所用的笔，除了可以用妖兽身上灵毛制成的毛笔外，还可以用某些天才地宝之类的炭笔来制符，这些都可以增加制符的成功率和符箓的威力。",
+        "supports": "灵毛笔和天才地宝炭笔可提升制符成功率及符箓威力。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0136",
+        "quote": "但如果没条件的话，甚至世俗间的普通笔也行，只是那制符的成功率实在是低的可怜。",
+        "supports": "普通笔可以替代，但成功率很低。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S018",
+    "difficulty": "简单",
+    "question_type": "斗法应对",
+    "question": "韩立在与“陆师兄”交手时，如何用两层防御拖住青蛟旗的风刃攻势，并为符宝争取时间？",
+    "answer": "他先用转动的精钢环挡下首轮风刃，但钢环被连续攻击切出沟槽并最终碎裂；随后玄铁盾挡住后续风刃流。对手把青蛟旗化成巨蛟扑来时，韩立收回玄铁盾，同时驱动灰色符宝化成巨剑形光华抵住蛟首。",
+    "reasoning": "答案按钢环、玄铁盾、符宝三个阶段描述韩立的防御转换；证据均来自同一场交手。",
+    "stratum": 1,
+    "anchor_chapter_id": "C0168",
+    "event_key": "hanli_layers_defense_against_qingjiao_flag",
+    "answer_points": [
+      "旋转精钢环接下首轮风刃但受损严重",
+      "玄铁盾挡住持续风刃流",
+      "青蛟旗化蛟攻来时收盾并以符宝巨剑抵住蛟首"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C0168",
+        "quote": "等光芒全都消失之时，原本光滑无比的钢环外壁上，多了十几道纵横交错的尺许长沟槽，整个法器已显的破破烂烂。",
+        "supports": "第一层精钢环在首轮风刃后已严重受损。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0168",
+        "quote": "这一次，韩立身前的钢环只维持了短短的片刻时间，就忽然发出了一声沉闷的轰鸣声，黄光大散，那件上品的精钢环终于寿终正寝，被密密麻麻的风刃给击的粉碎。",
+        "supports": "精钢环最终被连续风刃击碎。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0168",
+        "quote": "没有了阻碍的风刃激流，毫不客气的长驱直入，却被早已等待多时的另一件顶级法器玄铁盾，给挡住了去路，接着又爆发了乌光和青光的再次对撞。",
+        "supports": "韩立以玄铁盾接替钢环挡住持续风刃。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0168",
+        "quote": "可就在这时，原本盘膝而坐的韩立身上，突然飞起了一道数丈长的灰濛濛光华，呈巨剑形状，竟毫不示弱的一剑抵住了蛟首，互相纠缠起来。",
+        "supports": "青蛟扑击时韩立以符宝所化巨剑抵住蛟首。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S019",
+    "difficulty": "简单",
+    "question_type": "场所设施与限制",
+    "question": "韩立使用的十九号地火炼丹房有哪些设施和防打扰保障，为什么丑汉认为它的火力够用？",
+    "answer": "房内的地火口由八个龙首喷火，可调节火焰大小和高度，墙上葫芦装有能短时增强地火的火星砂；关门后房间与外界隔绝，除非数名结丹修士合力，否则无法从外面进入。丑汉称十八号已被占用，十九号虽稍逊但火力和稳定性仍很出色。",
+    "reasoning": "按原文介绍的房间选择、调火设施及隔绝保障回答，不推断火星砂能长期维持增强。",
+    "stratum": 1,
+    "anchor_chapter_id": "C0214",
+    "event_key": "hanli_nineteen_earthfire_room_features",
+    "answer_points": [
+      "十九号次于十八号但火力和稳定性出色",
+      "八个龙首喷出地火且可调节大小高度",
+      "火星砂可短时增强地火",
+      "关门后隔绝外界且数名结丹修士合力方能闯入"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C0214",
+        "quote": "不过十八号已被一位师伯占用了，所以师弟还是用十九号屋子吧！虽然它比十八号稍差了点，但火力和稳定性也都极为出色。",
+        "supports": "十九号房安排给韩立的原因及其火力、稳定性评价。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0214",
+        "quote": "师弟，这个就是此屋的地火口，炼丹所需要的地火，就是从这八个龙首中喷出。并且根据需要，还可自行调节火焰大小和高度，具体驱使之法，就刻在石墩外壁上了。",
+        "supports": "地火由八个龙首喷出，可调节火焰大小和高度。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0214",
+        "quote": "这些葫芦内，装的都是火星砂，可以暂时加强地火的威力，若师弟觉得地火温度还不够的话，提升威力，只是持续时间不会太久。",
+        "supports": "火星砂能暂时提高地火威力，但持续时间不长。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0214",
+        "quote": "屋门一经关闭后，就和外界断绝一切联系了。除非是数名结丹期修士合力，否则谁也无法从外面进入，所以师弟尽管放心，绝不会有人打扰的！",
+        "supports": "房门关闭后与外界隔绝，外人难以闯入。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S020",
+    "difficulty": "简单",
+    "question_type": "物品选择与发现",
+    "question": "李化元让韩立从几种功法中挑选主修功法时，韩立为什么选中金色书页，之后又发现了什么？",
+    "answer": "金色书页的外形让韩立想起自己的银色书页，但上面记载的凝元功只是普通法诀，他当时仍先选了它。回到洞府后，他用火烧银页，发现表层下面还藏有金页；新露出的内容是一门操纵飞剑、修炼剑芒的剑修之术。",
+    "reasoning": "按韩立在师父面前作选择、回洞府检查旧银页、发现夹层内容的顺序回答。",
+    "stratum": 1,
+    "anchor_chapter_id": "C0240",
+    "event_key": "hanli_selects_and_reveals_hidden_golden_page",
+    "answer_points": [
+      "金页外形与韩立的银页相似，引起他的注意",
+      "他先选了记载普通凝元功的金页",
+      "火烧银页后显出夹层金页",
+      "夹层记载操纵飞剑及修炼剑芒的剑修之术"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C0240",
+        "quote": "因为这书页的式样、大小，太眼熟了。韩立肯定完全和他手上的那个银色书页一模一样，唯一不同的地方，就是这个书页仿佛薄了一些，上面并没有那些古怪的花纹，反而出现了密密麻麻的古文。",
+        "supports": "金色书页外形与韩立已有的银色书页相同，触发了他的注意。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0240",
+        "quote": "于是，他开口对闭目养神中的李化元说道：“师傅，我已选好了，就是这个功法吧！”",
+        "supports": "韩立当场选择金色书页。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0240",
+        "quote": "他突然把书页放置两手之间，然后轻轻的一搓，顿时银色书页笼罩在了一团火红的烈火中，映的韩立脸面一片通红。",
+        "supports": "韩立回洞府后用火焚烧银色书页以探查。",
+        "required": true
+      },
+      {
+        "chapter_id": "C0240",
+        "quote": "因为这书页，竟然是一篇教人如何操纵飞剑及专门修炼剑芒的剑修之术，虽然似乎非常神妙，但却根本不是韩立所要的东西。",
+        "supports": "银页夹层揭出的内容是操纵飞剑和修炼剑芒的剑修之术。",
+        "required": true
+      }
+    ]
+  }
+]

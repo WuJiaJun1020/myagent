@@ -1,0 +1,377 @@
+[
+  {
+    "sample_id": "S091",
+    "difficulty": "简单",
+    "question_type": "人物动机与推断",
+    "question": "韩立为何判断青龙上人执意要与冰凤双修？",
+    "answer": "器灵子先说冰凤赴会并非自愿；海大少转述青龙上人有意与她双修并许以名分；韩立据此推测青龙上人看中了冰凤元阴之气的妙用。这个缘由是韩立的判断，原文没有把它写成青龙上人的亲口承认。",
+    "reasoning": "把传闻与韩立的推断分开，并保留其不确定性。",
+    "stratum": 9,
+    "anchor_chapter_id": "C1980",
+    "event_key": "qinglong_dual_cultivation_motive_inference",
+    "answer_points": [
+      "冰凤赴会并非自愿",
+      "青龙上人有双修意向并许名分",
+      "韩立推测其看中冰凤元阴之气"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C1980",
+        "quote": "“徒儿怎敢欺瞒师傅。只是一时不知道怎么告诉师傅才好。冰凤师姑这次外出参加聚会，并非出自本意的。”器灵子心中一凛，急忙的回答道。",
+        "supports": "器灵子说明冰凤参加聚会并非自愿。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1980",
+        "quote": "“这给倒未听凤师姑说过，但弟子从其他渠道听闻，似乎青龙上人有让师姑和其双修的意思，似乎还愿意给一定名分。”海大少想了想后，回道。",
+        "supports": "海大少转述自己听到的消息，包含“似乎”的不确定性。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1980",
+        "quote": "虽然他不知道冰凤如何在青龙上人面前被识破了真身，但是这位九星宗太上长老，竟然似乎知道冰凤元阴之气的妙用。这才会不顾一切的想和冰凤双修的。",
+        "supports": "韩立对青龙上人动机的推断。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S092",
+    "difficulty": "简单",
+    "question_type": "选择依据",
+    "question": "韩立为何仍建议一行人进入血鸦城，而不是绕开兽潮继续赶路？",
+    "answer": "血鸦城没有通往别城的传送法阵，绕过兽潮又会耗费远超十几日的时间；韩立认为日后可能要在魔界停留十几甚至数十年，进入城中接触魔族有助于熟悉其言谈举止，他也想趁机收集魔界灵药。",
+    "reasoning": "结合绕行成本与韩立提出的长期适应、收集资源两项目的。",
+    "stratum": 9,
+    "anchor_chapter_id": "C2030",
+    "event_key": "blood_crow_city_detour_tradeoff",
+    "answer_points": [
+      "血鸦城无传送阵且绕行需远超十几日",
+      "长期接触魔族可熟悉言谈举止",
+      "此行还可收集魔界灵药"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2030",
+        "quote": "“本城为了防止蝶尾兽突然袭击，现在已经处于戒严状态。但诸位前辈若是想去的话，自然绝没有问题的。至于传送法阵，却是没有的。本城太小，不具备设立固定传送法阵的条件。绕过兽潮方法当然是有的，但是所花费时间，恐怕远不止十几日的工夫了。诸位前辈还不如等兽潮自行过去后，继续再上路更合适一些的。”魔族大汉迟疑一下后，还是老实的一一回道。",
+        "supports": "说明城内无传送法阵且绕行耗时更长。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2030",
+        "quote": "“陇兄不愿意进入城池中，自然是怕被人识破身份而已。但血鸦城不过是一个小城，连传送法阵都没有，自然不可能有太厉害的禁制。我等伪装应该不会被识破的。而韩某建议去那血鸦城，最主要还是我们以后在魔界可能一待就是十几甚至数十年的时间。如此长的时间，和一些魔族接触是难免的事情。虽然伪魔珠可以伪装气息，但单凭区区一些资料简单了解，恐怕在言谈和举止上还会露出一些破绽来的。况且此行除了洗灵池和净灵莲外，魔界中应该还有其他一些灵界难寻的灵药，对我们也作用不小的。陇兄就不想趁机顺便收集一些吗？”韩立不慌不忙的传音回道。",
+        "supports": "韩立说明进城的长期适应与收集灵药目的。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S093",
+    "difficulty": "简单",
+    "question_type": "能力与限制",
+    "question": "曲儿说药灵之骨为何可能帮助芝仙灵躯突破原有瓶颈？",
+    "answer": "曲儿说芝仙灵躯炼化并融入灵骨后，既可能易经洗髓、增加法力，也可能得到灵骨原主人的神通和本源印痕；韩立补充，只有同为药灵之体者才能继承骨中印记。",
+    "reasoning": "概括药灵之骨的潜在效果，并指出继承印记的对象限制。",
+    "stratum": 9,
+    "anchor_chapter_id": "C2038",
+    "event_key": "medicine_spirit_bone_inheritance_benefit_limit",
+    "answer_points": [
+      "芝仙灵躯炼化灵骨可洗髓增力",
+      "可能继承灵骨主人的神通和本源印痕",
+      "只有药灵之体能继承骨中印记"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2038",
+        "quote": "“回禀主人，当年芝仙大人转世离开前，曾经给我灌输过一些有关通玄药灵的传承记忆。若是那芝仙灵躯炼化融入这根灵骨，不但可以易经洗髓法力大增。甚至可以得到药骨原先主人一些神通和本源印痕，有希望让其突破原先的瓶颈阻力，得以进阶大乘期的。”曲儿兴奋之极的回道。",
+        "supports": "曲儿解释灵骨对芝仙灵躯可能产生的作用。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2038",
+        "quote": "“此道理，我自然懂的。只是一时有些感慨而已。毕竟我能修炼到如此境界，若不是有些机缘话，根本是痴心妄想的事情。好了，这根药灵之骨虽然年代久远了，但里面的印记应该残留不少的，你先给我辨认一下，是何种通玄药灵所留，再将其炼化吧。嘿嘿，话说回来了。除非同为药灵之体，其他人也无法继承此灵骨中的印记。”韩立淡淡一笑的回道。",
+        "supports": "韩立说明灵骨印记的继承限制。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S094",
+    "difficulty": "简单",
+    "question_type": "修炼结果",
+    "question": "韩立修炼炼骨宝诀后，骨骼呈现出什么特征？",
+    "answer": "数个时辰后，韩立的骨骼比常人粗大一圈、透过晶莹的身躯隐约可见；骨骼泛着淡银色灵光，表面还有细如丝线的金色纹路，隐约组成金篆文。",
+    "reasoning": "答案限于本章呈现的骨骼外观变化。",
+    "stratum": 9,
+    "anchor_chapter_id": "C2048",
+    "event_key": "bone_refining_visible_silver_gold_marks",
+    "answer_points": [
+      "骨骼显得比常人粗大",
+      "骨骼泛淡银色灵光",
+      "骨表金色细纹组成金篆文"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2048",
+        "quote": "三四个时辰后，其身躯持续晶莹剔透下，竟隐约可以看到一根根远比平常人粗大一圈的骨骼。",
+        "supports": "说明骨骼的可见程度和粗大变化。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2048",
+        "quote": "这些骨骼不但闪动着淡银色灵光，仿佛纯银打造一般，更在表面浮现一些淡淡的金色斑纹。虽然奇淡无比，纤细如丝，甚至不仔细查看的话，都无法辨认清楚，但是这些金色纹路隐约组成一个个玄妙之极的金色符文，仿佛天生就印在骨骼之上一般。",
+        "supports": "说明银光与金色符文纹路。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2048",
+        "quote": "这些金色符文若是让一些大能修士看到，当即会大惊的脱口叫出“金篆文”三个字来。",
+        "supports": "原文将骨表金色符文称作金篆文。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S095",
+    "difficulty": "简单",
+    "question_type": "物品功效辨认",
+    "question": "韩立为何把太虚妙灵丹与自己曾得到的虚灵丹联系起来？",
+    "answer": "玉简说明太虚妙灵丹若在浸泡洗灵池、服用净灵莲之前服下，可有一半几率免去日后的修为隐患；韩立看到图中丹药后，凭记忆认出它与自己在广寒界禁地所得的虚灵丹是同一种丹药。",
+    "reasoning": "说明丹药的关键作用及韩立辨认两种名称所指为同物的依据。",
+    "stratum": 9,
+    "anchor_chapter_id": "C2104",
+    "event_key": "taixu_miaoling_pill_is_virtual_spirit_pill",
+    "answer_points": [
+      "浸池与服莲前服用可有一半几率免除后续修为隐患",
+      "韩立认出图中丹药与虚灵丹相同"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2104",
+        "quote": "“太虚妙灵丹，合体期修为者服用后，可以修为大进，极大增加突破合体期瓶颈机率。合体后期大乘者服用，对突破大乘瓶颈，也具有一定玄妙奇效。若是在浸泡洗灵池和服用净灵莲前服用一颗，则有一半的几率，能够免以后修为上的隐患。”",
+        "supports": "说明太虚妙灵丹针对洗灵池和净灵莲隐患的效果。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2104",
+        "quote": "这图中所绘制的灵丹，竟正是他当日从广寒界的禁地中得到的那一枚所谓的“虚灵丹”。",
+        "supports": "韩立辨认出图示灵丹就是他曾得到的虚灵丹。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2104",
+        "quote": "以他的惊人记忆力，自然一眼就看出图中的太虚妙灵丹和虚灵丹，根本就是一般无二的同一种丹药。",
+        "supports": "明确说明两个名称指向同一种丹药。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S096",
+    "difficulty": "简单",
+    "question_type": "行动结果",
+    "question": "韩立为何很快放弃把洗灵池水收走带离？",
+    "answer": "韩立将池水摄入巨型葫芦后发现，洗灵池水一旦离开池塘便立刻失去效用，因此无法靠带走池水保存其功效。",
+    "reasoning": "由他取水后的观察说明带走池水的结果。",
+    "stratum": 9,
+    "anchor_chapter_id": "C2109",
+    "event_key": "wash_pool_water_loses_effect_outside",
+    "answer_points": [
+      "韩立把池水摄入葫芦",
+      "池水离池塘后立即失效"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2109",
+        "quote": "两色霞光一阵狂闪后，一道淡银色水柱被一卷而起，并准确无误的被摄入到了巨型葫芦中。",
+        "supports": "韩立将洗灵池水收入葫芦。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2109",
+        "quote": "这洗灵池果然是大有玄机在其中，神秘之极的池水一离开池塘，竟立刻变得丝毫效用全无了。",
+        "supports": "直接说明池水离开池塘即失去效用。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S097",
+    "difficulty": "简单",
+    "question_type": "战斗应对",
+    "question": "豹麒兽为何向韩立求救，韩立如何替它解围？",
+    "answer": "磁光兽以五色光柱封住豹麒兽的退路，使周围虚空坚硬到它一时无法遁走；豹麒兽眼看光柱将罩住本体而求救，韩立随即以金色剑光将光柱从中斩开。",
+    "reasoning": "按被困、求救、韩立出手的先后回答。",
+    "stratum": 9,
+    "anchor_chapter_id": "C2135",
+    "event_key": "leopard_beast_rescue_from_magnetic_light",
+    "answer_points": [
+      "磁光兽封锁周围虚空令豹麒兽难以遁走",
+      "豹麒兽眼看本体将被光柱罩住而求救",
+      "韩立以剑光斩开光柱解围"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2135",
+        "quote": "但五色光柱还未落下，四周虚空就先一步的骤然一紧，一下变得精钢般的坚固无比，凭它神通竟一时无法破开遁走。",
+        "supports": "说明五色光柱配合凝固虚空限制豹麒兽遁走。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2135",
+        "quote": "小兽眼看粗大光柱就要真将自己本体罩住，这才真的惶恐起来，口中急忙发出求救的呜呜声。",
+        "supports": "说明豹麒兽求救的直接原因。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2135",
+        "quote": "话音刚落，忽然一道百余丈长金色剑光破空而来，一下将金色光柱硬生生的从中间一斩而开。",
+        "supports": "说明韩立以金色剑光斩开光柱。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S098",
+    "difficulty": "简单",
+    "question_type": "风险判断",
+    "question": "初到灵界后，韩立和朱果儿为什么对沿途森林渐渐感到不安？",
+    "answer": "他们看到墨绿色树木越来越多，密林中还弥漫着紫黑色、令人不适的气体；朱果儿觉得树木像魔界植物、雾气似含魔气，韩立也认为可能是魔族手段，并指出一路没有发现木族人更加奇怪。",
+    "reasoning": "列出沿途异常及两人的疑虑，不把猜测说成已确认事实。",
+    "stratum": 9,
+    "anchor_chapter_id": "C2147",
+    "event_key": "wood_clan_forest_magic_gas_suspicion",
+    "answer_points": [
+      "墨绿色树木渐多且密林有紫黑色气体",
+      "朱果儿怀疑植物与雾气带有魔界特征",
+      "韩立仅推测是魔族手段且注意到未发现木族人"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2147",
+        "quote": "随着飞车飞行的地域越来越多，这种墨绿树木也越发的多了起来，甚至出现近半巨木都是此种树木的密林。",
+        "supports": "说明特殊树木随行程增多。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2147",
+        "quote": "在这种密林中，则弥漫起一些紫黑色的诡异气体来，虽然只是淡淡的一层，稀薄无比的样子，但让人看了后，仍极其的不舒服。",
+        "supports": "说明密林内令人不适的紫黑色气体。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2147",
+        "quote": "“韩前辈，这些树木好像和魔界的植物极其相似。而且散发的那些雾气，似乎也有魔气在其中。这是怎么回事？”再飞行了一段距离后，朱果儿终于再也忍不住的问道。",
+        "supports": "朱果儿提出树木和雾气具有魔界特征的怀疑。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2147",
+        "quote": "“还不太清楚，但多半应该是魔族人弄的手段。而且我们飞行了如此之久，竟然还未发现任何一名木族人，这就更加有些奇怪了。木族纵然还不如我们人族，但实力也不容太小瞧的。”韩立脸色阴晴变化了一会儿后，才凝重的回道。",
+        "supports": "韩立明确说尚不清楚，只推测魔族手段，并指出没有遇见木族人。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S099",
+    "difficulty": "简单",
+    "question_type": "幻境识破",
+    "question": "韩立在心劫幻境中怎样察觉新婚场景并非真实？",
+    "answer": "韩立突然被丹田涌上的冰寒之意冲击，封存记忆随之涌出；恢复神智后，他重新打量新娘，认出她只是变化出来的假象，并说对方无法让他永坠虚幻。",
+    "reasoning": "保留幻境中记忆复苏和识破假新娘这两步。",
+    "stratum": 9,
+    "anchor_chapter_id": "C2188",
+    "event_key": "heart_trial_fake_bride_revelation",
+    "answer_points": [
+      "冰寒之意触发被封印的记忆涌出",
+      "韩立恢复神智并识破新娘为假"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2188",
+        "quote": "韩立傻傻一笑，心中满意之极，将手中头盖下意识的随手扔掉，想喃喃的冲眼前女子说些什么时，体内蓦然一凉下，竟有一股冰寒之意从丹田处往上一冒而出，飞快在头颅中转了数圈后，“轰”的爆裂而开，一股原本被封印起来的记忆顿时狂涌而出。",
+        "supports": "冰寒之意使被封印的记忆涌出。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2188",
+        "quote": "韩立目光闪动几下，似乎恢复了神智，但模样回答什么，反而面上笑容缓缓收起，用一丝异样目光重新上下打量了眼前女子几遍，半晌后，才淡淡的说了一句：“变化的不错，可惜假的就是假的，想要瞒过我，让我永坠虚幻之中，可不是这般容易的。”",
+        "supports": "韩立恢复神智后识破女子是幻化的假象。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S100",
+    "difficulty": "简单",
+    "question_type": "判断依据",
+    "question": "杜宇为何在韩立出手前就意识到他的实力已达到大乘层次？",
+    "answer": "韩立的金色巨掌表面浮现银色灵纹阵后，灵压又增强数倍；杜宇感受到这股威压后连退数步，认为自己可能会被直接压爆，随即判断这不是合体后期修士能有的神通，而是大乘手段。",
+    "reasoning": "以掌印变化、杜宇的直接感受和结论说明其判断依据。",
+    "stratum": 9,
+    "anchor_chapter_id": "C2200",
+    "event_key": "duyu_recognizes_hanli_mahayana_pressure",
+    "answer_points": [
+      "金色巨掌浮现银色纹阵",
+      "巨掌灵压增强三四倍",
+      "杜宇受压后判断韩立是大乘存在"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2200",
+        "quote": "正徐徐压下的金色巨掌，微微一颤下，竟从肌肤中浮出出一道道银色灵纹，并一闪的在巨手表面幻化成十几个大小不一的银色纹阵。",
+        "supports": "巨掌表面浮现银色纹阵。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2200",
+        "quote": "刹那间，一股比先前几乎强大了三四倍的可怕灵压，顿时从掌心中一涌而出，并气势汹汹的向下方一压而去。",
+        "supports": "说明巨掌威压陡增。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2200",
+        "quote": "这一下，下方正要直接催动头顶两件宝物的杜宇，神念略一感应到此灵压，身躯一颤下，竟不由自主的“蹬蹬”倒退出数步去，顿时面色再次一变，目中竟不由得闪过一丝恐惧之意。",
+        "supports": "杜宇感受到威压后不由自主后退。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2200",
+        "quote": "“不，这绝不是合体期后期修士能有的神通，是大乘，只有大乘期存在才能有这般可怕神通。”几乎转瞬间，白衣青年就马上惶恐的明白过来，并恐惧的几乎马上就想大叫出来，但在空中恐怖灵压下，却只是嘴巴微动了几下，却根本无法传出任何声音来。",
+        "supports": "杜宇据此判断韩立已达大乘层次。",
+        "required": true
+      }
+    ]
+  }
+]

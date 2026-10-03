@@ -122,19 +122,25 @@ src/
       shared/
       main/
       renderer/
-      tests/
 
     interview/
       shared/
       main/
       renderer/
-      tests/
 
     reading/
       shared/
       main/
       renderer/
-      tests/
+
+tests/
+  unit/                     # 按 src/ 模块路径排列
+  node/
+  integration/
+  e2e/
+  python/
+  helpers/
+  fixtures/
 ```
 
 迁移期间允许保留当前目录：

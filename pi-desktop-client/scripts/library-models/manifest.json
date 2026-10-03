@@ -1,0 +1,194 @@
+{
+  "Qwen3-Embedding-0.6B": {
+    "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+    "files": [
+      {
+        "rfilename": "config.json",
+        "blobId": "cef2749ee93607b8f9a58ec72f4f6bfaf874e71d",
+        "size": 727
+      },
+      {
+        "rfilename": "merges.txt",
+        "blobId": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+        "size": 1671853
+      },
+      {
+        "rfilename": "model.safetensors",
+        "blobId": "9116264a405846ebfe4e95556b63b1ca07c892a0",
+        "size": 1191586416,
+        "lfs": {
+          "sha256": "0437e45c94563b09e13cb7a64478fc406947a93cb34a7e05870fc8dcd48e23fd",
+          "size": 1191586416,
+          "pointerSize": 135
+        }
+      },
+      {
+        "rfilename": "tokenizer.json",
+        "blobId": "18a4abbf4a408dc534006a455544dcc195f356d2",
+        "size": 11423705,
+        "lfs": {
+          "sha256": "def76fb086971c7867b829c23a26261e38d9d74e02139253b38aeb9df8b4b50a",
+          "size": 11423705,
+          "pointerSize": 133
+        }
+      },
+      {
+        "rfilename": "tokenizer_config.json",
+        "blobId": "7345216a0785dc7086e8c245b2a9d3896ce2b756",
+        "size": 9706
+      },
+      {
+        "rfilename": "vocab.json",
+        "blobId": "4783fe10ac3adce15ac8f358ef5462739852c569",
+        "size": 2776833
+      }
+    ]
+  },
+  "Qwen3-Reranker-0.6B": {
+    "revision": "e61197ed45024b0ed8a2d74b80b4d909f1255473",
+    "files": [
+      {
+        "rfilename": "config.json",
+        "blobId": "39784456e9de7a06590f8a4a38760ac1fb38d65e",
+        "size": 727
+      },
+      {
+        "rfilename": "merges.txt",
+        "blobId": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+        "size": 1671853
+      },
+      {
+        "rfilename": "model.safetensors",
+        "blobId": "c2009afdaf622dc596bec224a625daa46a2b4cc9",
+        "size": 1191588280,
+        "lfs": {
+          "sha256": "27cd75a405b9c1b46b59abfd88aaa209e6fed2a1972cde9b70e7659537c5e65b",
+          "size": 1191588280,
+          "pointerSize": 135
+        }
+      },
+      {
+        "rfilename": "tokenizer.json",
+        "blobId": "cd71f61a15a522601badb3dc960d800d9cb3766c",
+        "size": 11422654,
+        "lfs": {
+          "sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+          "size": 11422654,
+          "pointerSize": 133
+        }
+      },
+      {
+        "rfilename": "tokenizer_config.json",
+        "blobId": "7345216a0785dc7086e8c245b2a9d3896ce2b756",
+        "size": 9706
+      },
+      {
+        "rfilename": "vocab.json",
+        "blobId": "4783fe10ac3adce15ac8f358ef5462739852c569",
+        "size": 2776833
+      }
+    ]
+  },
+  "bge-reranker-base": {
+    "repo": "BAAI/bge-reranker-base",
+    "revision": "2cfc18c9415c912f9d8155881c133215df768a70",
+    "files": [
+      {
+        "rfilename": "config.json",
+        "blobId": "ff248a5f7d76e27b10778b3c593c9fba1df4c448",
+        "size": 799
+      },
+      {
+        "rfilename": "model.safetensors",
+        "blobId": "2602cf45b8859e9f240d6bd2e01e3d0b22d589c8",
+        "size": 1112206140,
+        "lfs": {
+          "sha256": "ced967c45fd1902eb92716c9ceeca7c95a936770ea9db611f5a841b926e33fbd",
+          "size": 1112206140,
+          "pointerSize": 135
+        }
+      },
+      {
+        "rfilename": "sentencepiece.bpe.model",
+        "blobId": "7a3f40a75f870bc1f21700cd414dc2acc431583c",
+        "size": 5069051,
+        "lfs": {
+          "sha256": "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865",
+          "size": 5069051,
+          "pointerSize": 132
+        }
+      },
+      {
+        "rfilename": "special_tokens_map.json",
+        "blobId": "68171d1ff68b731a33d119708476692c094a466b",
+        "size": 279
+      },
+      {
+        "rfilename": "tokenizer.json",
+        "blobId": "a128fc2756518dd55d7cad49e3b6663d01a07f95",
+        "size": 17098107,
+        "lfs": {
+          "sha256": "9eb652ac4e40cc093272bbbe0f55d521cf67570060227109b5cdc20945a4489e",
+          "size": 17098107,
+          "pointerSize": 133
+        }
+      },
+      {
+        "rfilename": "tokenizer_config.json",
+        "blobId": "059214673d9d6d2ee319411e2ffec8c024b816d5",
+        "size": 443
+      }
+    ]
+  },
+  "bge-reranker-v2-m3": {
+    "repo": "BAAI/bge-reranker-v2-m3",
+    "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+    "files": [
+      {
+        "rfilename": "config.json",
+        "blobId": "9f62673cb00ec41dcec8947b9ed16f6f2eb23ba2",
+        "size": 795
+      },
+      {
+        "rfilename": "model.safetensors",
+        "blobId": "773a0a7d7cc8a010835938a3a82a87eac8b21909",
+        "size": 2271071852,
+        "lfs": {
+          "sha256": "d9e3e081faff1eefb84019509b2f5558fd74c1a05a2c7db22f74174fcedb5286",
+          "size": 2271071852,
+          "pointerSize": 135
+        }
+      },
+      {
+        "rfilename": "sentencepiece.bpe.model",
+        "blobId": "7a3f40a75f870bc1f21700cd414dc2acc431583c",
+        "size": 5069051,
+        "lfs": {
+          "sha256": "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865",
+          "size": 5069051,
+          "pointerSize": 132
+        }
+      },
+      {
+        "rfilename": "special_tokens_map.json",
+        "blobId": "b1879d702821e753ffe4245048eee415d54a9385",
+        "size": 964
+      },
+      {
+        "rfilename": "tokenizer.json",
+        "blobId": "1c98a28b19c084901b2622d8e8b15e85eed13bff",
+        "size": 17098273,
+        "lfs": {
+          "sha256": "69564b696052886ed0ac63fa393e928384e0f8caada38c1f4864a9bfbf379c15",
+          "size": 17098273,
+          "pointerSize": 133
+        }
+      },
+      {
+        "rfilename": "tokenizer_config.json",
+        "blobId": "328a00a9a560aadcf2a3064f917517359eb3cc26",
+        "size": 1173
+      }
+    ]
+  }
+}

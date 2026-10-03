@@ -11,17 +11,23 @@ export default defineConfig({
       "@": resolve(__dirname, "src"),
     },
   },
+  // Only the app HTML is an entry. Generated preview/test HTML and Python
+  // packages under .cache must not enter Vite's cold dependency scan.
+  optimizeDeps: { entries: ["index.html"] },
   server: {
     watch: {
       // Pi writes project-scoped package/resource state here. It is runtime data,
       // not renderer source, so changes must not trigger a full-page Vite reload.
-      ignored: ["**/.pi/**"],
+      ignored: ["**/.pi/**", "**/.cache/**", "**/tests/**", "**/models/**", "**/resources/python/**", "**/release/**", "**/dist/**"],
     },
     warmup: {
       clientFiles: [
         "./src/renderer/main.tsx",
         "./src/renderer/App.tsx",
         "./src/renderer/styles.css",
+        "./src/renderer/modules/interview/InterviewRendererModule.tsx",
+        "./src/renderer/modules/knowledge-studio/KnowledgeStudioRendererModule.tsx",
+        "./src/renderer/modules/smart-library/LibraryRendererModule.tsx",
       ],
     },
   },

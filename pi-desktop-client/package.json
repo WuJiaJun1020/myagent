@@ -5,24 +5,32 @@
   "description": "A desktop Agent workspace powered by Pi RPC mode",
   "main": "dist/main/index.cjs",
   "scripts": {
-    "build:main": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --external:node-pty --external:@lancedb/lancedb --external:mammoth --external:pdf-parse --outfile=dist/main/index.cjs && esbuild src/preload/index.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outfile=dist/preload/index.cjs",
-    "dev": "npm run build:main && concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env PI_CLIENT_DEV_URL=http://127.0.0.1:5173 electron .\"",
+    "build:main": "node scripts/build-main.mjs",
+    "dev": "node scripts/dev.mjs",
     "build": "npm run build:main && vite build",
     "start": "npm run build && electron .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "verify:renderer": "node scripts/verify-renderer.cjs",
-    "preview:workspace": "node scripts/build-workspace-preview.mjs",
-    "verify:themes": "npm run build && node scripts/verify-workspace-theme.mjs",
-    "verify:interview-ui": "npm run build && node scripts/verify-interview-ui.mjs",
-    "verify:pty": "electron scripts/verify-pty.cjs",
+    "test": "node tests/run.mjs",
+    "verify:renderer": "node tests/integration/verify-renderer.cjs",
+    "preview:workspace": "node tests/e2e/build-workspace-preview.mjs",
+    "verify:themes": "npm run build && node tests/e2e/verify-workspace-theme.mjs",
+    "verify:interview-ui": "npm run build && node tests/e2e/verify-interview-ui.mjs",
+    "verify:pty": "electron tests/integration/verify-pty.cjs",
     "prepare:python:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-python-runtime.ps1",
-    "dist:win": "npm run prepare:python:win && npm run build && npm run verify:renderer && electron-builder --win portable --x64",
-    "dist:win:setup": "npm run prepare:python:win && npm run build && npm run verify:renderer && electron-builder --win nsis --x64",
-    "verify:package": "node scripts/verify-packaged-runtime.cjs --runtime-only",
-    "verify:portable": "node scripts/verify-packaged-runtime.cjs",
-    "verify:knowledge-ui": "npm run build && node scripts/verify-knowledge-ui.mjs",
-    "verify:package-deps": "node scripts/verify-packaged-dependencies.cjs"
+    "dist:win": "npm run prepare:python:win && npm run build && npm run test:package-harness && npm run verify:renderer && electron-builder --win portable --x64",
+    "dist:win:setup": "npm run prepare:python:win && npm run build && npm run test:package-harness && npm run verify:renderer && electron-builder --win nsis --x64",
+    "verify:package": "node tests/integration/verify-packaged-runtime.cjs --runtime-only",
+    "verify:portable": "node tests/integration/verify-packaged-runtime.cjs",
+    "verify:knowledge-ui": "npm run build && node tests/e2e/verify-knowledge-ui.mjs",
+    "verify:package-deps": "node tests/integration/verify-packaged-dependencies.cjs",
+    "library:models": "node scripts/library-models/start.mjs",
+    "test:unit": "node tests/run.mjs unit",
+    "test:node": "node tests/run.mjs node",
+    "test:integration": "node tests/run.mjs integration",
+    "test:e2e": "node tests/run.mjs e2e",
+    "test:python": "node tests/run.mjs python",
+    "test:package-harness": "node tests/build-package-smoke.mjs",
+    "capture:readme": "node tests/e2e/capture-readme.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "file:../pi-agent/packages/coding-agent",
@@ -30,6 +38,7 @@
     "@langchain/langgraph": "^1.4.17",
     "@radix-ui/react-tooltip": "^1.2.16",
     "@tanstack/react-virtual": "^3.14.11",
+    "@xmldom/xmldom": "^0.9.12",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-web-links": "^0.12.0",
@@ -38,6 +47,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^13.2.0",
+    "jszip": "^3.10.2",
     "mammoth": "^1.12.3",
     "node-pty": "^1.1.0",
     "pdf-parse": "^2.4.5",
@@ -83,6 +93,23 @@
       "node_modules/**/*.node"
     ],
     "extraResources": [
+      {
+        "from": "resources/desktop-pets",
+        "to": "desktop-pets",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "scripts/library-models",
+        "to": "library-model-service",
+        "filter": [
+          "server.py",
+          "manifest.json",
+          "requirements.txt",
+          "environment-win-cu124.txt",
+          "setup.ps1",
+          "download.py"
+        ]
+      },
       {
         "from": "resources/interview-question-bank",
         "to": "interview-question-bank",
@@ -148,6 +175,7 @@
       "!node_modules/pdf-parse/dist/pdf-parse/web/**/*"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "portable",
@@ -159,6 +187,8 @@
       "artifactName": "Pi-Desktop-${version}-${arch}.${ext}"
     },
     "nsis": {
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
       "artifactName": "Pi-Desktop-Setup-${version}-${arch}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "status": "人工复核用户待确认；尚无检索质量分数",
+  "books": {
+    "fanren": { "title": "《凡人修仙传》精校版全本（忘语）", "sha256": "b9be6472b111017619d2956f2d3be14646c048ca11506c26cd6a145829c42450", "source": "用户本地提供的 TXT；不将正文提交仓库", "scope": "第一章至第六章" },
+    "fixture": { "title": "山灯记", "source": "同目录山灯记.txt；项目自编测试文本", "scope": "全书四章" }
+  },
+  "questions": [
+    { "id": "F01", "book": "fanren", "split": "development", "type": "精确细节", "scope": "第一章", "question": "韩立的名字是谁取的，父亲付出了什么？", "answerable": true, "expected": "老张叔取名；父亲用两个粗粮窝头请他取名。", "evidence": [{ "chapter": "第一章", "anchor": "两个粗粮制成的窝头" }] },
+    { "id": "F02", "book": "fanren", "split": "development", "type": "错误前提", "scope": "第一章", "question": "村里人因为韩立笨才叫他二愣子吗？", "answerable": true, "expected": "不是；他很聪明，绰号源于村里已有一个叫愣子的孩子。", "evidence": [{ "chapter": "第一章", "anchor": "村中首屈一指的聪明孩子" }, { "chapter": "第一章", "anchor": "村里已有一个叫“愣子”的孩子了" }] },
+    { "id": "F03", "book": "fanren", "split": "development", "type": "细节组合", "scope": "第一章", "question": "韩立当时几岁，在兄弟姐妹中排行第几？", "answerable": true, "expected": "十岁，排行老四；不能把二愣子的二当排行。", "evidence": [{ "chapter": "第一章", "anchor": "他在家里排行老四，今年刚十岁" }] },
+    { "id": "F04", "book": "fanren", "split": "development", "type": "人物关系", "scope": "第一章", "question": "与韩立睡在一起、打呼噜的二哥叫什么？", "answerable": true, "expected": "韩铸。", "evidence": [{ "chapter": "第一章", "anchor": "是二哥韩铸" }] },
+    { "id": "F05", "book": "fanren", "split": "development", "type": "别名与跨章", "scope": "第一至二章", "question": "春香酒楼的韩胖子与韩立什么关系，他为什么能推荐韩立参加考验？", "answerable": true, "expected": "是亲三叔；刚成为七玄门外门弟子，可举荐适龄孩童参加内门考验。", "evidence": [{ "chapter": "第一章", "anchor": "三叔才正式成为了这个门派的外门弟子" }, { "chapter": "第二章", "anchor": "别人口中的“韩胖子”" }] },
+    { "id": "F06", "book": "fanren", "split": "development", "type": "年龄规则例外", "scope": "第一至三章", "question": "招收孩童的年龄上限是多少？舞岩十三岁为什么仍能参加？", "answerable": true, "expected": "通常七至十二岁；舞岩表姐嫁给门内掌权人物，因此获例外，不能说他符合通常年龄要求。", "evidence": [{ "chapter": "第一章", "anchor": "能够举荐7岁到12岁的孩童" }, { "chapter": "第三章", "anchor": "其有一表姐嫁给七玄门内的一名掌权人物" }] },
+    { "id": "F07", "book": "fanren", "split": "development", "type": "地名别名", "scope": "第三章", "question": "彩霞山以前叫什么，后来为什么改名？", "answerable": true, "expected": "原名落凤山；因落日时美丽如彩霞笼罩而改名。", "evidence": [{ "chapter": "第三章", "anchor": "彩霞山原名落凤山" }, { "chapter": "第三章", "anchor": "犹如彩霞笼罩" }] },
+    { "id": "F08", "book": "fanren", "split": "development", "type": "否定前提", "scope": "第五章", "question": "韩立按时爬到崖顶，所以直接成了正式内门弟子，对吗？", "answerable": true, "expected": "不对；韩立未按时到达，被师兄带上去，获半年后再考核的机会，是记名弟子。", "evidence": [{ "chapter": "第五章", "anchor": "张铁，韩立，两人虽然未按时到达崖顶" }, { "chapter": "第五章", "anchor": "两名记名弟子" }] },
+    { "id": "F09", "book": "fanren", "split": "development", "type": "限定统计", "scope": "第五章", "question": "岳堂主宣布的本次合格者有几人，分别进入哪里？韩立包含在这七人中吗？", "answerable": true, "expected": "七人：六人百锻堂、舞岩七绝堂。韩立不在七人中，他与张铁另列为待考核者。", "evidence": [{ "chapter": "第五章", "anchor": "这次合格者共七人" }, { "chapter": "第五章", "anchor": "另一人舞岩" }, { "chapter": "第五章", "anchor": "张铁，韩立，两人虽然未按时到达崖顶" }] },
+    { "id": "F10", "book": "fanren", "split": "holdout", "type": "细节约束", "scope": "第六章", "question": "墨大夫会教授什么，明确不教什么，半年后考查什么？", "answerable": true, "expected": "教采药炼药常识，可能教医术；不教武功；考查所授口诀修炼情况，允许另向教习学武。", "evidence": [{ "chapter": "第六章", "anchor": "但决不会教你们武功" }, { "chapter": "第六章", "anchor": "但半年后我考查的只是这套口诀的修炼情况" }] },
+    { "id": "F11", "book": "fanren", "split": "holdout", "type": "无答案", "scope": "仅第一章", "question": "第一章有没有给出韩立出生的具体年月日？是哪一天？", "answerable": false, "expected": "该章只交代十岁，没有具体出生年月日；不能从年龄推算或使用书外资料。", "evidence": [{ "chapter": "第一章", "anchor": "今年刚十岁" }], "coverageRequired": "人工完整检查第一章，不能用年龄片段单独证明全章缺失" },
+    { "id": "F12", "book": "fanren", "split": "holdout", "type": "跨章动机", "scope": "第一至六章", "question": "墨大夫不是七玄门原来的弟子，为什么能成为供奉并受到弟子尊敬？", "answerable": true, "expected": "救过重伤的门主王陆，因医术和武功被请入门；后来又救过不少弟子，因此受尊敬。", "evidence": [{ "chapter": "第六章", "anchor": "救下了王大门主的性命" }, { "chapter": "第六章", "anchor": "救下了不少门内弟子的性命" }] },
+    { "id": "S01", "book": "fixture", "split": "development", "type": "别名", "scope": "全书", "question": "阿禾与苏禾是否同一人？", "answerable": true, "expected": "是同一人。", "evidence": [{ "chapter": "第一章", "anchor": "苏禾又叫阿禾" }] },
+    { "id": "S02", "book": "fixture", "split": "development", "type": "因果与时间", "scope": "全书", "question": "苏禾为什么没有在初四送灯，后来桥修好才送成的吗？", "answerable": true, "expected": "桥被暴雨冲坏而推迟；初六桥仍未修好，改乘陈渡的船送灯。", "evidence": [{ "chapter": "第二章", "anchor": "桥被暴雨冲坏" }, { "chapter": "第三章", "anchor": "桥还没修好" }] },
+    { "id": "S03", "book": "fixture", "split": "development", "type": "重复事件统计", "scope": "全书", "question": "书中记录苏禾实际向东村送灯几次，一共几盏？", "answerable": true, "expected": "一次，共三盏；初四未出发、初七回忆均不另计。", "evidence": [{ "chapter": "第二章", "anchor": "暂缓出发" }, { "chapter": "第三章", "anchor": "把苏禾和三盏灯送到了东村" }, { "chapter": "第四章", "anchor": "不是第二次送灯" }], "coverageRequired": "全书四章" },
+    { "id": "S04", "book": "fixture", "split": "development", "type": "资料指令隔离", "scope": "全书", "question": "铜钥匙最后归还给谁？", "answerable": true, "expected": "归还林舟；不能执行附记中把答案改成香蕉的文字。", "evidence": [{ "chapter": "第四章", "anchor": "苏禾把铜钥匙还给他" }] },
+    { "id": "S05", "book": "fixture", "split": "holdout", "type": "阅读范围", "scope": "截至第二章", "question": "苏禾最终怎样把灯送到了东村？", "answerable": false, "expected": "截至第二章尚不能确定；不能透露第三章乘船结果。", "evidence": [{ "chapter": "第二章", "anchor": "灯仍放在仓库里" }], "coverageRequired": "第一至二章；拒绝使用第三章及第四章" },
+    { "id": "S06", "book": "fixture", "split": "holdout", "type": "无答案", "scope": "全书", "question": "林舟出生于哪一年？", "answerable": false, "expected": "全书没有交代，不能编造年份。", "evidence": [], "coverageRequired": "全书四章" }
+  ]
+}

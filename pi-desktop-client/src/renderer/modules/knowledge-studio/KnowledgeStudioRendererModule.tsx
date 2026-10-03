@@ -1,3 +1,4 @@
+import { DesktopPetControl } from "../../features/desktop-pet/DesktopPetControl";
 import { Settings } from "lucide-react";
 import { TopBar } from "../../components/layout/TopBar";
 import { KnowledgeStudioWorkspace as Workspace } from "../../features/knowledge-studio/KnowledgeStudioWorkspace";
@@ -16,7 +17,7 @@ export function KnowledgeStudioSidebar() {
       <button type="button" className={tab === "review" ? "active" : ""} onClick={() => setTab("review")}><strong>生成任务</strong><span>{snapshot?.batches.length ?? 0}</span></button>
 
     </div>
-    <div className="sidebar-footer"><div className="connection running"><span className="connection-dot" /><span><strong>知识工坊已就绪</strong><small>本地独立数据</small></span></div><button className="icon-button" type="button" aria-label="打开设置" onClick={() => setSettingsOpen(true)}><Settings size={15} /></button></div>
+    <div className="sidebar-footer"><div className="connection running"><span className="connection-dot" /><span><strong>知识工坊已就绪</strong><small>本地独立数据</small></span></div><div className="sidebar-footer-actions"><DesktopPetControl /><button className="icon-button" type="button" aria-label="打开设置" onClick={() => setSettingsOpen(true)}><Settings size={15} /></button></div></div>
   </>;
 }
 

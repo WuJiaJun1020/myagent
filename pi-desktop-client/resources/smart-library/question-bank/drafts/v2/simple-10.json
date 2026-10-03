@@ -1,0 +1,379 @@
+[
+  {
+    "sample_id": "S101",
+    "difficulty": "简单",
+    "question_type": "物品来历与请求",
+    "question": "许家为何把虚天鼎作为贺礼送给韩立？",
+    "answer": "许芊羽说明，她是奉冰魄先祖的血魂分身之命送来虚天鼎；血魂分身重伤昏迷前交代此事，并希望韩立带鼎去许家一趟。",
+    "reasoning": "交代赠鼎指令的来源与附带请求。",
+    "stratum": 10,
+    "anchor_chapter_id": "C2210",
+    "event_key": "xutian_cauldron_gift_blood_soul_request",
+    "answer_points": [
+      "虚天鼎由许芊羽奉冰魄血魂之命送给韩立",
+      "血魂重伤昏迷前嘱咐送鼎，并请韩立赴许家"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2210",
+        "quote": "“前辈明鉴，晚辈是奉冰魄先祖血魂之命，才将虚天鼎当做贺礼奉给前辈的。”许芊羽有些不安的回道。",
+        "supports": "许芊羽说明送鼎是奉冰魄先祖血魂之命。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2210",
+        "quote": "“正是。血魂前辈在半年前身负重伤忽然的返回，但是刚一回到族中不久，就立刻伤势发作的昏迷不醒。不过在此之前，血魂前辈却吩咐族中弟子将这只虚天鼎立刻给前辈送来，并希望前辈能带着此鼎到许家一趟。”许芊羽不再有何迟疑的回道。",
+        "supports": "血魂重伤返回许家，昏迷前嘱咐送鼎并希望韩立带鼎去许家。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S102",
+    "difficulty": "简单",
+    "question_type": "能力限制",
+    "question": "邪莲介绍的土乾神卫有什么依赖条件和弱点？",
+    "answer": "土乾神卫的炼制和操纵都必须以土乾魔功为基础；它们在地面上才能发挥真正实力，离开沙土后实力会下降近半，但身处土元气充沛环境时又很难真正损坏。",
+    "reasoning": "用依赖、离地后的削弱和恢复耐久条件概括其特性。",
+    "stratum": 10,
+    "anchor_chapter_id": "C2222",
+    "event_key": "tugan_guardians_soil_dependency",
+    "answer_points": [
+      "炼制和操纵依赖土乾魔功",
+      "离开沙土实力下降近半",
+      "土元气充沛处难以损坏"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2222",
+        "quote": "“黄道友的这些土乾神卫是其自行研究出来的一种独门傀儡，无论炼制还是操纵都必须以土乾魔功为基础才可。不过这种土乾神卫，只有在地面上才能发挥真正实力，一旦离开沙土就会立刻大降近半之多。不过这种傀儡只要有身处土元气充沛的环境，就很难真正损坏掉，倒也是一种极不错的护卫了。即使我们这些大乘老祖，想要一下消灭日如此多此傀儡，也是一种颇为麻烦的事情。”邪莲咯咯一笑的加以解释起来。",
+        "supports": "邪莲说明土乾神卫依赖土乾魔功，离开沙土会削弱且在土元气充沛处难损坏。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2222",
+        "quote": "“这也是。这种近似拥有不灭之体的家伙，一向都极其讨厌的对手。”这一次，金差连连点头的大加赞同。",
+        "supports": "金差认可这类近似不灭的傀儡很难缠。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S103",
+    "difficulty": "简单",
+    "question_type": "潜入掩护",
+    "question": "宝花为何先调动封印之力，而不是马上祭出手中宝物？",
+    "answer": "宝花先沟通封印之灵，把封印之力集中到此地，一方面压制螟虫之母的实力，另一方面掩饰众人的行动；随后她借此封住自身气息，使螟虫之母即使在近处也无法感知。",
+    "reasoning": "说明调动封印之力的两重目的，以及它如何帮助宝花靠近。",
+    "stratum": 10,
+    "anchor_chapter_id": "C2235",
+    "event_key": "baohua_suppresses_mother_and_hides_approach",
+    "answer_points": [
+      "封印之力集中此地以压制螟虫之母",
+      "封印之力掩饰众人行动",
+      "宝花气息被遮蔽，可接近而不被感知"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2235",
+        "quote": "“好，为了以防万一，妾身先沟通封印之灵，让其将封印之力全都聚集在此地，一来可以压制螟虫之母的实力，二来也可掩饰我等的行动。”宝花未马上祭出手中宝物，反而凝重异常的说道。",
+        "supports": "宝花说明集中封印之力是为压制螟虫之母并掩饰行动。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2235",
+        "quote": "这时，宝花身躯四周却浮现出无数灰色符文，并飞快一滚下，就将其包裹在了其中，只能隐约看到一个模糊的窈窕身影而已。",
+        "supports": "灰色符文包裹宝花。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2235",
+        "quote": "“现在封印之力已经将我气息彻底遮蔽住了，就算离那螟虫之母再近，也无法感知到的。妾身就要动手了。诸位道友准备一下吧。”宝花镇定的冲众人说道。",
+        "supports": "宝花说明气息已被封印之力彻底遮蔽，靠近也不会被察觉。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S104",
+    "difficulty": "简单",
+    "question_type": "神通应对",
+    "question": "韩立的金色漩涡如何应对不断重现的白骨骷髅？",
+    "answer": "漩涡的吸力持续把附近骷髅吸入；骷髅虽会在原地重新出现且气息似乎更强，但它们仍会再次被吸入并搅碎，因此重现并没有让它们脱离漩涡的反复压制。",
+    "reasoning": "区分骷髅重现与漩涡持续吸收、粉碎的效果。",
+    "stratum": 10,
+    "anchor_chapter_id": "C2243",
+    "event_key": "golden_vortex_repeatedly_grinds_skeletons",
+    "answer_points": [
+      "漩涡吸入大量骷髅",
+      "骷髅会重现且气息增强",
+      "重现后仍被反复吸入并搅碎"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2243",
+        "quote": "天地元气一阵剧烈晃动，漩涡就疯狂旋转起来，阵阵梵音后，一股恐怖吸力从中狂卷而出，将附近大量骷髅头硬生生的一吸而入。",
+        "supports": "漩涡的恐怖吸力将附近骷髅吸入。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2243",
+        "quote": "虽然这些白骨骷髅一闪后，就会在原地再次浮现而出，并且气息似乎再强大几分，但是漩涡中吸力却同样无穷无尽，也在不停的一点点涨。",
+        "supports": "骷髅会在原地重新出现且气息似乎增强。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2243",
+        "quote": "如此一来，无论那些骷髅头重新出现多少，均都一般无二的被漩涡一扯而入，再硬生生的搅个粉碎。",
+        "supports": "重现的骷髅仍被漩涡吸入并搅碎。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S105",
+    "difficulty": "简单",
+    "question_type": "要求与威胁",
+    "question": "妙龄女子向空鱼一族索要什么，又以什么条件威胁他们？",
+    "answer": "她要求空鱼一族交出两名族人，并说如果他们能多繁衍族人，即使有一部分被当作祭品，族群仍可壮大，族母也可能给他们好处；若下次来时成员还是这么少，就不只是一顿鞭打。",
+    "reasoning": "概括她提出的交人要求与繁衍条件、后续威胁。",
+    "stratum": 10,
+    "anchor_chapter_id": "C2279",
+    "event_key": "female_demon_demands_air_fish_tribe_sacrifices",
+    "answer_points": [
+      "女子要求交出两名族人",
+      "要求空鱼多繁衍以供部分族人作祭品",
+      "成员不增则下次惩罚更重"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2279",
+        "quote": "“你们是自己将两名族人交出来，还是让我亲自动手。要不是看你们这些家伙，对我们一族有些用处，早就全都斩杀干净了，哪能还留你们在这乾火之地里繁衍生息。”女子檀口一张，却说出让人冰寒的话语来。",
+        "supports": "女子要求鱼怪交出两名族人，并以“再多吃一些血食”威胁。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2279",
+        "quote": "“味道还是那般鲜美，真是百吃不厌啊。可惜你们空鱼一族繁衍的实在少了一些。为了不浪费，这一次就拿她们两个当祭品好了。不过死罪可免活罪却不可饶！”妙龄女子用舌头添了一下嘴角的残余血迹，脸上带着一丝品尝美味的享受笑容，但口中话语却越发森然起来。",
+        "supports": "女子把两名女性鱼怪称为祭品，并表示空鱼繁衍太少。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2279",
+        "quote": "“这顿鞭子应该可以让你们长些记性，好好老实一段时间了吧。识趣的话，就多生些族人出来。这样的话，纵然会有一部分当做祭品，但你们族群仍能壮大一些的。如此的话，我们那族母大人也会极为高兴，未必不能给你们一些好处的。下次再来的话，如果你们空鱼一族还只是这些成员的话，就不是一顿鞭打就能了事的了。”",
+        "supports": "女子要求多生族人，并警告下次人数仍少时不会只鞭打。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S106",
+    "difficulty": "简单",
+    "question_type": "脱困受阻",
+    "question": "黄元子为何被紫金巨手压制后无法瞬移逃走？",
+    "answer": "黄元子刚想瞬移，巨手掌上浮现银色纹阵并先行罩下；他感觉四周空气紧束，法力大半失灵，也失去了瞬移能力。随后他的箭矢和自爆法宝等反击也被巨手压溃。",
+    "reasoning": "说明禁锢效果及反击仍无法脱身的结果。",
+    "stratum": 10,
+    "anchor_chapter_id": "C2324",
+    "event_key": "huang_yuanzi_instant_move_suppressed",
+    "answer_points": [
+      "银色纹阵先行罩下",
+      "法力大半失灵并丧失瞬移能力",
+      "攻击与自爆法宝被巨手碾溃"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2324",
+        "quote": "黄元子大惊失色，体表遁光一起，就想瞬移的逃离，但是上空紫金手掌中忽然一层层银色纹阵涌现而出，滴溜溜一转后，一股无形之力顿时先一步的一罩而下。",
+        "supports": "紫金巨手银色纹阵的无形之力先一步罩下。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2324",
+        "quote": "黄元子只觉四周空气一紧，不但体内法力一下失灵大半，更是一下丧失瞬移而走的能力，仿佛整个虚空都被禁锢起来了一般。",
+        "supports": "黄元子法力失灵大半并失去瞬移能力。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2324",
+        "quote": "无论那些箭矢般的黄芒多犀利，还是十几件宝物自爆后的狂暴能量多惊人，在一接触紫金巨手后，均被硬生生的一碾而溃。",
+        "supports": "箭矢和宝物自爆能量接触巨手后均被碾溃。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S107",
+    "difficulty": "简单",
+    "question_type": "入城方式",
+    "question": "血鹤城如何办理入城，韩立三人又为何很快免于盘问？",
+    "answer": "入城者交灵石并回答来历、停留时间等问题，卫士记录后发铁牌放行；轮到韩立三人时，花石老祖显出合体期气息并付了一块中阶灵石，卫士被灵压震慑，没再盘问，直接交给他们三块铁牌。",
+    "reasoning": "先讲通常流程，再讲韩立一行免于盘问的具体经过。",
+    "stratum": 10,
+    "anchor_chapter_id": "C2346",
+    "event_key": "blood_crane_city_entry_and_hua_shi_deterrence",
+    "answer_points": [
+      "通常盘问来历和停留时间并收取灵石",
+      "登记信息后发铁牌",
+      "花石显露合体气息并付中阶灵石，卫士不再盘问"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2346",
+        "quote": "不过在此期间，那些卫士或多或少的都问了一下这些人的来历和打算在血鹤城待上多久等简单问题。",
+        "supports": "卫士询问入城者来历和计划停留多久。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2346",
+        "quote": "那些血骨门卫士却不管这一切，将这些信息大概记录一下，就给所有人发了一个铁牌，就放他们进去。",
+        "supports": "卫士记录信息并发铁牌放行。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2346",
+        "quote": "等轮到韩立的时候，花石老祖不动声色的上前一步，将身上的合体期气息略微放出了一二后，抬手将一块中阶灵石抛了过去，同时口中冷冷说道：“三个人，剩下的灵石不用找了。”",
+        "supports": "花石放出合体期气息并交出中阶灵石。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2346",
+        "quote": "为首卫士在一接到那块中阶灵石后，哪还敢还盘问半句话语，急忙拿出三个铁牌交给了韩立三人，就恭敬的又退到了旁边。",
+        "supports": "卫士不敢继续盘问，交出三个铁牌。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S108",
+    "difficulty": "简单",
+    "question_type": "禁制破解",
+    "question": "无垢老祖为何没有顾忌华西仙子临死前提到的同命禁制？",
+    "answer": "华西仙子认为自己陨落会因同命禁制牵连无垢老祖；无垢老祖回答，他数年前就已经破解了这道禁制，只是一直忍到现在，目的是得到华西仙子袖中的东西。",
+    "reasoning": "区分华西的威胁依据与无垢已经破解禁制、隐忍的真实目的。",
+    "stratum": 10,
+    "anchor_chapter_id": "C2374",
+    "event_key": "wugou_bypassed_shared_fate_restriction",
+    "answer_points": [
+      "华西认为同命禁制会牵连无垢",
+      "无垢数年前已破解禁制",
+      "无垢一直忍耐是为了取得她袖中之物"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2374",
+        "quote": "“你竟然修成了替灵大法，否则我绝不会落得这般下场的。你也别得意，夫妻本是同命鸟，我既然要陨落在此，你也别想继续存活世上。不要忘了，你身上下的同命禁制了。”华西仙子元婴拼命挣扎了片刻，却根本无法挣脱后，彻底绝望的终止了一切举动，但是口中却怨毒之极的冲无垢老祖说道。",
+        "supports": "华西仙子以同命禁制威胁无垢老祖。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2374",
+        "quote": "“是吗，既然这般想，那你就安心的去吧。早在数年前，我就已经破解掉了你下的禁制，一直忍到现在，只是为了你袖中那件东西而已。”无垢老祖目中泛起一丝奇怪神色，但口中却木然说道。",
+        "supports": "无垢说明数年前已破解禁制，并一直忍到现在是为了她袖中之物。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S109",
+    "difficulty": "简单",
+    "question_type": "规则说明",
+    "question": "强者之战中，一场比斗要在什么情况下才会结束？",
+    "answer": "双方先由各自阵法大师布置并检查两道相同的防护禁制，再让参战者进入；禁制会持续到一方主动认输或决出生死后才自行消散。",
+    "reasoning": "直接回答禁制如何设立及结束条件。",
+    "stratum": 10,
+    "anchor_chapter_id": "C2380",
+    "event_key": "strongest_battle_barrier_end_conditions",
+    "answer_points": [
+      "双方布置并检查相同的防护禁制",
+      "禁制覆盖参战者",
+      "一方认输或分出生死后禁制才消散"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2380",
+        "quote": "“几位道友请看，那座酷似手指的五座山峰，就是我等约定的较技之地。到时大战一旦开始，我等五人就直接去这五座山峰即可。一旦双方参战人全都到齐，自然会有双方的阵法大师，各自激活事先布置的两道防护禁制，将决斗之人全都罩在其内。只有一方主动说出‘认输’二字，或者直接分出生死后，这两道防护禁制才会自行的溃散消失。”碧影神色凝重的给韩立等人介绍着强者之战的大概情形。",
+        "supports": "碧影介绍参战者进入两道防护禁制并说明认输或分出生死才会解除。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2380",
+        "quote": "“放心，这两道禁制完全一样，并不复杂，双方布置完后还会让阵法宗师互相检查一遍，确认无误后，才会让自己人进入其中的。”碧影笑了一笑后，解释了两句。",
+        "supports": "双方布置后由阵法宗师互相检查确认。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S110",
+    "difficulty": "简单",
+    "question_type": "陷阱形成",
+    "question": "云淡和月梳刚察觉不对时，祭坛阵眼发生了什么变化，使他们被困在血幕中？",
+    "answer": "附近天地元气异常，云淡察觉法则之力像是专门冲着兄妹而来并催促撤离；但空中光阵随即喷下血色霞光，形成半圆血幕，把兄妹及卫士一并罩住，幕内法力也难以凝聚。",
+    "reasoning": "按异常征兆、光阵启动和血幕困人的顺序说明。",
+    "stratum": 10,
+    "anchor_chapter_id": "C2429",
+    "event_key": "blood_curtain_trap_at_array_eye",
+    "answer_points": [
+      "云淡察觉法则之力似乎专门针对兄妹",
+      "空中光阵喷下血色霞光",
+      "血幕罩住兄妹与卫士且压制法力"
+    ],
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "expansion-v2",
+    "evidence": [
+      {
+        "chapter_id": "C2429",
+        "quote": "“情形不对，这股法则之力怎会凝聚我等上空，好像是专门针对我等的。快走！”云淡见识似乎更高一筹，目光往空中飞快扫了几眼后，脸色骤然大变的说道。",
+        "supports": "云淡察觉法则之力聚集在上方并似针对兄妹。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2429",
+        "quote": "此光阵“嗡嗡”声一响，顿时在中心处浮现出一个五色状漩涡，里面只轰鸣声一响，顿时喷出一抹艳丽似血的霞光，直奔阵眼处一落而下。",
+        "supports": "空中光阵形成漩涡并喷出血色霞光。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2429",
+        "quote": "血光一闪后，一层半圆状血色光幕骤然形成，仿佛一只巨碗般将云淡月梳和一干商盟卫士全都困在了其下。",
+        "supports": "半圆血色光幕将兄妹和卫士困住。",
+        "required": true
+      },
+      {
+        "chapter_id": "C2429",
+        "quote": "云淡月梳二人只觉身上一寒，体内法力当即大都无法凝聚一起。",
+        "supports": "血幕内法则之力令二人法力难以凝聚。",
+        "required": true
+      }
+    ]
+  }
+]

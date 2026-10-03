@@ -1,3 +1,6 @@
+import { useResourceStore } from "../../stores/resource-store";
+import { filterCommands, type ComposerCommand } from "./slash-commands";
+import { SlashCommandDialog, type CommandDialogKind } from "./SlashCommandDialog";
 import {
   CornerDownRight,
   Mic,
@@ -18,7 +21,7 @@ import {
   type DragEvent,
   type KeyboardEvent,
 } from "react";
-import type { ImageAttachment, SessionMode, SlashCommand, ThinkingLevel } from "../../../shared/contracts/agent-session";
+import type { ImageAttachment, SessionMode, ThinkingLevel } from "../../../shared/contracts/agent-session";
 import type { WorkspaceFileReference } from "../../../shared/contracts/workspace";
 import { agentGateway } from "../../services/agent-gateway";
 import { workspaceGateway } from "../../services/workspace-gateway";
@@ -30,22 +33,6 @@ import { useUiStore } from "../../stores/ui-store";
 import { ComposerApprovalControl } from "./ComposerApprovalControl";
 import { ComposerModelControls } from "./ComposerModelControls";
 import { HintButton, HoverHint } from "../../components/ui/tooltip";
-
-type ComposerCommand = Omit<SlashCommand, "source"> & {
-  source: SlashCommand["source"] | "desktop";
-  usage?: string;
-};
-
-const DESKTOP_COMMANDS: ComposerCommand[] = [
-  { name: "new", description: "创建新会话", source: "desktop", usage: "[work|chat]" },
-  { name: "chat", description: "新建独立的纯聊天会话", source: "desktop" },
-  { name: "work", description: "新建独立的工作会话", source: "desktop" },
-  { name: "name", description: "重命名当前会话", source: "desktop", usage: "<名称>" },
-  { name: "compact", description: "压缩当前上下文", source: "desktop", usage: "[附加要求]" },
-  { name: "thinking", description: "设置 Thinking Level", source: "desktop", usage: "<level>" },
-  { name: "model", description: "切换模型", source: "desktop", usage: "<provider/model>" },
-  { name: "abort", description: "停止当前任务", source: "desktop" },
-];
 
 const sourceLabels: Record<ComposerCommand["source"], string> = {
   desktop: "桌面端",
@@ -61,6 +48,8 @@ function formatTokens(tokens: number): string {
 }
 
 export function Composer() {
+  const [commandDialog, setCommandDialog] = useState<CommandDialogKind | null>(null);
+  const commandMenuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [commandIndex, setCommandIndex] = useState(0);
   const [queueMutation, setQueueMutation] = useState<string | null>(null);
@@ -108,13 +97,9 @@ export function Composer() {
     const match = /(?:^|\s)@([^\s@]*)$/.exec(input);
     return match ? { query: match[1] ?? "", start: match.index + match[0].indexOf("@") } : null;
   }, [chatMode, input]);
-  const availableCommands = useMemo<ComposerCommand[]>(() => {
-    const merged: ComposerCommand[] = [...commands, ...DESKTOP_COMMANDS];
-    const unique = new Map(merged.map((command) => [command.name, command]));
-    return [...unique.values()]
-      .filter((command) => commandQuery !== null && command.name.toLowerCase().includes(commandQuery))
-      .slice(0, 8);
-  }, [commands, commandQuery]);
+  const availableCommands = useMemo(() => filterCommands(commands, commandQuery), [commands, commandQuery]);
+  useEffect(() => { setCommandIndex(0); }, [commandQuery]);
+  useEffect(() => { commandMenuRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" }); }, [commandIndex]);
   const context = session?.contextUsage;
   const contextPercent = context?.percent === null || context?.percent === undefined
     ? null
@@ -182,7 +167,48 @@ export function Composer() {
 
   async function executeDesktopCommand(command: string, args: string): Promise<boolean> {
     if (!session) return false;
+    if ((busy || sessionMutation) && ["new", "chat", "work", "clone", "fork", "import", "resume", "compact", "reload", "model", "thinking"].includes(command)) throw Error("请等待当前任务或会话切换完成后再执行此指令");
+    const ui = useUiStore.getState();
+    const store = useSessionStore.getState();
+    const settings = (section: "appearance" | "agent" | "security") => useUiStore.setState({ settingsOpen: true, settingsSection: section });
     switch (command) {
+      case "settings": settings("appearance"); return true;
+      case "scoped-models": settings("agent"); return true;
+      case "trust": settings("security"); return true;
+      case "login": case "logout": ui.setProviderSettingsOpen(true); return true;
+      case "tree": case "session": ui.setSessionOverviewOpen(true); return true;
+      case "fork":
+        if (args) await store.forkSession(args); else ui.setSessionOverviewOpen(true);
+        if (useSessionStore.getState().error) throw Error(useSessionStore.getState().error!);
+        return true;
+      case "clone": await store.cloneSession(); if (useSessionStore.getState().error) throw Error(useSessionStore.getState().error!); return true;
+      case "import": await store.importSession(); if (useSessionStore.getState().error) throw Error(useSessionStore.getState().error!); return true;
+      case "resume":
+        if (args) { await store.switchSession(args); if (useSessionStore.getState().error) throw Error(useSessionStore.getState().error!); }
+        else setCommandDialog("resume");
+        return true;
+      case "export":
+        if (args === "html") await agentGateway.exportCurrentSessionHtml();
+        else if (args === "jsonl") await agentGateway.exportCurrentSessionJsonl();
+        else if (args) throw Error("用法：/export [html|jsonl]，保存位置在文件对话框中选择");
+        else setCommandDialog("export");
+        return true;
+      case "share": case "hotkeys": case "changelog": setCommandDialog(command); return true;
+      case "copy": {
+        const result = await window.piDesktop.send({ type: "get_last_assistant_text" });
+        const text = (result.data as { text?: string } | undefined)?.text;
+        if (!text) throw Error("当前会话没有可复制的助手回复");
+        await navigator.clipboard.writeText(text); return true;
+      }
+      case "reload": {
+        if (busy) throw Error("请等待当前任务结束再重新加载资源");
+        await useResourceStore.getState().reload(status.cwd);
+        if (useResourceStore.getState().error) throw Error(useResourceStore.getState().error!);
+        const snapshot = await agentGateway.getRuntimeSnapshot();
+        useSessionStore.setState({ commands: snapshot.commands, models: snapshot.models, thinkingLevels: snapshot.thinkingLevels });
+        await refreshSessionState(); return true;
+      }
+      case "quit": setCommandDialog("quit"); return true;
       case "new": {
         if (args && args !== "chat" && args !== "work") throw new Error("用法：/new [work|chat]");
         const mode: SessionMode = args === "chat" ? "chat" : args === "work" ? "work" : session.mode;
@@ -196,7 +222,7 @@ export function Composer() {
         await createSession("work");
         return true;
       case "name":
-        if (!args) throw new Error("用法：/name <会话名称>");
+        if (!args) { setCommandDialog("name"); return true; }
         await renameSession(session.id, args);
         return true;
       case "compact":
@@ -204,12 +230,14 @@ export function Composer() {
         await refreshSessionState();
         return true;
       case "thinking":
+        if (!args) { settings("agent"); return true; }
         if (!thinkingLevels.includes(args as ThinkingLevel)) {
           throw new Error("可用级别：" + thinkingLevels.join(", "));
         }
         await selectThinkingLevel(args as ThinkingLevel);
         return true;
       case "model": {
+        if (!args) { settings("agent"); return true; }
         const separator = args.indexOf("/");
         if (separator <= 0 || separator === args.length - 1) {
           throw new Error("用法：/model <provider/model>");
@@ -225,8 +253,8 @@ export function Composer() {
     }
   }
 
-  async function send(): Promise<void> {
-    const message = input.trim();
+  async function send(selectedCommand?: string): Promise<void> {
+    const message = (selectedCommand ?? input).trim();
     if (!message || status.state !== "running" || !sessionReady || bashRunning || stopping) return;
     if (useUiStore.getState().sessionComposerDrafts[session.id]?.text !== input) return;
     setSessionComposerDraft(session.id, { text: "", attachments });
@@ -249,10 +277,11 @@ export function Composer() {
         return;
       }
       if (message.startsWith("/")) {
-        const spaceIndex = message.indexOf(" ");
+        const spaceIndex = message.search(/\s/);
         const command = message.slice(1, spaceIndex === -1 ? undefined : spaceIndex);
         const args = spaceIndex === -1 ? "" : message.slice(spaceIndex + 1).trim();
         if (await executeDesktopCommand(command, args)) return;
+        if (!commands.some(item => item.name === command)) throw Error("未知指令：/" + command + "。输入 / 查看可用指令。");
       }
       requestChatFollow();
       if (!message.startsWith("/")) pendingId = usePendingPrompts.getState().add(session.id, message, busy);
@@ -390,6 +419,11 @@ export function Composer() {
     setCommandIndex(0);
   }
 
+  function selectCommand(command: ComposerCommand): void {
+    setCommandIndex(0);
+    void send("/" + command.name);
+  }
+
   function completeFileReference(file: WorkspaceFileReference): void {
     if (!session || !fileReferenceQuery) return;
     const reference = file.path.includes(" ") ? `@"${file.path}"` : `@${file.path}`;
@@ -402,6 +436,7 @@ export function Composer() {
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (event.nativeEvent.isComposing) return;
     if (fileReferences.length > 0 && fileReferenceQuery) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
@@ -429,7 +464,9 @@ export function Composer() {
       }
       if (event.key === "Tab" || (event.key === "Enter" && !event.shiftKey)) {
         event.preventDefault();
-        completeCommand(availableCommands[Math.min(commandIndex, availableCommands.length - 1)]);
+        const command = availableCommands[Math.min(commandIndex, availableCommands.length - 1)];
+        if (event.key === "Tab") completeCommand(command);
+        else selectCommand(command);
         return;
       }
     }
@@ -441,6 +478,7 @@ export function Composer() {
 
   return (
     <footer className="composer-wrap">
+      {commandDialog && <SlashCommandDialog kind={commandDialog} onClose={() => setCommandDialog(null)} />}
       {(error || (status.state === "error" && status.detail)) && (
         <div className="error-banner" role="alert">{error ?? status.detail}</div>
       )}
@@ -466,7 +504,7 @@ export function Composer() {
           </div>
         )}
         {availableCommands.length > 0 && (
-          <div className="command-menu" role="listbox" aria-label="Pi 指令">
+          <div ref={commandMenuRef} className="command-menu" role="listbox" aria-label="Pi 指令">
             <div className="command-menu-title"><WandSparkles size={13} />可用指令</div>
             {availableCommands.map((command, index) => (
               <button
@@ -476,7 +514,7 @@ export function Composer() {
                 aria-selected={index === commandIndex}
                 key={command.source + ":" + command.name}
                 onMouseDown={(event) => event.preventDefault()}
-                onClick={() => completeCommand(command)}
+                onClick={() => selectCommand(command)}
               >
                 <span><strong>/{command.name}</strong>{(command.usage || command.argumentHint) && <code>{command.usage || command.argumentHint}</code>}</span>
                 <small>{command.description}</small>

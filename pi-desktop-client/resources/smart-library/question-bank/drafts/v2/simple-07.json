@@ -1,0 +1,391 @@
+[
+  {
+    "sample_id": "S071",
+    "question_type": "协助动机与条件",
+    "anchor_chapter_id": "C1477",
+    "event_key": "yanli_offers_temporary_removal_of_han_li_mark_in_exchange_for_rescue",
+    "question": "妍丽怎样说服韩立冒险救她和元瑶？",
+    "answer": "韩立指出自己也处在妖王控制之下，未必能救她们。妍丽表示她们可以在冥河之地中短时间驱除韩立身上的印记，因此这次相助也能成为韩立自救的机会。韩立答应在方法确实可行且力所能及的前提下冒险相助。",
+    "reasoning": "妍丽把救援与韩立自身脱困联系起来；韩立的答复明确保留了方法有效、且不超出能力范围这两个条件。",
+    "answer_points": [
+      "妍丽提出可在冥河之地短时间驱除韩立身上的印记。",
+      "这使救助两女也成为韩立自救的机会。",
+      "韩立仅在方法可行且力所能及的前提下答应。"
+    ],
+    "difficulty": "简单",
+    "stratum": 7,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1477",
+        "quote": "“这一点，韩兄不用担心，救助我们的方法，小妹早已经想好了，对韩兄来说应该举手之劳而已。而且这一次韩兄相助我们，其实也是自救的良机。我二人有办法，可以在冥河之地中短时间内驱除掉道友身上的印记。”妍丽突然嘴角一翘，浮现一丝狡黠的说道。",
+        "supports": "妍丽指出临时驱除印记既是救助方法，也是韩立自救机会。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1477",
+        "quote": "“好！若是真的方法可取。在下又力所能及，韩某就冒一次险，设法救助二位道友脱身的。”韩立摸了摸下巴，目光在元瑶脸上一扫后，终于下定决心的说道。",
+        "supports": "韩立答应的前提是方法可行且力所能及。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S072",
+    "question_type": "伪装与脱身判断",
+    "anchor_chapter_id": "C1494",
+    "event_key": "han_li_absorbs_soul_control_and_keeps_faking_submission",
+    "question": "韩立恢复神识后，为什么没有马上暴露自己已经清醒？",
+    "answer": "他体内的破灭法目吸收了黑色圆珠发出的摄神黑丝，使神识恢复；但六足等人仍以为他受控，韩立便决定将计就计，利用被控制的表象寻找脱身机会。",
+    "reasoning": "先说明神识恢复的原因，再对应他有意维持假象的打算；并不把他当时的脱身计划说成已经成功。",
+    "answer_points": [
+      "破灭法目吸收了圆珠放出的摄神黑丝，令韩立神识恢复。",
+      "韩立决定装作仍受控制，以伺机脱身。"
+    ],
+    "difficulty": "简单",
+    "stratum": 7,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1494",
+        "quote": "但万万没想到的是，黑芒只是一开始让神识模糊了片刻，等到黑色圆珠一嵌入眉宇间时，暗藏头颅中的破灭法目忽然自行激发起来，将从黑色圆珠不停放出的一道道摄神黑丝全都吸纳的一干二净。",
+        "supports": "破灭法目吸收摄神黑丝，黑色圆珠未能持续控制韩立。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1494",
+        "quote": "韩立心念一转之下，当即决定将计就计，看看能否借被制模样，寻找脱身的良机。",
+        "supports": "韩立决定将计就计，借被制模样寻找脱身良机。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S073",
+    "question_type": "防御效果与脱身",
+    "anchor_chapter_id": "C1505",
+    "event_key": "blood_puppet_hand_fails_against_han_li_golden_scale_and_he_evades_second_grab",
+    "question": "血傀儡的血手已经抓到韩立肩头，为什么没能制住他？",
+    "answer": "血手先抓破了雷袍和黑色战甲，却无法抓破韩立体表的金色鳞甲；韩立虽被击得踉跄，仍凭诡异身法化成虚影脱开，没有给血爪第二次出手的机会。",
+    "reasoning": "原文分别写明外层防护被破、金色鳞甲挡住抓击，以及韩立脱身时机，构成血手未能制住他的直接原因。",
+    "answer_points": [
+      "血手破开雷袍和黑色战甲。",
+      "金色鳞甲挡住血手，血手无法抓破韩立体表。",
+      "韩立随后化为虚影脱身，避免被再次抓击。"
+    ],
+    "difficulty": "简单",
+    "stratum": 7,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1505",
+        "quote": "血手五指血光反卷下，一把抓破了雷袍和黑色战甲两层防护，直接抓在了韩立肩头上。",
+        "supports": "血手破开两层外部防护并抓到韩立肩头。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1505",
+        "quote": "但是此人显然也小看了韩立身上的那层金色鳞片的防护能力，血焰在和青袍接触的一瞬间，将其化为了乌有。但是五指抓在金色甲片上时，却只感到指尖一震的冰凉异常，并被一滑而开，竟无法抓破韩立体表。",
+        "supports": "血手无法抓破韩立身上的金色鳞甲。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1505",
+        "quote": "但好在韩立身法诡异也不是普通修士可比的，身子只是诡异一扭，略一模糊下，就在原地化为一道虚影的不见了踪影，根本不给血爪第二次出手机会。",
+        "supports": "韩立以身法化作虚影，未给血爪第二次机会。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S074",
+    "question_type": "体质用途与收徒动机",
+    "anchor_chapter_id": "C1518",
+    "event_key": "jiang_elder_recruits_yuanya_for_rare_tianyin_body_and_thundertribulation",
+    "question": "姜姓老者为何认定元瑶的天阴之体适合收为弟子？",
+    "answer": "天阴之体并非对普通人族功法有帮助，而是修炼长元族某种大神通所必需，且极为罕见，姜姓老者寻找近万年未遇。老者想让元瑶修炼这门神通，以辅助自己渡过下一次天劫。",
+    "reasoning": "原文直接说明体质与神通的对应关系、体质罕见程度及老者收徒的实际目的。",
+    "answer_points": [
+      "天阴之体是修炼长元族某种大神通的必要条件，对普通人族功法无特别帮助。",
+      "这种体质极为稀少，老者寻找近万年都未遇到。",
+      "老者希望借相关神通提高自己渡过下一次天劫的把握。"
+    ],
+    "difficulty": "简单",
+    "stratum": 7,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1518",
+        "quote": "“老夫多年心愿得偿，一时有些失态，倒让三位见笑了。所谓的天阴之体，并非出自我们人族，而是长元族对某种特殊体质的说法。你们不知道毫不奇怪的。此种体质对普通的人族功法在修炼上并未有什么帮助，但是修炼长元族的某种大神通来，却必须是此体质之人才可。但是这种体质的存在，就是长元族本身也罕有人有的，其他各族具有此体质的就更加稀少了。最起码，老夫曾经花费近万余年专门寻找，一直未果的。这位道友姓元吧，不知元道友可否愿意拜在老夫的门下。”老者满面笑容之下，竟对元瑶如此的说道。",
+        "supports": "姜姓老者解释天阴之体的适用功法及其罕见程度，并提出收徒。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1518",
+        "quote": "“不错。老夫正是此意。不过放心，老夫绝无恶意的。我也不瞒你们，老夫的确是看中元道友的天阴之体，准备让其修炼与之相关的大神通。而有此种神通相辅的话，我下一次的天劫，起码有七成以上把握可以度过了。甚至再下一次的，若是运气好的话，也不是没有希望熬过的。而有了两次天劫的时间，老夫修为再进两层，进入大乘后期，最终再进入渡劫期，也不是没有可能的。”姜姓老者将笑容一收，非常诚恳的说道。",
+        "supports": "老者说明收元瑶为徒是为修炼神通辅助自己渡劫。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S075",
+    "question_type": "异常现象与战斗判断",
+    "anchor_chapter_id": "C1554",
+    "event_key": "two_headed_moth_regenerates_and_destroys_sword_with_invisible_wave",
+    "question": "韩立把双头怪蛾斩成碎片后，为什么青筱仍提醒普通法宝杀不死它？",
+    "answer": "怪蛾碎尸很快重新聚合，恢复如初；它随后振翅放出无形波动，把再次攻来的青丝飞剑卷住并震得纷纷爆裂，说明普通宝物攻击不足以杀死它。",
+    "reasoning": "青筱的提醒由怪蛾迅速复原和无形波动毁掉飞剑两项表现支撑。",
+    "answer_points": [
+      "怪蛾被斩碎后很快复原。",
+      "怪蛾振翅放出的无形波动卷住青丝，并使飞剑爆裂。",
+      "因此普通宝物不足以斩杀此怪物。"
+    ],
+    "difficulty": "简单",
+    "stratum": 7,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1554",
+        "quote": "“道友小心，这怪物似乎是不死之身。单凭普通宝物之力无法斩杀的。”",
+        "supports": "青筱提醒怪物疑似不死之身，普通宝物无法斩杀。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1554",
+        "quote": "原本已经碎尸万段的怪蛾残尸同时往中间一聚，灰光一闪，就诡异的恢复如初了。",
+        "supports": "碎尸重新聚合，怪蛾恢复如初。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1554",
+        "quote": "可是那怪物却怒极的一声大吼，随即双翅一扇，顿时一层先前出现过的无形波动立刻浮现而出，并向四面八方同时扩散而去，一下将激射而至的青丝全都卷入了其中。",
+        "supports": "怪蛾振翅放出无形波动，卷住飞剑青丝。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1554",
+        "quote": "所有青丝微微一顿，随之化为数寸长的青色小剑。接着“砰砰”之声接连不绝，众飞剑纷纷化为一团团青芒爆裂开来。",
+        "supports": "青丝飞剑在波动中爆裂。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S076",
+    "question_type": "法宝威能与结果",
+    "anchor_chapter_id": "C1561",
+    "event_key": "magnetic_mountain_crushes_blood_shrimp_claws_and_pins_body",
+    "question": "血色巨虾试图用巨鳌托住元磁神山，为什么反而被压得无法脱身？",
+    "answer": "巨虾仗着体形巨大和巨鳌力量，想硬接百余丈高的元磁神山；但山体异芒一闪，巨鳌便被压断，山峰接着把巨虾半截身子压在礁石上。即使它拼命挣扎，神山仍纹丝不动。",
+    "reasoning": "答案按巨虾判断失误、巨鳌被压断到巨虾被镇住的顺序说明结果，没有把神山的重量与其他攻击混为一谈。",
+    "answer_points": [
+      "巨虾凭体型和巨鳌力量试图硬接元磁神山。",
+      "神山异芒一闪便将巨鳌压断。",
+      "山峰把巨虾半截身子压在礁石上，巨虾挣扎也无法移动神山。"
+    ],
+    "difficulty": "简单",
+    "stratum": 7,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1561",
+        "quote": "血色巨虾两只前鳌血光大放，骤然间涨大了数倍，并用力往上一抬，竟打算依仗自己巨力硬接下元磁神山。",
+        "supports": "血色巨虾涨大巨鳌，企图用力量硬接元磁神山。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1561",
+        "quote": "那对巨鳌一颤，就被无法抵挡的巨力一下压折成了四截，巨鳌从中间部分寸寸的碎裂开来。",
+        "supports": "巨鳌被神山的巨力压断。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1561",
+        "quote": "黑色山峰下落之势丝毫未停，发出一声轰隆隆的巨响，就将未多提防的巨虾半截身子，一闪的压在了礁石上。",
+        "supports": "神山把巨虾半截身子压在礁石上。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1561",
+        "quote": "任凭血虾发出惊怒异常大吼，拼命晃动在外的上半截身子，但是黑色小山纹丝不动，仿佛就此和礁石连成了一体一般。",
+        "supports": "巨虾挣扎时神山仍纹丝不动。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S077",
+    "question_type": "鉴定结论与交易凭据",
+    "anchor_chapter_id": "C1603",
+    "event_key": "tenglong_pill_appraisal_and_auction_settlement_token",
+    "question": "鉴定者认为腾龙丹适合什么修为层次，韩立拿到的玉牌又有什么用？",
+    "answer": "鉴定者判断腾龙丹以木属性为主、土金为辅，药性已通灵，适合上族七八阶服用；九阶服用的效果不足七八阶效果的十分之一。韩立认可两件拍品的底价，玉牌是拍卖结束后交割灵石的凭据。",
+    "reasoning": "答案把丹药的鉴定结论与拍卖流程中的凭据用途分别标出，均由鉴定者和主持拍卖者直接说明。",
+    "answer_points": [
+      "腾龙丹木属性为主、土金为辅，药性通灵。",
+      "适合上族七八阶，九阶使用效果不足前者十分之一。",
+      "玉牌记录拍卖底价并作为结束后交割灵石的凭据。"
+    ],
+    "difficulty": "简单",
+    "stratum": 7,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1603",
+        "quote": "“此丹药木属性为主，土金属性为辅。丹性已经通灵，适合上族七八阶服用，九阶使用的话，效果就不足原先的十分之一了。此丹足可列入一品之列了。”另一人影刚才只是凝望了半天，也不知使用何种手段，竟然将这腾龙丹的药性说的一丝不差。",
+        "supports": "鉴定者说明丹药属性、灵性和适用阶层及九阶效果。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1603",
+        "quote": "“恭喜道友了，无论金雷竹还是这些丹药，都可以参加本次拍卖会了。特别是前者，更足以列入压轴物品之列的。对了，那些丹药可有名字，另外我给道友列出一个拍卖底价，道友看看是否满意？”女子转首仔细望了一眼韩立，忽然轻笑的说道。",
+        "supports": "主持者说明拍卖底价并写在玉牌上。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1603",
+        "quote": "“腾龙丹，好，我们就以此名字拍卖了。道友将手中那块玉牌收好，此物也是拍卖结束后，交割灵石的依据。”女子徐徐的说道。",
+        "supports": "玉牌作为拍卖结束后交割灵石的依据。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S078",
+    "question_type": "人物关系来由",
+    "anchor_chapter_id": "C1614",
+    "event_key": "qiying_failed_host_rebirth_and_became_companion_to_xianxian",
+    "question": "麒影最初为何附身在纤纤身上，他们后来为何成为伴生关系？",
+    "answer": "麒影是真灵麒麟自爆后分裂出的十万份神念之一，当时神念之力将尽，便寻找容易附身成功的对象；它附在尚是胎儿的纤纤身上原想借胎转生，但未能成功，最终与纤纤魂魄成为伴生关系。纤纤说自己并不知道它为何未能转生而形成伴生关系。",
+    "reasoning": "答案依据麒影对神念来历与选择宿主原因的自述，并保留纤纤对最终形成伴生关系缘由的不确定。",
+    "answer_points": [
+      "麒影是真灵麒麟自爆后分出的十万份神念之一，当时力量将尽，寻找容易附身的对象。",
+      "它附身胎儿纤纤原本是想借胎转生。",
+      "转生未成功后，两者与纤纤魂魄成为伴生关系；具体失败缘由未说明。"
+    ],
+    "difficulty": "简单",
+    "stratum": 7,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1614",
+        "quote": "“不错！我只是那只麒麟真灵自爆的十万份神念之一。但当年他已经被大敌逼得陨落在即，就算不自爆元神同样无法逃脱的性命。虽然最后施展逆天神通，将元神分裂成了十万份之多，但是为了置于死地而后生，以后还有重修的机会，可将几个最重要信息，在每一分神念中都复制的十分完整。这个真灵之穴，就是其中最重要的东西之一。放心吧，绝不会出错的。”迷你麒麟嘿嘿的说道。",
+        "supports": "麒影自述是十万份神念之一，附身纤纤的目的在于借胎重修。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1614",
+        "quote": "“的确。我能修炼到如今境界，多亏当年你附身在尚是胎儿的我身上。不过，你当初如此做，原本也是想趁机借胎转生的。我虽然不知道，你最终为何没有成功，反而和我的魂魄成了伴生的关系，但是你当年对我可谈不上什么好意的。”纤纤目光一闪，抿嘴一笑道。",
+        "supports": "纤纤说明麒影附身尚在胎中的自己，但最终成为魂魄伴生。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1614",
+        "quote": "“当时我能逃出升天，本身神念之力也快耗尽了，自然要找一个最容易附身成功的。否则一个真灵级神念的十万分之一，占据一名成年晶族的身体，仍是轻而易举的事情，又怎能找上你的。”迷你麒麟哼哼几声，无奈的说道。",
+        "supports": "麒影解释当时神念将尽，才找容易附身的对象。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S079",
+    "question_type": "攻击时机与配合",
+    "anchor_chapter_id": "C1636",
+    "event_key": "magnetic_mountain_knocks魔猿_from_lightning_defense",
+    "question": "魔猿用紫色巨剑挡住雷柱时，韩立怎样制造机会让雷光击中它？",
+    "answer": "魔猿把全部力量用于持剑抵挡头顶雷柱，韩立趁其难以稳住身形时，以藏在地下的元磁神山突然撞击，将它撞离防御位置；原本被巨剑挡住的雷光随即从剑侧绕过，击中魔猿。",
+    "reasoning": "证据交代魔猿注意力受雷柱牵制、元磁神山突然撞击的位置变化，以及随后雷光命中的结果。",
+    "answer_points": [
+      "魔猿全力以紫色巨剑抵挡头顶雷柱。",
+      "韩立以地下元磁神山出其不意撞击魔猿，使其失去稳定并离开原位。",
+      "雷光从紫色巨剑旁掠过，击中魔猿。"
+    ],
+    "difficulty": "简单",
+    "stratum": 7,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1636",
+        "quote": "魔猿全部力量都用来持剑对付头顶的金色雷柱，纵然肉身强横，在这出其不意的一击下，身形也根本无法稳住了。",
+        "supports": "魔猿全力持剑对抗雷柱，出其不意的攻击令它站不稳。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1636",
+        "quote": "这时青色大手才一闪的现出了真正模样，黑乎乎的，闪动着灰白色光芒，赫然是元磁神山。",
+        "supports": "青色大手显出元磁神山的真形。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1636",
+        "quote": "原本被紫色巨剑硬生生挡住的雷色光柱，突然诡异的一扭，金光顿时从紫色巨剑一侧一闪而过。下一刻，雷光结结实实的击在了刚飞出去的魔猿身上。",
+        "supports": "雷光绕过紫色巨剑，击中了被撞开的魔猿。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S080",
+    "question_type": "时机判断与联合攻击",
+    "anchor_chapter_id": "C1697",
+    "event_key": "han_li_team_attacks_night_clan_before_night_power_surge",
+    "question": "韩立三人为何在夜幕降临前集中攻击夜族人，合击后结果如何？",
+    "answer": "柳水儿提醒众人，夜族人一到晚上实力会大增；韩立也看到天色渐暗，因此没有等对方增强，而是与柳水儿、石昆同时施法，合成灰色符文光球轰击战团，四名夜族人最终被击杀。",
+    "reasoning": "答案将夜族人的夜间优势作为攻击时机原因，并用三人施法形成光球、四名对手被消灭说明合击结果。",
+    "answer_points": [
+      "夜族人夜间实力会增强，柳水儿催促在日落前动手。",
+      "韩立、柳水儿和石昆一同施法形成灰色符文光球。",
+      "光球符文覆盖战团，四名夜族人被击杀。"
+    ],
+    "difficulty": "简单",
+    "stratum": 7,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1697",
+        "quote": "“韩兄，石道友，快动手。一到晚上，这些夜族人就和那些暗兽一般，实力会暴增不少的。”柳水儿眼见一时无法将对方拿下，心中焦虑之下，蓦然冲韩立二人娇叱的喊道。",
+        "supports": "柳水儿提醒夜幕降临后夜族人实力会大增。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1697",
+        "quote": "韩立听了这话，神色微微一动，目光冲高空瞥了一眼，只见此界的夜色已经渐渐黯淡下来，夜晚不久就将降临的样子。",
+        "supports": "韩立确认天色即将转暗。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1697",
+        "quote": "片刻工夫后，远远看去，韩立三人和那几名异族所在战团长空，蓦然浮现一颗奇大无比的巨型光球，灰光闪闪，有无数符文若隐若现。",
+        "supports": "三人合力形成巨型灰色符文光球。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1697",
+        "quote": "顿时在惊天动地的连绵巨响下，四名异族人就此烟消云散了。",
+        "supports": "四名夜族人最终被符文击杀。",
+        "required": true
+      }
+    ]
+  }
+]

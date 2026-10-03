@@ -1,0 +1,416 @@
+[
+  {
+    "sample_id": "S081",
+    "question_type": "幻境机制与脱困",
+    "anchor_chapter_id": "C1723",
+    "event_key": "dadan_jue_breaks_han_li_out_of_starry_sky_illusion",
+    "question": "韩立看星空图时为何能从漫长幻境中醒来，现实中过了多久？",
+    "answer": "星空图将韩立的神念拉进极其厉害的幻阵；大衍诀自行运转，把他的神念强行拉回。虽然他在幻境中感觉经历了无数岁月，现实中其实只过了数个呼吸。",
+    "reasoning": "原文分别说明幻阵对神念的作用、大衍诀的脱困效果及主观与现实时间的差异。",
+    "answer_points": [
+      "星空图以幻阵将韩立神念拉入幻境。",
+      "大衍诀自行运转，使他清醒脱困。",
+      "幻境感觉经历无数岁月，现实仅数个呼吸。"
+    ],
+    "difficulty": "简单",
+    "stratum": 8,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1723",
+        "quote": "这星空图竟然蕴含了一种远超他能理解的、极其厉害的幻阵，连他如此强大神念的存在，竟丝毫抵抗没有的被一下拉入其中。",
+        "supports": "星空图蕴含强大幻阵并将韩立神念拉入其中。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1723",
+        "quote": "要不是大衍诀自行运转，强行将他神念拉了回来，恐怕他刚才一个不慎，就会永远坠入刚才幻境中，直至在此站到白骨而不自知。",
+        "supports": "大衍诀将韩立神念拉回，否则他可能长陷幻境。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1723",
+        "quote": "当韩立彻底清醒之时，仍然站在高台边上盯着地面的星空图，先前经过无数岁月的恍惚，其实才不过数个呼吸间的工夫。",
+        "supports": "韩立清醒时现实仅过去数个呼吸。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S082",
+    "question_type": "身份凭据与状态确认",
+    "anchor_chapter_id": "C1758",
+    "event_key": "old_qingming_guard_token_confirms_han_li_completed_task_and_is_free",
+    "question": "天卫凭什么确认韩立曾是青冥卫，又如何解释他如今的身份？",
+    "answer": "韩立出示刻有“丙五十六”的旧青冥卫令牌，天卫核验后确认令牌无误；但编号一百多年前已被取消，韩立当年完成九死一生的任务后已是自由身。",
+    "reasoning": "答案根据令牌的标识、天卫验证结果和韩立对脱离编制原因的说明作答。",
+    "answer_points": [
+      "青冥卫旧令牌刻有“丙五十六”等字样。",
+      "天卫验证令牌属实。",
+      "编号已于一百多年前取消，韩立因完成九死一生任务而成为自由身。"
+    ],
+    "difficulty": "简单",
+    "stratum": 8,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1758",
+        "quote": "玉佩一面铭印着一些银蝌文，另一面则刻着“丙五十六”等几个淡金色文字，正是韩立当年的青冥卫令牌！",
+        "supports": "令牌上有丙五十六字样，是韩立当年的青冥卫令牌。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1758",
+        "quote": "“不错，的确是青冥卫的令牌不假。不过道友的青冥卫编号早就在一百多年前已经取消了，道友已是自由之身了。”枯瘦天卫手中灵光一敛下，面上全是奇怪之色的说道。",
+        "supports": "天卫核验属实并指出其编号早已取消、韩立已是自由身。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1758",
+        "quote": "“在下当年完成了一件九死一生的任务，任务完成之时，就算是自由之身了。”韩立并不觉得奇怪，平静的回道。",
+        "supports": "韩立说明完成九死一生任务后脱离编制。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S083",
+    "question_type": "修炼条件与暂缓原因",
+    "anchor_chapter_id": "C1766",
+    "event_key": "han_li_delays_second_layer_of_refining_spirit_until_body_is_strong_enough",
+    "question": "韩立为什么暂时不能修炼炼神术第二层？",
+    "answer": "韩立的神念强度已符合要求，但肉身强度仍不足；他须等到合体后期、梵圣真魔功大成时才可能勉强达到条件。此前他打算先用红罗天酒等外物慢慢改善体质。",
+    "reasoning": "原文把炼神术第二层的两项条件分开说明，并给出韩立暂缓修炼期间的打算。",
+    "answer_points": [
+      "第二层要求的神念强度已满足。",
+      "肉身强度仍不足，须等梵圣真魔功在合体后期大成才可能达标。",
+      "韩立打算先借红罗天酒改善体质。"
+    ],
+    "difficulty": "简单",
+    "stratum": 8,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1766",
+        "quote": "而以他现在的情况，倒也达到了神念强度上的要求，但是肉身强度上却仍然差了一些，必须等到合体后期梵圣真魔功大成时，才可能勉强达到条件的。",
+        "supports": "韩立满足神念强度要求，但肉身尚未达标。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1766",
+        "quote": "在此之前，却可以先想办法用一些外物先加强一下肉身再说。",
+        "supports": "韩立打算先用外物加强肉身。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1766",
+        "quote": "比如那红罗天酒，就有慢慢改善体质的妙用，可先调配出来饮用的。",
+        "supports": "红罗天酒可慢慢改善体质。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S084",
+    "question_type": "来访安排与动机",
+    "anchor_chapter_id": "C1794",
+    "event_key": "han_li_sends_juniors_to_market_while_visiting_wangu",
+    "question": "万骨真人邀韩立一叙时，韩立为何让海大少和器灵子先去坊市？",
+    "answer": "海大少和器灵子本想陪韩立去坊市办事，韩立看出他们想去见识坊市，便让他们先去；他认为坊市里的东西通常不是自己所需，而且自己要去拜访万骨真人，不方便带两人同行。",
+    "reasoning": "原文交代两人的愿望、韩立对坊市的判断及他要单独拜访的安排。",
+    "answer_points": [
+      "两人想去坊市开开眼界。",
+      "韩立认为坊市中的东西通常不是自己需要的。",
+      "他要拜访万骨真人，不便带两人同行，于是让他们先去。"
+    ],
+    "difficulty": "简单",
+    "stratum": 8,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1794",
+        "quote": "“韩前辈，你是不是要去外面的坊市啊，晚辈二人自然要随时侍候一旁了。”器灵子起身后，笑嘻嘻的说道。",
+        "supports": "器灵子说二人希望跟随韩立到坊市。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1794",
+        "quote": "“我知道你二人的意思，想去外面的坊市开开眼界去了。但那些坊市中的东西，基本不可能有我所需要东西，所以一般情况下，我不会过去的。但此地聚集了如此多高阶修士，你们到坊市中见识一二，倒也不错的。一会儿，我去拜访一下白骨门的万骨真人，也不方便带你们二人过去。我就用令牌先送你们出去吧，等晚上再回来就行了。”韩立口中说着，神色恢复了平静。",
+        "supports": "韩立说明他们想逛坊市，并让其自行前往，自己去拜访万骨真人。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S085",
+    "question_type": "交易条件协商",
+    "anchor_chapter_id": "C1814",
+    "event_key": "long_family_and_spirit_clan_bargain_on废灵_for_war舟",
+    "question": "陇家与器灵族为擎天巨舟谈交换条件时，最后谈成了什么？",
+    "answer": "陇家起初要求每艘战舟交换十个无自主意识的废灵，器灵族认为私交废灵触犯族规且只得三分之一战舟，提出最多五个。经过讨价还价，双方最后同意每艘战舟用七个废灵交换，陇家则交付总数四成的擎天巨舟。",
+    "reasoning": "答案保留了最初条件、器灵族提出的风险和最终折中的数量及交付比例。",
+    "answer_points": [
+      "陇家原先提出每艘战舟十个废灵，换取三分之一巨舟。",
+      "器灵族指出交易触犯禁例，最初表示最多五个且三分之一收益不相称。",
+      "最终每艘战舟七个废灵，陇家交付总数四成的巨舟。"
+    ],
+    "difficulty": "简单",
+    "stratum": 8,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1814",
+        "quote": "“我们陇家条件不是很简单吗？只要每只战丹提供十个没有自主意识的废灵给我们陇家，我们陇家就将炼制出来的擎天巨舟，分你们三分之一。这条件还不够优厚吗？据本老祖所知，你们器灵族根本不将废灵当同族人看待的，用它们换取如此多擎天巨舟，应该是一本万利的事情。”陇家老祖没有表情的回道。",
+        "supports": "陇家提出十个废灵换三分之一擎天巨舟。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1814",
+        "quote": "“哼，十只绝对不行。我们器灵族虽然不将废灵看做同族，但是按照整个灵族的禁例来看，将废灵擅自交给异族人，却是犯了叛族大罪的，每只战舟顶多用五只废器灵交换。而且我们冒此奇险和你们陇家做此交易，才只能拿到三分之一的战舟，所冒风险和收益也根本不成比例的。本圣女说句不好听的话，早知道陇家如此小气的话，妾身倒是宁愿当初的擎天战舟图落到了三皇和那些妖王之手了。想来这些大势力，比你们陇家应该大方一些的。”黄袍少女用皓腕一挽额前的一缕秀发，淡淡的说道。",
+        "supports": "器灵族说明交易禁例和最初愿付的数量。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1814",
+        "quote": "“千秋道友又何必用这激将之法！你应该很清楚我修炼的无情道功法，根本不会动任何情绪上的弱点。不过圣女都如此说了，那老夫做主就再退让一步。你们到时每只灵舟拿出八个废灵来换，并且我会拿出总共数量的四成交付你们器灵一族。”老家老祖望着千秋圣女好一会儿，才沉声的说道。",
+        "supports": "陇家提出八个换四成的让步。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1814",
+        "quote": "“七个，也就七个了。老夫答应下来了，下面我们要赶紧商讨一下，在魔劫降临之前的其他方面的一些合作了。”陇家老祖略一沉吟，竟一口答应了下来。",
+        "supports": "双方最后同意七个废灵的条件。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S086",
+    "question_type": "交易信任与自保",
+    "anchor_chapter_id": "C1852",
+    "event_key": "han_li_limits_jinyue_to_third_layer_and_keeps_second_formula_unextractable",
+    "question": "韩立为让金悦放心带他进入地渊，提出了哪些自保与核验办法？",
+    "answer": "韩立澄清自己只需到地渊第三层，由金悦亲自带路并亲眼看他被前辈牵引离开；这样金悦可当场确认他没有进入或破坏深层矿脉。他又说明后半部法诀没有抄成玉简，只记在神念中，若被强行夺取便可立即毁掉。",
+    "reasoning": "韩立用限制目的地和允许对方目睹离开过程回应金悦的疑虑，同时保留法诀的不可强夺性作为自保。",
+    "answer_points": [
+      "韩立只要求进入第三层，不进入珍稀矿脉所在的最深层。",
+      "他提出由金悦亲自带到坐标并目睹自己离开。",
+      "后半部法诀只记在神念中，遭强夺时可以毁掉。"
+    ],
+    "difficulty": "简单",
+    "stratum": 8,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1852",
+        "quote": "“最深一层？在下何时说过要进此地的。我只要进入地渊第三层处即可了。”韩立听了这话，脸色为之一松，并一笑的说道。",
+        "supports": "韩立明确只要到地渊第三层。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1852",
+        "quote": "“这还不简单。道友只要亲自带在下到地渊三层，目睹在下离开的过程，应该不会再有何怀疑了吧。若是到时道友觉得有何不妥时，尽可出手擒下韩某。以道友如今后期大成的修为，拦下区区在下一名中期存在，应该是轻而易举的事情。当然金道友还觉不放心的话，也尽可多带几人同去。在下不会反对的。”韩立不加思索的回道。",
+        "supports": "韩立提出金悦亲自带路并观察其离开。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1852",
+        "quote": "“金道友还是不要起其他念头的好，道友应该很清楚，我既然孤身到此，自然不会害怕贵族动另外的心思。那后半部法诀我根本没有复制成玉简，而是默记在神念中的。道友若是想用其他手段得到的话，在下一个念头，就可将此法诀彻底毁掉。况且，以贵族的能力是否真能留下韩某，恐怕还是两说的事情吧。”韩立蓦然嘿嘿一笑。",
+        "supports": "法诀只记在神念中，若被强取便可毁掉。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S087",
+    "question_type": "变身效果与脱困",
+    "anchor_chapter_id": "C1895",
+    "event_key": "li_zun_zhe_triple_head_six_arm_form_breaks_silver_binding",
+    "question": "力尊者变为三头六臂后，怎样摆脱银光仙子的束缚？",
+    "answer": "力尊者变身后修为从合体初期暴涨至合体中期左右，六只手各持黑色魔剑并放出黑丝大网，斩碎了缠绕他的银色匹练；趁匹练重新凝聚的间隙，他脱身瞬移离开。",
+    "reasoning": "原文先说明变身带来的力量提升和魔剑攻击，再写匹练被破及重新凝聚之间的脱身时机。",
+    "answer_points": [
+      "力尊者化作三头六臂魔物，修为提升到合体中期左右。",
+      "他以六口黑色魔剑发出黑丝大网，斩碎银色匹练。",
+      "匹练尚未重新凝聚时，他脱离束缚并瞬移。"
+    ],
+    "difficulty": "简单",
+    "stratum": 8,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1895",
+        "quote": "独角老者竟在一瞬间化为了三头六臂的魔物形象，并且身上黑色魔气滚滚而出，气息比起刚才强大足足有两倍以上。原本合体初期的修为，竟在一下狂涨到了合体中期左右。",
+        "supports": "力尊者变身后三头六臂，修为提升到合体中期左右。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1895",
+        "quote": "而修为大增的此魔，面上狞色一现，六手一翻转下，六口黑色魔剑浮现而出，剑光一闪下，就见无数黑丝仿佛大网般的爆发而出。",
+        "supports": "六口魔剑发出黑丝攻击。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1895",
+        "quote": "原本将其包住的银色匹练，竟在“嗤嗤”的破空声中被斩成了无数碎片。",
+        "supports": "银色匹练被斩碎。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1895",
+        "quote": "但就这片刻耽搁，三头六臂的力尊者，身形一动，就一下脱离了束缚，在原地消失不见了。",
+        "supports": "趁片刻间隙，力尊者脱离束缚消失。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S088",
+    "question_type": "傀儡联防机制",
+    "anchor_chapter_id": "C1923",
+    "event_key": "two_glass_golems_combine_palms_to_create_antiattack_seven_color_shield",
+    "question": "塔内两具琉璃傀儡怎样联手挡住韩立的银色匹练？",
+    "answer": "两具傀儡靠到一起，把四只手掌抵在一处，凝出七色光球并扩成光罩；光罩高速震动、涌现符文，使银色匹练还未碰到罩面便无法继续靠近，随后被反弹。",
+    "reasoning": "证据顺序对应两具傀儡合掌、七色光罩形成及光罩隔空阻住并弹开银色匹练。",
+    "answer_points": [
+      "两具傀儡并到一起，以四只手掌相抵。",
+      "手掌间形成七色光球并扩成光罩，表面高速震动并浮现符文。",
+      "银色匹练无法接近光罩并被反弹。"
+    ],
+    "difficulty": "简单",
+    "stratum": 8,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1923",
+        "quote": "两具琉璃傀儡，一见这番雷霆般的攻击，四目七色灵光一阵流转，身形突然一闪的凑到了一起，并且四条手臂一模糊下，四只手掌一下诡异的抵在了一起。",
+        "supports": "两具傀儡凑到一起，四掌抵在一起。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1923",
+        "quote": "开始不过头颅大小，狂闪几下后却蓦然化为了一层七色光罩！",
+        "supports": "七色光球扩成光罩。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1923",
+        "quote": "光罩竟以肉眼无法看见频率震动起来，同时表面无数大小符文狂涌而出，散发出绚丽之极的光芒。",
+        "supports": "光罩震动并涌现符文。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1923",
+        "quote": "几乎离光罩还有半尺远，光罩附近蓦然虚空一阵模糊，银色匹练一颤的无法再近前寸许了。",
+        "supports": "银色匹练未能靠近光罩，被反弹。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S089",
+    "question_type": "法宝回收与封存",
+    "anchor_chapter_id": "C1940",
+    "event_key": "han_li_recalls_and_seals_purple_cauldron_due_to_demon_divine_sense",
+    "question": "韩立追回紫言鼎后，为何没有马上把它当作普通法宝收用？",
+    "answer": "紫言鼎中还藏着血光圣祖的一缕神念，韩立担心直接使用或贴身收藏有风险。他先以金银符文和金色电网封住小鼎，再装进玉盒并贴上符箓暂时封印，准备等驱除残留神念并重新祭炼后再用。",
+    "reasoning": "原文记述了封存步骤及其原因，明确说明这是暂时封印，不能据此说小鼎已经重新祭炼。",
+    "answer_points": [
+      "小鼎中藏有血光圣祖的一缕神念。",
+      "韩立先用金银符文和金色电网使小鼎失去灵动。",
+      "他把小鼎封入玉盒、贴上符箓，待驱除神念并重新祭炼后再考虑使用。"
+    ],
+    "difficulty": "简单",
+    "stratum": 8,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1940",
+        "quote": "韩立双目微微一眯，突然托着小鼎的手心中灵光一闪，数道金银符文无声的浮出，并一闪的就贴在了小鼎上。",
+        "supports": "韩立以金银符文贴在小鼎上。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1940",
+        "quote": "不光如此，韩立十指一动，雷鸣声大起，无数金色电弧从指尖弹射而出，化为一张金色电网的将小鼎全都包裹进了其中。",
+        "supports": "他再以金色电网包裹并封住小鼎。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1940",
+        "quote": "一只袖子又飞快往此盒上一抖，又有十几张五颜六色的符箓飞射而出，一贴后，立刻形成几个微型符阵深深镶嵌在了盒盖上。",
+        "supports": "小鼎收入玉盒后又贴符箓形成符阵。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1940",
+        "quote": "虽然这件紫言鼎就像车骑恭说的那般，用所教秘术轻易的从血光圣祖化身手中夺取成功，并最终抓到了手中，但此宝藏有那老魔的一丝神念在，在没有驱除掉这缕神念并重新祭炼一番后，他又怎敢大大咧咧的直接拿来使用和贴身收藏。",
+        "supports": "韩立说明因有血光圣祖神念，须先驱除并重新祭炼才敢使用。",
+        "required": true
+      }
+    ]
+  },
+  {
+    "sample_id": "S090",
+    "question_type": "元神转移与肉身保护",
+    "anchor_chapter_id": "C1960",
+    "event_key": "yuansha_releases_sixji_divine_fragment_from_body_into_black_coffin",
+    "question": "元刹为何先封闭体内六极分神的元神六识，又怎样让她离开自己的身体？",
+    "answer": "六极分神解释说，元刹的化身无法同时容纳两个强大元神；她暂时封闭六识，是为避免损害元刹的肉身。随后元刹解除黑色玉棺表面的禁制符箓，六极分神化为绿色小人并进入棺中，离开元刹的身体。",
+    "reasoning": "答案区分了封闭六识的目的和随后通过解封玉棺完成元神转移的过程。",
+    "answer_points": [
+      "两个强大元神不能同时安置于元刹化身内。",
+      "六极暂时封闭元神六识，以免损伤元刹肉身。",
+      "元刹烧去黑棺符箓后，六极分神化作绿色小人进入棺中。"
+    ],
+    "difficulty": "简单",
+    "stratum": 8,
+    "authoring_model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "authoring_spec_version": "v2-expansion",
+    "evidence": [
+      {
+        "chapter_id": "C1960",
+        "quote": "“你这化身虽然肉身也算强大，但无法同时容纳两个强大元神的，我只有暂时封闭元神六识，才能不会对你肉身造成损害的。对了，此地是哪里，你的法力怎么损耗如此严重，莫非遇到了什么麻烦。”那陌生女子解释了两句后，话题一转的蓦然问道。",
+        "supports": "六极说明封闭元神六识是为避免损坏元刹肉身。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1960",
+        "quote": "赫然是一具丈许长的漆黑玉棺，表面铭印着一层层的神秘花纹，散发着丝丝的漆黑魔气。",
+        "supports": "元刹取出密封着的黑色玉棺。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1960",
+        "quote": "“噗嗤”一声，黑色玉棺上贴着的金银色符箓熊熊燃烧起来，瞬间化为了一股股青烟的不见。",
+        "supports": "玉棺表面禁制符箓燃尽。",
+        "required": true
+      },
+      {
+        "chapter_id": "C1960",
+        "quote": "绿色小人目睹此景，身形微微一动，就化为一团绿光的没入棺中，并一闪即逝的不见了踪影。",
+        "supports": "六极分神化成绿光进入棺中。",
+        "required": true
+      }
+    ]
+  }
+]

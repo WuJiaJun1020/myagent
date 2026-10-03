@@ -88,7 +88,10 @@ export type ModelResponseDiagnostics = Pick<ModelResponse, "requestId" | "model"
   providerStopReason: string;
 };
 
+export type ModelPreparedRequest = { systemPrompt?: string; messages: unknown[]; model: AiResolvedModel; estimatedInputTokens: number; contextWindowTokens?: number; maxOutputTokens?: number; reasoning?: string; temperature?: number; timeoutMs?: number };
 export type ModelCallOptions = AiCallOptions & {
+  /** Opt-in local context snapshot; never includes credentials or transport headers. */
+  onPreparedRequest?: (request: ModelPreparedRequest) => void;
   /** Local lifecycle metadata only. No credentials, URLs, prompts or raw errors. */
   onCallDiagnostics?: (diagnostics: ModelCallDiagnostics) => void;
   /** Opt-in local diagnostics, including responses rejected by validation. Never add this text to generic errors. */
@@ -132,5 +135,5 @@ export interface ModelGateway {
   /** Expected request/provider/cancellation failures are returned, not thrown. */
   generate(request: ModelRequest, options?: ModelCallOptions): Promise<AiGatewayResult<ModelResponse>>;
   /** Expected failures terminate the iterator with one `failed` event. */
-  stream(request: ModelRequest, options?: AiCallOptions): AsyncIterable<ModelStreamEvent>;
+  stream(request: ModelRequest, options?: ModelCallOptions): AsyncIterable<ModelStreamEvent>;
 }

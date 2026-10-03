@@ -1,4 +1,4 @@
-import { Bot, Factory, ScanFace } from "lucide-react";
+import { Bot, Factory, ScanFace, BookOpen } from "lucide-react";
 import { lazy } from "react";
 import { PRODUCT_MODULE_IDS, type ProductModuleId } from "../../platform/shared/product-module";
 import {
@@ -88,7 +88,18 @@ const knowledgeStudioModule: RendererModuleDefinition<"knowledge-studio"> = {
   resolveLayout: () => ({ detailVariant: "default", detailSuppressed: true }),
 };
 
+const loadLibrary = () => import("./smart-library/LibraryRendererModule");
+const libraryModule: RendererModuleDefinition<"smart-library"> = {
+  id: "smart-library", title: "智慧图书", navigationLabel: "智慧图书", navigationDescription: "书架与阅读", icon: BookOpen,
+  Sidebar: lazy(async () => ({ default: (await loadLibrary()).LibrarySidebar })),
+  TopBar: lazy(async () => ({ default: (await loadLibrary()).LibraryTopBar })),
+  Workspace: lazy(async () => ({ default: (await loadLibrary()).LibraryWorkspace })),
+  DetailPanel: lazy(async () => ({ default: (await loadLibrary()).LibraryDetailPanel })),
+  keepWorkspaceAlive: true, preload: loadLibrary,
+  resolveLayout: () => ({ detailVariant: "default", detailSuppressed: true, topbarSuppressed: true }),
+};
 const rendererModuleRegistry = {
+  "smart-library": libraryModule,
   agent: agentModule,
   interview: interviewModule,
   "knowledge-studio": knowledgeStudioModule,
